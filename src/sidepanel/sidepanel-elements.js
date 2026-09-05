@@ -2,6 +2,7 @@ export function getSidePanelElements(root = document) {
   const elements = {
     reloadPdf: root.querySelector("#reloadPdf"),
     documentTitle: root.querySelector("#documentTitle"),
+    contextReadyIndicator: root.querySelector("#contextReadyIndicator"),
     tabStatus: root.querySelector("#tabStatus"),
     pdfStatus: root.querySelector("#pdfStatus"),
     selectionStatus: root.querySelector("#selectionStatus"),

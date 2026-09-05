@@ -283,6 +283,7 @@ async function renderDocument(document) {
     currentDocument = null;
     await conversation.setDocumentUrl("");
     renderDocumentTitle(null);
+    renderContextReady(false);
     elements.pdfStatus.textContent = "";
     updateAskReadiness();
     return;
@@ -290,9 +291,14 @@ async function renderDocument(document) {
 
   currentDocument = document;
   renderDocumentTitle(document);
+  renderContextReady(true);
   elements.pdfStatus.textContent = "";
   await conversation.setDocumentUrl(document.url);
   updateAskReadiness();
+}
+
+function renderContextReady(isReady) {
+  elements.contextReadyIndicator.hidden = !isReady;
 }
 
 function renderDocumentTitle(document) {
