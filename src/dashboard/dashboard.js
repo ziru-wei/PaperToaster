@@ -251,10 +251,24 @@ function createStarButton(paper) {
     event.preventDefault();
     event.stopPropagation();
     await setLibraryPaperStarred(paper.documentKey, !paper.starred, paper);
+    notifyPaperActivityChanged(paper.documentKey);
     await refreshPapers();
   });
 
   return button;
+}
+
+function notifyPaperActivityChanged(documentKey) {
+  if (!documentKey) {
+    return;
+  }
+
+  chrome.runtime.sendMessage({
+    type: MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED,
+    documentKey
+  }).catch(() => {
+    // Side panel may be closed; dashboard local refresh still applies.
+  });
 }
 
 function renderSortMenu() {

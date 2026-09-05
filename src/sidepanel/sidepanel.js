@@ -9,7 +9,7 @@ import {
   saveDocumentForUrl
 } from "../document/load-document.js";
 import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
-import { getLibraryPaperSummary } from "../storage/library-store.js";
+import { getLibraryPaperSummary, setLibraryPaperStarred } from "../storage/library-store.js";
 import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
 import { getAiSettings, hasConfiguredAiApiKey, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
@@ -26,6 +26,8 @@ let titleSaveTimer = null;
 let refreshTimer = null;
 let currentAnswerAbortController = null;
 let documentRequestId = 0;
+let currentPaperStarred = false;
+let starSavePending = false;
 
 const elements = getSidePanelElements();
 
@@ -65,6 +67,7 @@ elements.reloadPdf.addEventListener("click", () => {
 });
 elements.openDashboard.addEventListener("click", openDashboard);
 elements.copyTabUrl.addEventListener("click", copyActiveTabUrl);
+elements.documentStar.addEventListener("click", toggleCurrentDocumentStar);
 elements.documentTitle.addEventListener("input", () => {
   updateManualDocumentTitle();
 });
@@ -76,6 +79,10 @@ chrome.runtime.onMessage.addListener((message) => {
 
   if (message?.type === MessageType.LIBRARY_PAPER_CONTEXT_CHANGED) {
     scheduleRefreshState();
+  }
+
+  if (message?.type === MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED && message.documentKey === currentDocument?.documentKey) {
+    refreshCurrentDocumentStar();
   }
 });
 
@@ -375,7 +382,8 @@ function mergeLibraryDocument(document, paper) {
     ...document,
     url: document.url || paper?.canonicalUrl || "",
     title: document.title || paper?.title || "",
-    titleSource: document.titleSource || paper?.titleSource || ""
+    titleSource: document.titleSource || paper?.titleSource || "",
+    starred: Boolean(paper?.starred)
   };
 }
 
@@ -396,8 +404,10 @@ async function renderDocumentIfCurrent(document, request) {
 async function renderDocument(document) {
   if (!document) {
     currentDocument = null;
+    currentPaperStarred = false;
     await conversation.setDocumentUrl("");
     renderDocumentTitle(null);
+    await renderDocumentStar(null);
     renderContextReady(false);
     elements.pdfStatus.textContent = "";
     updateAskReadiness();
@@ -407,6 +417,7 @@ async function renderDocument(document) {
   currentDocument = document;
   renderDocumentTitle(document);
   renderUrlLine(document.url || "");
+  await renderDocumentStar(document);
   renderContextReady(true);
   elements.pdfStatus.textContent = "";
   await conversation.setDocumentUrl(document.url);
@@ -435,6 +446,72 @@ function renderDocumentTitle(document) {
   elements.documentTitle.placeholder = "Title not found";
   elements.documentTitle.classList.add("muted");
   elements.documentTitle.removeAttribute("title");
+}
+
+async function renderDocumentStar(document) {
+  const documentKey = document?.documentKey || "";
+  if (!documentKey) {
+    setDocumentStarState(false, true);
+    return;
+  }
+
+  let starred = Boolean(document.starred);
+  try {
+    const paper = await getLibraryPaperSummary(documentKey);
+    if (currentDocument?.documentKey !== documentKey) {
+      return;
+    }
+    starred = Boolean(paper?.starred);
+  } catch (error) {
+    addDiagnostic(`Paper star read skipped: ${error.message || String(error)}`);
+  }
+
+  if (currentDocument?.documentKey === documentKey) {
+    currentDocument.starred = starred;
+  }
+
+  setDocumentStarState(starred, false);
+}
+
+async function refreshCurrentDocumentStar() {
+  if (!currentDocument?.documentKey) {
+    return;
+  }
+
+  await renderDocumentStar(currentDocument);
+}
+
+async function toggleCurrentDocumentStar() {
+  if (!currentDocument?.documentKey || starSavePending) {
+    return;
+  }
+
+  const nextStarred = !currentPaperStarred;
+  starSavePending = true;
+  setDocumentStarState(nextStarred, false);
+  try {
+    await setLibraryPaperStarred(currentDocument.documentKey, nextStarred, {
+      canonicalUrl: currentDocument.url,
+      title: currentDocument.title,
+      titleSource: currentDocument.titleSource
+    });
+    currentDocument.starred = nextStarred;
+    notifyLibraryPaperActivityChanged();
+  } catch (error) {
+    setDocumentStarState(!nextStarred, false);
+    showError(`Could not update star.\n${error.message || String(error)}`);
+  } finally {
+    starSavePending = false;
+  }
+}
+
+function setDocumentStarState(starred, disabled) {
+  currentPaperStarred = Boolean(starred);
+  elements.documentStar.disabled = Boolean(disabled);
+  elements.documentStar.classList.toggle("starred", currentPaperStarred);
+  elements.documentStar.title = currentPaperStarred ? "Unstar paper" : "Star paper";
+  elements.documentStar.setAttribute("aria-label", elements.documentStar.title);
+  elements.documentStar.setAttribute("aria-pressed", String(currentPaperStarred));
 }
 
 function updateManualDocumentTitle() {

@@ -103,7 +103,53 @@ header {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+}
+
+.document-star {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: #cbd5e1;
+  background: transparent;
+  cursor: pointer;
+}
+
+.document-star span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask-image: url("../assets/icons/star.svg");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-image: url("../assets/icons/star.svg");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.document-star:hover,
+.document-star.starred {
+  color: #facc15;
+}
+
+.document-star:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.32);
+  outline-offset: 2px;
+}
+
+.document-star:disabled {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .context-ready-indicator {

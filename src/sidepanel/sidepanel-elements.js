@@ -3,6 +3,7 @@ export function getSidePanelElements(root = document) {
     reloadPdf: root.querySelector("#reloadPdf"),
     openDashboard: root.querySelector("#openDashboard"),
     copyTabUrl: root.querySelector("#copyTabUrl"),
+    documentStar: root.querySelector("#documentStar"),
     documentTitle: root.querySelector("#documentTitle"),
     contextReadyIndicator: root.querySelector("#contextReadyIndicator"),
     tabStatus: root.querySelector("#tabStatus"),

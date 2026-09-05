@@ -23,6 +23,7 @@ Expected behavior:
 - If the user switches from the dashboard to a real PDF tab, the side panel should return to active PDF tab mode.
 - The selected dashboard card shows a subtle active state.
 - Dashboard cards refresh when side panel conversation activity changes.
+- The side panel title star and dashboard card star share the same `papers.starred` storage field.
 - Placeholder title records such as `Untitled paper` and `Title not found` are hidden from the dashboard list.
 
 ## Architecture
