@@ -8,6 +8,9 @@ import {
 } from "../storage/chat-store.js";
 
 const THREAD_WHEEL_VISIBLE_COUNT = 5;
+const THREAD_WHEEL_ANGLE_STEP = 10;
+const THREAD_WHEEL_EASING = 0.22;
+const THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT = 170;
 
 export function createConversationPanelController({
   threadElement,
@@ -26,7 +29,9 @@ export function createConversationPanelController({
   let saveTimer = null;
   let documentRequestId = 0;
   let threadWheelOpen = false;
-  let threadWheelOffset = 0;
+  let threadWheelScroll = 0;
+  let threadWheelTargetScroll = 0;
+  let threadWheelAnimationFrame = 0;
 
   newThreadButton.addEventListener("click", () => {
     createThread().catch(reportError);
@@ -52,16 +57,7 @@ export function createConversationPanelController({
       selectThread(selectButton.dataset.selectThreadId).catch(reportError);
     }
   });
-  threadWheelElement.addEventListener("wheel", (event) => {
-    const archivedThreads = getArchivedThreads();
-    const maxOffset = Math.max(0, archivedThreads.length - THREAD_WHEEL_VISIBLE_COUNT);
-    if (!threadWheelOpen || maxOffset <= 0) {
-      return;
-    }
-
-    event.preventDefault();
-    setThreadWheelOffset(threadWheelOffset + (event.deltaY > 0 ? 1 : -1));
-  }, { passive: false });
+  document.addEventListener("wheel", handleThreadWheel, { passive: false });
   document.addEventListener("click", (event) => {
     if (!threadBarElement.contains(event.target)) {
       closeThreadWheel();
@@ -267,7 +263,7 @@ export function createConversationPanelController({
     }
 
     threadSummaries = threads;
-    clampThreadWheelOffset();
+    clampThreadWheelScroll();
     renderThreadList();
   }
 
@@ -307,26 +303,32 @@ export function createConversationPanelController({
     threadArchiveButton.classList.toggle("active", threadWheelOpen && archivedThreads.length > 0);
     threadWheelElement.hidden = !threadWheelOpen || !archivedThreads.length;
     document.body.classList.toggle("thread-wheel-open", threadWheelOpen && archivedThreads.length > 0);
-    threadWheelElement.textContent = "";
 
     if (!threadWheelOpen || !archivedThreads.length) {
+      threadWheelElement.textContent = "";
       return;
     }
 
-    clampThreadWheelOffset();
-    const visibleThreads = archivedThreads.slice(threadWheelOffset, threadWheelOffset + THREAD_WHEEL_VISIBLE_COUNT);
-    visibleThreads.forEach((thread, index) => {
-      const item = document.createElement("div");
-      item.className = `thread-chip thread-wheel-chip slot-${index}`;
+    clampThreadWheelScroll();
+    const existingItems = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"), (item) => [
+      item.dataset.threadId,
+      item
+    ]));
+    const renderedThreadIds = new Set();
+    archivedThreads.forEach((thread) => {
+      renderedThreadIds.add(thread.threadId);
+      const item = existingItems.get(thread.threadId) || document.createElement("div");
+      item.className = "thread-chip thread-wheel-chip";
+      item.dataset.threadId = thread.threadId;
 
-      const selectButton = document.createElement("button");
+      const selectButton = item.querySelector(".thread-select") || document.createElement("button");
       selectButton.className = "thread-select";
       selectButton.type = "button";
       selectButton.dataset.selectThreadId = thread.threadId;
       selectButton.title = formatThreadTitle(thread);
       selectButton.textContent = formatThreadLabel(thread);
 
-      const deleteButton = document.createElement("button");
+      const deleteButton = item.querySelector(".thread-delete") || document.createElement("button");
       deleteButton.className = "thread-delete";
       deleteButton.type = "button";
       deleteButton.dataset.deleteThreadId = thread.threadId;
@@ -334,9 +336,19 @@ export function createConversationPanelController({
       deleteButton.setAttribute("aria-label", `Delete ${formatThreadLabel(thread)}`);
       deleteButton.textContent = "×";
 
-      item.append(selectButton, deleteButton);
-      threadWheelElement.append(item);
+      if (!item.isConnected) {
+        item.append(selectButton, deleteButton);
+        threadWheelElement.append(item);
+      }
     });
+
+    for (const item of Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"))) {
+      if (!renderedThreadIds.has(item.dataset.threadId)) {
+        item.remove();
+      }
+    }
+
+    updateThreadWheelPositions(archivedThreads);
   }
 
   function getArchivedThreads() {
@@ -352,8 +364,9 @@ export function createConversationPanelController({
     }
 
     threadWheelOpen = !threadWheelOpen;
-    clampThreadWheelOffset();
+    clampThreadWheelScroll();
     renderThreadList();
+    startThreadWheelAnimation();
   }
 
   function closeThreadWheel() {
@@ -365,19 +378,75 @@ export function createConversationPanelController({
     renderThreadList();
   }
 
-  function setThreadWheelOffset(offset) {
+  function setThreadWheelTargetScroll(offset) {
     const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
-    threadWheelOffset = Math.min(Math.max(0, offset), maxOffset);
-    renderThreadList();
+    threadWheelTargetScroll = Math.min(Math.max(0, offset), maxOffset);
+    startThreadWheelAnimation();
   }
 
-  function clampThreadWheelOffset() {
+  function clampThreadWheelScroll() {
     const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
-    threadWheelOffset = Math.min(Math.max(0, threadWheelOffset), maxOffset);
+    threadWheelScroll = Math.min(Math.max(0, threadWheelScroll), maxOffset);
+    threadWheelTargetScroll = Math.min(Math.max(0, threadWheelTargetScroll), maxOffset);
+  }
+
+  function startThreadWheelAnimation() {
+    if (threadWheelAnimationFrame) {
+      return;
+    }
+
+    threadWheelAnimationFrame = window.requestAnimationFrame(animateThreadWheel);
+  }
+
+  function animateThreadWheel() {
+    threadWheelAnimationFrame = 0;
+    const archivedThreads = getArchivedThreads();
+    const difference = threadWheelTargetScroll - threadWheelScroll;
+    if (Math.abs(difference) < 0.002) {
+      threadWheelScroll = threadWheelTargetScroll;
+      updateThreadWheelPositions(archivedThreads);
+      return;
+    }
+
+    threadWheelScroll += difference * THREAD_WHEEL_EASING;
+    updateThreadWheelPositions(archivedThreads);
+    startThreadWheelAnimation();
+  }
+
+  function updateThreadWheelPositions(archivedThreads = getArchivedThreads()) {
+    const items = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"), (item) => [
+      item.dataset.threadId,
+      item
+    ]));
+    for (const [index, thread] of archivedThreads.entries()) {
+      const item = items.get(thread.threadId);
+      if (!item) {
+        continue;
+      }
+
+      const position = index - threadWheelScroll;
+      const opacity = getThreadWheelOpacity(position);
+      const isSelectable = position >= -0.05 && position < THREAD_WHEEL_VISIBLE_COUNT - 0.05;
+      item.classList.toggle("visible", isSelectable);
+      item.style.setProperty("--thread-wheel-angle", `${position * -THREAD_WHEEL_ANGLE_STEP}deg`);
+      item.style.setProperty("--thread-wheel-opacity", String(opacity));
+      item.style.zIndex = String(100 - Math.round(Math.abs(position) * 10));
+    }
   }
 
   function reportError(error) {
     onDiagnostic?.(`Conversation thread action failed: ${error.message || String(error)}`);
+  }
+
+  function handleThreadWheel(event) {
+    const archivedThreads = getArchivedThreads();
+    const maxOffset = Math.max(0, archivedThreads.length - THREAD_WHEEL_VISIBLE_COUNT);
+    if (!threadWheelOpen || maxOffset <= 0) {
+      return;
+    }
+
+    event.preventDefault();
+    setThreadWheelTargetScroll(threadWheelTargetScroll + event.deltaY / THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT);
   }
 
   function toggleConversationSelection(quote) {
@@ -434,4 +503,20 @@ function formatThreadTime(timestamp) {
 
 function getThreadLabelTime(thread) {
   return Number(thread?.firstMessageCreatedAt || thread?.createdAt || thread?.updatedAt) || 0;
+}
+
+function getThreadWheelOpacity(position) {
+  if (position < -1 || position > THREAD_WHEEL_VISIBLE_COUNT) {
+    return 0;
+  }
+
+  if (position < 0) {
+    return Math.max(0, 1 + position);
+  }
+
+  if (position > THREAD_WHEEL_VISIBLE_COUNT - 1) {
+    return Math.max(0, THREAD_WHEEL_VISIBLE_COUNT - position);
+  }
+
+  return 1;
 }

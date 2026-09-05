@@ -184,7 +184,7 @@ header {
 .thread-wheel {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 16px;
   z-index: 30;
   width: min(330px, calc(100vw - 30px));
   height: 172px;
@@ -208,33 +208,19 @@ header {
 
 .thread-wheel-chip {
   position: absolute;
-  right: 4px;
+  right: -8px;
   top: 0;
   width: 132px;
   max-width: 132px;
+  opacity: var(--thread-wheel-opacity, 0);
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-  pointer-events: auto;
+  pointer-events: none;
+  transform: rotate(var(--thread-wheel-angle, 0deg));
   transform-origin: calc(100% + 186px) center;
 }
 
-.thread-wheel-chip.slot-0 {
-  transform: rotate(0deg);
-}
-
-.thread-wheel-chip.slot-1 {
-  transform: rotate(-10deg);
-}
-
-.thread-wheel-chip.slot-2 {
-  transform: rotate(-20deg);
-}
-
-.thread-wheel-chip.slot-3 {
-  transform: rotate(-30deg);
-}
-
-.thread-wheel-chip.slot-4 {
-  transform: rotate(-40deg);
+.thread-wheel-chip.visible {
+  pointer-events: auto;
 }
 
 .thread-select,
