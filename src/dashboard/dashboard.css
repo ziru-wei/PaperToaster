@@ -222,8 +222,8 @@ h1 {
 
 .message-ring {
   --message-ratio: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.94) 40%, transparent 42%),
@@ -258,6 +258,7 @@ h1 {
   width: 24px;
   height: 24px;
   border-radius: 50%;
+  margin-right: -4px;
   padding: 0;
   color: #cbd5e1;
   background: transparent;
@@ -281,7 +282,8 @@ h1 {
 }
 
 .paper-star:hover {
-  background: rgba(148, 163, 184, 0.13);
+  color: #facc15;
+  background: transparent;
 }
 
 .paper-star.starred {
