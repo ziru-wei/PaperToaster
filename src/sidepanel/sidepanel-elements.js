@@ -7,6 +7,7 @@ export function getSidePanelElements(root = document) {
     tabStatus: root.querySelector("#tabStatus"),
     pdfStatus: root.querySelector("#pdfStatus"),
     selectionStatus: root.querySelector("#selectionStatus"),
+    scrollToLatest: root.querySelector("#scrollToLatest"),
     selectionText: root.querySelector("#selectionText"),
     toggleSelectionText: root.querySelector("#toggleSelectionText"),
     selectionQuestionForm: root.querySelector("#selectionQuestionForm"),

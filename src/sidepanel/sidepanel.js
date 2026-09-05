@@ -31,6 +31,7 @@ const conversation = createConversationPanelController({
   threadElement: elements.conversationThread,
   threadArchiveButton: elements.conversationThreadArchive,
   threadWheelElement: elements.conversationThreadWheel,
+  scrollToBottomButton: elements.scrollToLatest,
   onDiagnostic: addDiagnostic,
   onChange: updateAskReadiness
 });

@@ -5,7 +5,7 @@
   --selection-text-size: 12px;
   --thread-selection-text-size: 11.25px;
   --control-radius: 12px;
-  --composer-width: min(100%, 320px);
+  --composer-width: min(100%, 360px);
 }
 
 html,
@@ -389,18 +389,6 @@ section {
   transition: opacity 120ms ease;
 }
 
-.chat-panel::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
-  height: 16px;
-  pointer-events: none;
-  background: linear-gradient(rgba(247, 248, 250, 0), #f7f8fa);
-  content: "";
-}
-
 .chat-panel::before {
   position: absolute;
   z-index: 2;
@@ -427,6 +415,43 @@ section {
   position: relative;
   width: var(--composer-width);
   align-self: center;
+}
+
+.scroll-to-latest {
+  display: inline-flex;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: #4b5563;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.14);
+  opacity: 0.92;
+}
+
+.scroll-to-latest[hidden] {
+  display: none;
+}
+
+.scroll-to-latest svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.scroll-to-latest:hover {
+  color: #111827;
+  background: #ffffff;
+  opacity: 1;
 }
 
 .composer-input-stack:has(.selection-quote:not(:empty)) {
@@ -506,7 +531,7 @@ textarea {
   resize: none;
   border: 1px solid #eceff4;
   border-radius: 15px;
-  padding: 8px;
+  padding: 12px 14px;
   color: #111827;
   background: #ffffff;
   font: inherit;
@@ -519,6 +544,7 @@ textarea:focus {
 }
 
 #selectionQuestion {
+  min-height: 112px;
   font-size: var(--chat-text-size);
   line-height: 1.42;
   max-height: 150px;
@@ -526,7 +552,7 @@ textarea:focus {
 }
 
 #selectionQuestion.new-thread-command {
-  padding-bottom: 25px;
+  padding-bottom: 34px;
 }
 
 .prompt-field {
@@ -536,8 +562,8 @@ textarea:focus {
 
 .new-thread-prompt-hint {
   position: absolute;
-  right: 10px;
-  bottom: 8px;
+  right: 14px;
+  bottom: 12px;
   z-index: 2;
   color: #9ca3af;
   font-size: 11px;
@@ -710,26 +736,12 @@ form {
   flex-direction: column;
   gap: 28px;
   align-self: center;
-  padding: 4px 6px 14px;
-  scrollbar-color: rgba(107, 114, 128, 0.16) transparent;
-  scrollbar-width: thin;
+  padding: 4px 4px 14px;
+  scrollbar-width: none;
 }
 
 .conversation-thread::-webkit-scrollbar {
-  width: 2px;
-}
-
-.conversation-thread::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.conversation-thread::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(107, 114, 128, 0.16);
-}
-
-.conversation-thread:hover::-webkit-scrollbar-thumb {
-  background: rgba(107, 114, 128, 0.28);
+  display: none;
 }
 
 .conversation-thread[hidden] {

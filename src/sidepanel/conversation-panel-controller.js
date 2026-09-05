@@ -16,6 +16,7 @@ export function createConversationPanelController({
   threadElement,
   threadArchiveButton,
   threadWheelElement,
+  scrollToBottomButton,
   onDiagnostic,
   onChange
 }) {
@@ -30,6 +31,9 @@ export function createConversationPanelController({
   let threadWheelTargetScroll = 0;
   let threadWheelAnimationFrame = 0;
 
+  scrollToBottomButton.addEventListener("click", () => {
+    scrollToBottom({ smooth: true });
+  });
   threadArchiveButton.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleThreadWheel();
@@ -74,6 +78,7 @@ export function createConversationPanelController({
       toggleConversationSelection(quote);
     }
   });
+  threadElement.addEventListener("scroll", updateScrollToBottomButton);
   threadElement.addEventListener("keydown", (event) => {
     const quote = event.target.closest(".conversation-selection");
     if (!quote || (event.key !== "Enter" && event.key !== " ")) {
@@ -104,6 +109,7 @@ export function createConversationPanelController({
       threadSummaries = [];
       closeThreadWheel();
       render();
+      updateScrollToBottomButton();
       renderThreadList();
       onChange?.();
       return;
@@ -121,6 +127,7 @@ export function createConversationPanelController({
     }
 
     render();
+    updateScrollToBottomButton();
     onChange?.();
   }
 
@@ -279,7 +286,32 @@ export function createConversationPanelController({
       threadElement.append(item);
     }
 
-    threadElement.scrollTop = threadElement.scrollHeight;
+    scrollToBottom();
+    window.requestAnimationFrame(updateScrollToBottomButton);
+  }
+
+  function scrollToBottom({ smooth = false } = {}) {
+    if (smooth && typeof threadElement.scrollTo === "function") {
+      threadElement.scrollTo({
+        top: threadElement.scrollHeight,
+        behavior: "smooth"
+      });
+    } else {
+      threadElement.scrollTop = threadElement.scrollHeight;
+    }
+
+    window.requestAnimationFrame(updateScrollToBottomButton);
+  }
+
+  function updateScrollToBottomButton() {
+    if (!messages.length || threadElement.hidden) {
+      scrollToBottomButton.hidden = true;
+      return;
+    }
+
+    const distanceFromBottom = threadElement.scrollHeight - threadElement.clientHeight - threadElement.scrollTop;
+    const hasScrollableThread = threadElement.scrollHeight > threadElement.clientHeight + 4;
+    scrollToBottomButton.hidden = !hasScrollableThread || distanceFromBottom < 80;
   }
 
   function renderThreadList() {
