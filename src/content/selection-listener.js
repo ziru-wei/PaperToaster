@@ -16,7 +16,6 @@ function sendSelectionIfChanged(options = {}) {
     type: "PDF_SELECTION_CHANGED",
     text,
     sourceUrl: window.location.href,
-    capturedAt: Date.now(),
     captureMethod: options.captureMethod || "content-script",
     openPanel: Boolean(options.openPanel)
   }).catch(() => {

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Paper Chat Settings</title>
+    <link rel="stylesheet" href="./options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Paper Chat Settings</h1>
+          <p>Local settings for model access and selected-text prompts.</p>
+        </div>
+      </header>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <h2>AI Provider</h2>
+            <p>API key is stored in extension-local browser storage and is never written to this repo.</p>
+          </div>
+          <div class="actions">
+            <button id="saveAiSettings" type="button">Save</button>
+            <button id="clearAiKey" type="button">Clear key</button>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label>
+            <span>Provider</span>
+            <select id="aiProvider">
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
+          <label>
+            <span>Model</span>
+            <input id="aiModel" type="text" placeholder="gemini-3.7-flash">
+          </label>
+          <label class="api-key-field">
+            <span>API Key</span>
+            <input id="aiApiKey" type="password" autocomplete="off" placeholder="Paste API key">
+          </label>
+          <label class="debug-mode-field">
+            <span>Mode</span>
+            <span class="checkbox-row">
+              <input id="aiDebugMode" type="checkbox">
+              <span>Debug mode: use placeholder responses and skip API requests.</span>
+            </span>
+          </label>
+          <label class="system-prompt-field">
+            <span>System Prompt</span>
+            <textarea id="aiSystemPrompt" rows="5"></textarea>
+          </label>
+        </div>
+        <div id="aiKeyStatus" class="status"></div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <h2>Prompt Presets</h2>
+            <p>Slash prompts for selected-text questions.</p>
+          </div>
+          <div class="actions">
+            <button id="addPreset" type="button">Add</button>
+            <button id="resetPresets" type="button">Reset</button>
+            <button id="savePresets" type="button">Save</button>
+          </div>
+        </div>
+        <div id="presetList" class="preset-list"></div>
+      </section>
+
+      <div id="status" class="status" role="status"></div>
+    </main>
+    <template id="presetTemplate">
+      <article class="preset-row">
+        <label>
+          <span>Name</span>
+          <input class="preset-label" type="text" placeholder="Explain with examples">
+        </label>
+        <label>
+          <span>Prompt</span>
+          <textarea class="preset-prompt" rows="3" placeholder="Explain this selected passage..."></textarea>
+        </label>
+        <button class="delete-preset" type="button">Delete</button>
+      </article>
+    </template>
+    <script type="module" src="./options.js"></script>
+  </body>
+</html>

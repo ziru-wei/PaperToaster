@@ -1,30 +1,42 @@
-import { stripHash } from "../pdf/fetch-pdf.js";
 import { chunkDocument } from "../pdf/chunk-document.js";
+import {
+  getDocumentMemoryKey,
+  normalizeDocumentUrl,
+  normalizeLegacyDocumentUrl
+} from "./document-key.js";
+import {
+  DOCUMENT_STORE,
+  PAPER_STORE,
+  openPaperDatabase,
+  requestToPromise,
+  transactionDone
+} from "./paper-database.js";
 
-const DB_NAME = "pdf-ai-inspector";
-const DB_VERSION = 1;
-const DOCUMENT_STORE = "documents";
-
-let databasePromise = null;
+export { getDocumentMemoryKey, normalizeDocumentUrl } from "./document-key.js";
 
 export function getDocumentStoreKey({ url, parserId, cacheVersion }) {
-  return `pdf:${cacheVersion}:${parserId}:${normalizeDocumentUrl(url)}`;
+  return `pdf:${cacheVersion}:${parserId}:${getDocumentMemoryKey(url)}`;
 }
 
 export async function getStoredDocument({ url, parserId, cacheVersion }) {
-  const db = await openDatabase();
+  const db = await openPaperDatabase();
   const key = getDocumentStoreKey({ url, parserId, cacheVersion });
-  const record = await requestToPromise(db.transaction(DOCUMENT_STORE, "readonly").objectStore(DOCUMENT_STORE).get(key));
-  return record ? hydrateStoredDocument(record) : null;
+  let record = await getDocumentRecord(db, key);
+  if (!record) {
+    record = await getDocumentRecord(db, getLegacyDocumentStoreKey({ url, parserId, cacheVersion }));
+  }
+  return record ? hydrateStoredDocument(record, url) : null;
 }
 
 export async function saveStoredDocument({ url, parserId, cacheVersion, document }) {
-  const db = await openDatabase();
+  const db = await openPaperDatabase();
   const key = getDocumentStoreKey({ url, parserId, cacheVersion });
+  const documentKey = getDocumentMemoryKey(url);
   const normalizedUrl = normalizeDocumentUrl(url);
   const now = Date.now();
   const record = {
     key,
+    documentKey,
     cacheVersion,
     parserId,
     normalizedUrl,
@@ -44,52 +56,38 @@ export async function saveStoredDocument({ url, parserId, cacheVersion, document
     updatedAt: now
   };
 
-  await requestToPromise(db.transaction(DOCUMENT_STORE, "readwrite").objectStore(DOCUMENT_STORE).put(record));
+  const transaction = db.transaction([DOCUMENT_STORE, PAPER_STORE], "readwrite");
+  transaction.objectStore(DOCUMENT_STORE).put(record);
+  upsertPaperRecord(transaction.objectStore(PAPER_STORE), {
+    documentKey,
+    url,
+    title: record.title,
+    titleSource: record.titleSource,
+    metadata: record.metadata,
+    now
+  });
+  await transactionDone(transaction);
   return hydrateStoredDocument(record);
 }
 
-export function normalizeDocumentUrl(url) {
-  try {
-    return stripHash(url);
-  } catch {
-    return String(url || "");
-  }
+function getLegacyDocumentStoreKey({ url, parserId, cacheVersion }) {
+  return `pdf:${cacheVersion}:${parserId}:${normalizeLegacyDocumentUrl(url)}`;
 }
 
-function openDatabase() {
-  if (databasePromise) {
-    return databasePromise;
-  }
-
-  databasePromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(DOCUMENT_STORE)) {
-        const store = db.createObjectStore(DOCUMENT_STORE, { keyPath: "key" });
-        store.createIndex("byNormalizedUrl", "normalizedUrl", { unique: false });
-        store.createIndex("byUpdatedAt", "updatedAt", { unique: false });
-        store.createIndex("byTitle", "title", { unique: false });
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("Could not open document store."));
-    request.onblocked = () => reject(new Error("Document store upgrade is blocked by another extension view."));
-  });
-
-  return databasePromise;
+function getDocumentRecord(db, key) {
+  return requestToPromise(db.transaction(DOCUMENT_STORE, "readonly").objectStore(DOCUMENT_STORE).get(key));
 }
 
-function hydrateStoredDocument(record) {
+function hydrateStoredDocument(record, requestedUrl = "") {
   const page = {
     pageNumber: 1,
     text: record.markdown || ""
   };
 
   return {
-    url: record.url,
+    url: requestedUrl || record.url,
+    documentKey: record.documentKey || "",
+    normalizedUrl: record.normalizedUrl || "",
     title: record.title || "",
     titleSource: record.titleSource || "",
     titleCandidates: [],
@@ -113,9 +111,24 @@ function hydrateStoredDocument(record) {
   };
 }
 
-function requestToPromise(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("Document store request failed."));
-  });
+function upsertPaperRecord(store, { documentKey, url, title, titleSource, metadata, now }) {
+  if (!documentKey) {
+    return;
+  }
+
+  const getRequest = store.get(documentKey);
+  getRequest.onsuccess = () => {
+    const existing = getRequest.result || {};
+    store.put({
+      ...existing,
+      documentKey,
+      canonicalUrl: url || existing.canonicalUrl || "",
+      title: title || existing.title || "",
+      titleSource: titleSource || existing.titleSource || "",
+      metadata: metadata || existing.metadata || null,
+      createdAt: existing.createdAt || now,
+      updatedAt: now,
+      activeThreadId: existing.activeThreadId || ""
+    });
+  };
 }

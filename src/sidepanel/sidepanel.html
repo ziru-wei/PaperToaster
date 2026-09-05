@@ -21,30 +21,23 @@
         </button>
       </header>
 
-      <section>
-        <h2>Inspect PDF</h2>
-        <form id="searchForm">
-          <textarea id="query" rows="3" placeholder="Ask a keyword-style question, e.g. main contribution"></textarea>
-          <button type="submit">Search</button>
-        </form>
-        <div id="results"></div>
-      </section>
-
-      <section>
-        <div class="section-heading">
-          <h2>Selected Text</h2>
-          <div class="selection-actions">
-            <button id="copySelection" class="small-icon-button" type="button" title="Copy selection" aria-label="Copy selection" disabled>Copy</button>
-            <button id="clearSelection" class="small-icon-button" type="button" title="Clear selection" aria-label="Clear selection" disabled>Clear</button>
-          </div>
+      <section class="chat-panel">
+        <div id="conversationThread" class="conversation-thread" hidden></div>
+        <div class="composer">
+          <div id="selectionStatus" class="muted">Select text in the PDF viewer.</div>
+          <blockquote id="selectionText" class="selection-quote"></blockquote>
+          <button id="toggleSelectionText" class="selection-toggle" type="button" aria-label="Expand selected text" hidden>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <form id="selectionQuestionForm">
+            <div class="prompt-field">
+              <textarea id="selectionQuestion" rows="4" placeholder="Ask about selected text. Type / for prompts."></textarea>
+              <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
+            </div>
+            <button id="askSelectionAi" type="submit" disabled>Ask AI</button>
+          </form>
+          <div id="selectionContextStatus" class="muted"></div>
         </div>
-        <div id="selectionStatus" class="muted">Select text in the PDF viewer.</div>
-        <blockquote id="selectionText"></blockquote>
-        <form id="selectionQuestionForm">
-          <textarea id="selectionQuestion" rows="2" placeholder="Ask about selected text"></textarea>
-          <button id="prepareSelectionContext" type="submit" disabled>Prepare context</button>
-        </form>
-        <div id="selectionContextStatus" class="muted"></div>
       </section>
     </main>
     <script type="module" src="./sidepanel.js"></script>

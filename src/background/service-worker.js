@@ -73,7 +73,6 @@ async function handleMessage(message, sender) {
       }, {
         text: message.text,
         sourceUrl: message.sourceUrl || sender.tab?.url || message.tabUrl || "",
-        capturedAt: message.capturedAt,
         captureMethod: message.captureMethod || "content-script"
       });
       if (message.openPanel && sender.tab) {
@@ -87,12 +86,6 @@ async function handleMessage(message, sender) {
         ok: true,
         selection: getSelectionForTab(message.tabId, message.tabUrl)
       };
-
-    case MessageType.CLEAR_SELECTION:
-      if (message.tabId) {
-        selectionsByTab.delete(message.tabId);
-      }
-      return { ok: true };
 
     default:
       throw new Error(`Unknown message type: ${message?.type}`);
@@ -108,7 +101,6 @@ function saveSelectionForTab(tab, selection) {
     text: String(selection.text || "").trim(),
     sourceUrl: selection.sourceUrl || tab.url || "",
     tabUrl: tab.url || "",
-    capturedAt: selection.capturedAt || Date.now(),
     captureMethod: selection.captureMethod || "unknown"
   });
 }
