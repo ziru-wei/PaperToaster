@@ -173,6 +173,8 @@ Return shape:
   threadCount,
   messageCount,
   firstConversationAt,
+  firstThreadStartedAt,
+  lastThreadStartedAt,
   lastConversationAt,
   firstOpenedAt,
   lastOpenedAt,
@@ -188,8 +190,9 @@ Most fields are derived:
 - `hasMarkdown`: any `documents` record exists for `documentKey` with non-empty `markdown`.
 - `threadCount`: count of non-empty or all conversation threads, depending on UI choice.
 - `messageCount`: sum of `conversationThreads.messageCount`.
-- `firstConversationAt`: minimum non-null `conversationThreads.firstMessageCreatedAt`.
-- `lastConversationAt`: maximum `conversationThreads.updatedAt` among threads with messages.
+- `firstConversationAt` / `firstThreadStartedAt`: earliest non-empty thread start time.
+- `lastThreadStartedAt`: latest non-empty thread start time.
+- `lastConversationAt`: maximum `conversationThreads.updatedAt` among threads with messages; not used for the card First/Last thread label.
 - `lastOpenedAt`: `papers.updatedAt` or a future explicit field if needed.
 
 Recommendation: empty threads should not make a paper look active. They can exist as active working state, but dashboard counters and dates should prefer threads with `messageCount > 0`.
@@ -270,7 +273,7 @@ Paper item content:
 ```text
 Title
 embedded PDF link on title
-left-aligned First and Latest timestamps below title
+left-aligned thread start timestamp below title
 3 threads · 14 messages
 star button
 ```
@@ -445,7 +448,7 @@ Implemented first:
 - IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
 - Responsive dashboard grid: one, two, or three columns depending on available browser width.
-- Compact paper cards with title-as-link, left-aligned First/Latest timestamps below the title, top-right thread/message counts, and a bottom-right star.
+- Compact paper cards with title-as-link, left-aligned thread start timestamp below the title, top-right thread/message counts, and a bottom-right star.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 

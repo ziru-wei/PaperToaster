@@ -120,9 +120,13 @@ function createTitleLink(paper) {
 function createPaperTimeLine(paper) {
   const line = document.createElement("div");
   line.className = "paper-time-line";
-  const first = paper.firstConversationAt || paper.firstOpenedAt;
-  const latest = paper.lastConversationAt || paper.lastOpenedAt || paper.updatedAt;
-  line.textContent = `First ${formatTime(first)} · Latest ${formatTime(latest)}`;
+  if (paper.threadCount > 1) {
+    line.textContent = `First ${formatTime(paper.firstThreadStartedAt)} · Last ${formatTime(paper.lastThreadStartedAt)}`;
+  } else if (paper.threadCount === 1) {
+    line.textContent = `Started ${formatTime(paper.firstThreadStartedAt)}`;
+  } else {
+    line.textContent = `Opened ${formatTime(paper.firstOpenedAt || paper.lastOpenedAt || paper.updatedAt)}`;
+  }
   return line;
 }
 

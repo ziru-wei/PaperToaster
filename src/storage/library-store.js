@@ -104,8 +104,10 @@ function groupThreadsByKey(threads) {
 
 function createPaperSummary({ paper, document, threads }) {
   const nonEmptyThreads = threads.filter((thread) => Number(thread.messageCount) > 0);
+  const threadStartTimes = nonEmptyThreads.map(getThreadStartedAt).filter(Boolean);
   const messageCount = nonEmptyThreads.reduce((sum, thread) => sum + (Number(thread.messageCount) || 0), 0);
-  const firstConversationAt = minTime(nonEmptyThreads.map((thread) => thread.firstMessageCreatedAt || thread.createdAt));
+  const firstConversationAt = minTime(threadStartTimes);
+  const lastThreadStartedAt = maxTime(threadStartTimes);
   const lastConversationAt = maxTime(nonEmptyThreads.map((thread) => thread.updatedAt));
   const updatedAt = maxTime([paper.updatedAt, document?.updatedAt, lastConversationAt]);
   const byteLength = Number(document?.byteLength) || 0;
@@ -124,6 +126,8 @@ function createPaperSummary({ paper, document, threads }) {
     emptyThreadCount: Math.max(0, threads.length - nonEmptyThreads.length),
     messageCount,
     firstConversationAt,
+    firstThreadStartedAt: firstConversationAt,
+    lastThreadStartedAt,
     lastConversationAt,
     firstOpenedAt: minTime([paper.createdAt, document?.parsedAt, document?.updatedAt]),
     lastOpenedAt: maxTime([paper.updatedAt, document?.updatedAt]),
@@ -204,6 +208,10 @@ function maxTime(values) {
 
 function getTime(value) {
   return Number(value) || 0;
+}
+
+function getThreadStartedAt(thread) {
+  return getTime(thread?.firstMessageCreatedAt || thread?.createdAt);
 }
 
 function getDomain(url) {
