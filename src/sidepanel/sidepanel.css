@@ -402,20 +402,25 @@ section {
 }
 
 .composer {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 3;
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
   gap: 4px;
-  margin-top: auto;
+  pointer-events: none;
+}
+
+.composer > * {
+  pointer-events: auto;
 }
 
 .composer-input-stack {
   position: relative;
   width: var(--composer-width);
   align-self: center;
-  transform: translateY(12px);
 }
 
 .scroll-to-latest {
@@ -743,7 +748,7 @@ form {
   flex-direction: column;
   gap: 28px;
   align-self: center;
-  padding: 4px 4px 14px;
+  padding: 4px 4px 156px;
   scrollbar-width: none;
 }
 
