@@ -447,7 +447,7 @@ section {
 }
 
 .composer-input-stack:has(.selection-quote:not(:empty)) {
-  padding-top: 28px;
+  padding-top: 36px;
 }
 
 button {
@@ -609,15 +609,15 @@ form {
 .selection-quote {
   position: absolute;
   right: 12px;
-  bottom: calc(100% - 60px);
+  bottom: calc(100% - 70px);
   left: 12px;
   z-index: 1;
   overflow: hidden;
-  max-height: 64px;
+  max-height: 78px;
   margin: 0;
   border: 0;
   border-radius: 8px;
-  padding: 10px 13px 14px;
+  padding: 14px 17px 16px;
   color: #374151;
   background: #e5e7eb;
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.12);
@@ -632,6 +632,16 @@ form {
   transition: max-height 150ms ease, opacity 150ms ease, transform 150ms ease, bottom 150ms ease, box-shadow 150ms ease;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.selection-quote::first-letter {
+  float: left;
+  margin: 1px 7px 0 0;
+  color: #4b5563;
+  font-size: 2.45em;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 0.82;
 }
 
 .selection-quote.has-overflow::after {
