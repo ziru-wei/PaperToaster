@@ -15,6 +15,8 @@
         </div>
         <div class="dashboard-controls">
           <input id="paperSearch" type="search" placeholder="Search papers and URLs" aria-label="Search papers">
+          <button id="paperImportButton" class="dashboard-text-button" type="button">Import</button>
+          <button id="paperEditButton" class="dashboard-text-button" type="button">Edit</button>
           <div class="sort-control">
             <button id="paperSortButton" class="sort-button" type="button" title="Sort papers" aria-label="Sort papers" aria-expanded="false">
               <span class="sort-icon" aria-hidden="true"></span>
@@ -24,6 +26,14 @@
         </div>
       </header>
 
+      <input id="paperImportFile" type="file" accept="application/json,.json" hidden>
+      <section id="bulkActions" class="bulk-actions" aria-live="polite" hidden>
+        <span id="selectionSummary" class="selection-summary">0 selected</span>
+        <button id="selectAllButton" class="bulk-button" type="button">Select all</button>
+        <button id="backupAllButton" class="bulk-button" type="button">Backup all</button>
+        <button id="archiveSelectedButton" class="bulk-button" type="button" disabled>Archive</button>
+        <button id="deleteSelectedButton" class="bulk-button danger" type="button" disabled>Delete</button>
+      </section>
       <section id="paperList" class="paper-list" aria-label="Local papers"></section>
       <div id="emptyState" class="empty-state" hidden>
         <h2>No local papers yet</h2>

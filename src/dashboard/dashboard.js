@@ -1,4 +1,9 @@
 import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
+import {
+  deleteLibraryPapers,
+  exportLibraryPapers,
+  importLibraryArchive
+} from "../storage/library-archive-store.js";
 import { MessageType } from "../shared/messages.js";
 
 const SORT_OPTIONS = [
@@ -16,12 +21,23 @@ const state = {
   activeDocumentKey: "",
   papers: [],
   sort: "latestThread",
-  query: ""
+  query: "",
+  editMode: false,
+  selectedDocumentKeys: new Set()
 };
 
 const elements = {
   summary: document.querySelector("#librarySummary"),
   search: document.querySelector("#paperSearch"),
+  importButton: document.querySelector("#paperImportButton"),
+  importFile: document.querySelector("#paperImportFile"),
+  editButton: document.querySelector("#paperEditButton"),
+  bulkActions: document.querySelector("#bulkActions"),
+  selectionSummary: document.querySelector("#selectionSummary"),
+  selectAllButton: document.querySelector("#selectAllButton"),
+  backupAllButton: document.querySelector("#backupAllButton"),
+  archiveSelectedButton: document.querySelector("#archiveSelectedButton"),
+  deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
   sortButton: document.querySelector("#paperSortButton"),
   sortMenu: document.querySelector("#paperSortMenu"),
   paperList: document.querySelector("#paperList"),
@@ -36,6 +52,44 @@ elements.search.addEventListener("input", () => {
 elements.sortButton.addEventListener("click", (event) => {
   event.stopPropagation();
   setSortMenuOpen(elements.sortMenu.hidden);
+});
+
+elements.importButton.addEventListener("click", () => {
+  elements.importFile.click();
+});
+
+elements.importFile.addEventListener("change", () => {
+  importArchiveFile(elements.importFile.files?.[0]).catch((error) => {
+    elements.summary.textContent = `Could not import archive: ${error.message || String(error)}`;
+  }).finally(() => {
+    elements.importFile.value = "";
+  });
+});
+
+elements.editButton.addEventListener("click", () => {
+  setEditMode(!state.editMode);
+});
+
+elements.selectAllButton.addEventListener("click", () => {
+  selectAllVisiblePapers();
+});
+
+elements.backupAllButton.addEventListener("click", () => {
+  backupAllPapers().catch((error) => {
+    elements.summary.textContent = `Could not back up papers: ${error.message || String(error)}`;
+  });
+});
+
+elements.archiveSelectedButton.addEventListener("click", () => {
+  archiveSelectedPapers().catch((error) => {
+    elements.summary.textContent = `Could not archive papers: ${error.message || String(error)}`;
+  });
+});
+
+elements.deleteSelectedButton.addEventListener("click", () => {
+  deleteSelectedPapers().catch((error) => {
+    elements.summary.textContent = `Could not delete papers: ${error.message || String(error)}`;
+  });
 });
 
 window.addEventListener("focus", () => {
@@ -86,7 +140,11 @@ async function refreshPapers() {
 
 function renderSummary() {
   const totalMessages = state.papers.reduce((sum, paper) => sum + paper.messageCount, 0);
-  elements.summary.textContent = `${state.papers.length} papers · ${totalMessages} messages`;
+  const selectedCount = getSelectedDocumentKeys().length;
+  elements.summary.textContent = state.editMode
+    ? `${state.papers.length} papers · ${selectedCount} selected`
+    : `${state.papers.length} papers · ${totalMessages} messages`;
+  renderBulkActions();
 }
 
 function renderPapers() {
@@ -100,12 +158,21 @@ function createPaperCard(paper, maxMessageCount) {
   const isActive = paper.documentKey === state.activeDocumentKey;
   card.className = "paper-card";
   card.classList.toggle("active", isActive);
+  card.classList.toggle("editing", state.editMode);
+  card.classList.toggle("selected", state.selectedDocumentKeys.has(paper.documentKey));
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-pressed", String(isActive));
-  card.setAttribute("aria-label", `Open side panel context for ${paper.title || "paper"}`);
+  card.setAttribute("aria-pressed", String(state.editMode ? state.selectedDocumentKeys.has(paper.documentKey) : isActive));
+  card.setAttribute("aria-label", state.editMode
+    ? `Select ${paper.title || "paper"}`
+    : `Open side panel context for ${paper.title || "paper"}`);
   card.addEventListener("click", (event) => {
     if (isCardActionIgnored(event.target)) {
+      return;
+    }
+
+    if (state.editMode) {
+      togglePaperSelection(paper.documentKey);
       return;
     }
 
@@ -121,6 +188,11 @@ function createPaperCard(paper, maxMessageCount) {
     }
 
     event.preventDefault();
+    if (state.editMode) {
+      togglePaperSelection(paper.documentKey);
+      return;
+    }
+
     openPaperContextInSidePanel(paper.documentKey);
   });
 
@@ -146,8 +218,34 @@ function createPaperCard(paper, maxMessageCount) {
   footer.append(createStarButton(paper));
 
   main.append(topRow, footer);
+  if (state.editMode) {
+    card.append(createPaperCheckbox(paper));
+  }
   card.append(main);
   return card;
+}
+
+function createPaperCheckbox(paper) {
+  const label = document.createElement("label");
+  label.className = "paper-select";
+  label.title = `Select ${paper.title || "paper"}`;
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = state.selectedDocumentKeys.has(paper.documentKey);
+  checkbox.setAttribute("aria-label", `Select ${paper.title || "paper"}`);
+  checkbox.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  checkbox.addEventListener("change", () => {
+    setPaperSelected(paper.documentKey, checkbox.checked);
+  });
+
+  label.append(checkbox);
+  label.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  return label;
 }
 
 function createMessageRing(paper, maxMessageCount) {
@@ -204,7 +302,7 @@ function normalizeTitleForDisplay(title) {
 }
 
 function isCardActionIgnored(target) {
-  return Boolean(target?.closest?.(".paper-star"));
+  return Boolean(target?.closest?.(".paper-star, .paper-select"));
 }
 
 function isPlaceholderTitle(title) {
@@ -221,6 +319,11 @@ function createTitleLink(paper) {
     link.target = "_blank";
     link.rel = "noreferrer";
   }
+  link.addEventListener("click", (event) => {
+    if (state.editMode) {
+      event.preventDefault();
+    }
+  });
   return link;
 }
 
@@ -289,6 +392,147 @@ function renderSortMenu() {
     });
     return button;
   }));
+}
+
+function renderBulkActions() {
+  const selectedCount = getSelectedDocumentKeys().length;
+  const allVisibleSelected = state.papers.length > 0 && selectedCount === state.papers.length;
+  elements.bulkActions.hidden = !state.editMode;
+  elements.selectionSummary.textContent = `${selectedCount} selected`;
+  elements.selectAllButton.textContent = allVisibleSelected ? "Clear" : "Select all";
+  elements.selectAllButton.disabled = state.papers.length === 0;
+  elements.backupAllButton.disabled = state.papers.length === 0;
+  elements.archiveSelectedButton.disabled = selectedCount === 0;
+  elements.deleteSelectedButton.disabled = selectedCount === 0;
+  elements.editButton.textContent = state.editMode ? "Done" : "Edit";
+  elements.editButton.classList.toggle("active", state.editMode);
+}
+
+function setEditMode(editMode) {
+  state.editMode = Boolean(editMode);
+  if (!state.editMode) {
+    state.selectedDocumentKeys.clear();
+  }
+
+  renderPapers();
+  renderSummary();
+}
+
+function togglePaperSelection(documentKey) {
+  setPaperSelected(documentKey, !state.selectedDocumentKeys.has(documentKey));
+}
+
+function setPaperSelected(documentKey, selected) {
+  if (!documentKey) {
+    return;
+  }
+
+  if (selected) {
+    state.selectedDocumentKeys.add(documentKey);
+  } else {
+    state.selectedDocumentKeys.delete(documentKey);
+  }
+
+  renderPapers();
+  renderSummary();
+}
+
+function selectAllVisiblePapers() {
+  const visibleKeys = state.papers.map((paper) => paper.documentKey).filter(Boolean);
+  const selectedVisibleCount = getSelectedDocumentKeys().length;
+  const shouldSelectAll = selectedVisibleCount !== visibleKeys.length;
+  state.selectedDocumentKeys.clear();
+
+  if (shouldSelectAll) {
+    for (const documentKey of visibleKeys) {
+      state.selectedDocumentKeys.add(documentKey);
+    }
+  }
+
+  renderPapers();
+  renderSummary();
+}
+
+async function archiveSelectedPapers() {
+  const selectedKeys = getSelectedDocumentKeys();
+  if (!selectedKeys.length || !window.confirm(`Archive ${selectedKeys.length} selected paper(s)? This downloads a restorable archive, then removes them from the dashboard.`)) {
+    return;
+  }
+
+  const archive = await exportLibraryPapers(selectedKeys);
+  downloadArchiveFile(archive);
+  await deleteLibraryPapers(selectedKeys);
+  await afterBulkMutation(selectedKeys);
+}
+
+async function deleteSelectedPapers() {
+  const selectedKeys = getSelectedDocumentKeys();
+  if (!selectedKeys.length || !window.confirm(`Delete ${selectedKeys.length} selected paper(s)? This removes their local markdown and conversations.`)) {
+    return;
+  }
+
+  await deleteLibraryPapers(selectedKeys);
+  await afterBulkMutation(selectedKeys);
+}
+
+async function backupAllPapers() {
+  const papers = await getAllDisplayablePapers();
+  const documentKeys = papers.map((paper) => paper.documentKey).filter(Boolean);
+  if (!documentKeys.length) {
+    return;
+  }
+
+  const archive = await exportLibraryPapers(documentKeys);
+  downloadArchiveFile(archive, "backup");
+}
+
+async function importArchiveFile(file) {
+  if (!file) {
+    return;
+  }
+
+  const archive = JSON.parse(await file.text());
+  const result = await importLibraryArchive(archive);
+  state.selectedDocumentKeys.clear();
+  await refreshAll();
+  const summary = `Added ${result.importedPaperCount} papers · skipped ${result.skippedPaperCount} existing`;
+  elements.summary.textContent = summary;
+  window.alert(`Import complete.\n${summary}`);
+}
+
+function downloadArchiveFile(archive, kind = "archive") {
+  const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `reading-dashboard-${kind}-${date}-${archive.documentKeys.length}-papers.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function afterBulkMutation(documentKeys) {
+  if (documentKeys.includes(state.activeDocumentKey)) {
+    state.activeDocumentKey = "";
+  }
+
+  setEditMode(false);
+  for (const documentKey of documentKeys) {
+    notifyPaperActivityChanged(documentKey);
+  }
+  await refreshPapers();
+}
+
+function getSelectedDocumentKeys() {
+  const visibleKeys = new Set(state.papers.map((paper) => paper.documentKey));
+  return [...state.selectedDocumentKeys].filter((documentKey) => visibleKeys.has(documentKey));
+}
+
+async function getAllDisplayablePapers() {
+  const papers = await listLibraryPapers(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread);
+  return papers.filter(isDisplayablePaper);
 }
 
 function getMaxMessageCount() {

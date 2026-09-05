@@ -8,6 +8,8 @@ The Reading Dashboard is a separate extension page that lists papers already kno
 
 The side panel supports two context sources: the active PDF tab and a dashboard-selected library paper.
 
+The dashboard also has a compact management mode for bulk archive/delete/import. Details are in `docs/dashboard-archive-import.md`.
+
 ## Implemented Feature: Dashboard Paper Context In Side Panel
 
 Goal:
