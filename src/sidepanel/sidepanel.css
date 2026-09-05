@@ -415,7 +415,7 @@ section {
   position: relative;
   width: var(--composer-width);
   align-self: center;
-  margin-top: 12px;
+  transform: translateY(12px);
 }
 
 .scroll-to-latest {
