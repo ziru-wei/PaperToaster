@@ -39,7 +39,7 @@ export function normalizeAiSettings(settings) {
   const provider = normalizeProvider(settings?.provider);
   const model = normalizeModel(settings?.model) || DEFAULT_AI_SETTINGS.model;
   const apiKey = String(settings?.apiKey || "").trim();
-  const debugMode = Boolean(settings?.debugMode);
+  const debugMode = normalizeDebugMode(settings?.debugMode);
   const systemPrompt = normalizeSystemPrompt(settings?.systemPrompt) || DEFAULT_AI_SETTINGS.systemPrompt;
 
   return {
@@ -78,4 +78,8 @@ function normalizeSystemPrompt(systemPrompt) {
   return String(systemPrompt || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeDebugMode(debugMode) {
+  return debugMode === true || debugMode === "true" || debugMode === 1 || debugMode === "1";
 }

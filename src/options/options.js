@@ -41,6 +41,7 @@ elements.addPreset.addEventListener("click", () => {
 });
 elements.saveAiSettings.addEventListener("click", saveAiProviderSettings);
 elements.clearAiKey.addEventListener("click", clearAiProviderKey);
+elements.aiDebugMode.addEventListener("change", saveAiProviderSettings);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
 
