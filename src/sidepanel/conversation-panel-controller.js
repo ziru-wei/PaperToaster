@@ -42,6 +42,21 @@ export function createConversationPanelController({
       selectThread(selectButton.dataset.selectThreadId).catch(reportError);
     }
   });
+  threadElement.addEventListener("click", (event) => {
+    const quote = event.target.closest(".conversation-selection");
+    if (quote) {
+      toggleConversationSelection(quote);
+    }
+  });
+  threadElement.addEventListener("keydown", (event) => {
+    const quote = event.target.closest(".conversation-selection");
+    if (!quote || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+
+    event.preventDefault();
+    toggleConversationSelection(quote);
+  });
 
   async function setDocumentUrl(url) {
     const requestId = ++documentRequestId;
@@ -236,6 +251,8 @@ export function createConversationPanelController({
       if (message.role === "user" && message.selectionText) {
         const quote = document.createElement("blockquote");
         quote.className = "conversation-selection";
+        quote.tabIndex = 0;
+        quote.title = "Click to scroll selected text";
         quote.textContent = message.selectionText;
         item.append(quote);
       }
@@ -278,6 +295,13 @@ export function createConversationPanelController({
 
   function reportError(error) {
     onDiagnostic?.(`Conversation thread action failed: ${error.message || String(error)}`);
+  }
+
+  function toggleConversationSelection(quote) {
+    quote.classList.toggle("scrollable");
+    if (!quote.classList.contains("scrollable")) {
+      quote.scrollTop = 0;
+    }
   }
 
   return {
