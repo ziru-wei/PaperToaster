@@ -80,42 +80,40 @@ active tab URL
 
 Fast tab switching is guarded by request ids in the side panel and in the conversation controller, so stale async loads should not overwrite the active paper title or active thread.
 
-## TODO: New Thread Plus Button
+## Thread Rail UI
 
-Storage support exists, but UI does not expose multi-thread operations yet.
+The first multi-thread UI pass is implemented in the fixed top title area.
 
-Needed UI behavior:
+Current UI behavior:
 
-1. Add a small plus button in the chat header or near the conversation area.
-2. Clicking plus calls `createStoredChatThread(activeDocument.url)`.
-3. The new thread becomes `papers.activeThreadId`.
-4. The side panel clears the visible conversation and starts appending to the new empty thread.
-5. If the user does not click plus, continue using the existing `activeThreadId`.
+1. The left `+` button creates a new active thread for the current paper.
+2. Existing thread chips scroll horizontally to the right, with newer threads shown first.
+3. Thread chips are labeled by the first message timestamp when available.
+4. Selecting a chip calls `setActiveStoredChatThread(activeDocument.url, threadId)`.
+5. Deleting a chip removes the thread and its messages, then activates the newest remaining thread if one exists.
 
-Needed controller API:
+Controller API:
 
 ```js
-conversation.createNewThread()
-conversation.listThreads()
-conversation.setActiveThread(threadId)
+conversation.createThread()
+conversation.selectThread(threadId)
+conversation.deleteThread(threadId)
 ```
 
-Needed store APIs already present:
+Store APIs:
 
 ```js
 createStoredChatThread(url)
 listStoredChatThreads(url)
 setActiveStoredChatThread(url, threadId)
+deleteStoredChatThread(url, threadId)
 ```
 
-## TODO: Thread Switcher
+## TODO: Thread Management Polish
 
-After plus button works, add a compact thread switcher:
-
-- Show existing threads for the active `documentKey`.
-- Use `updatedAt` and first user message as the default label if no custom thread title exists.
-- Selecting a thread calls `setActiveStoredChatThread(activeDocument.url, threadId)`.
-- The side panel reloads that thread's messages.
+- Add clearer management affordances if deletion becomes too easy to misclick.
+- Consider editable thread titles only if timestamp labels become insufficient.
+- Keep UI compact; this is utility chrome, not a notes app.
 
 ## TODO: Key Promotion And Aliases
 
@@ -137,5 +135,4 @@ This should happen before building a serious library UI, otherwise the same pape
 
 - Should a new thread inherit the latest selected text, or start with no selected text?
 - Should thread titles be user-editable immediately, or inferred from the first user question first?
-- Should deleting a thread be supported in V0.1, or deferred?
 - Should all messages keep full `selectionText`, or should very long selections be stored separately to keep message records smaller?

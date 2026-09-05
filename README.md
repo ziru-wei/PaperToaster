@@ -32,6 +32,7 @@ Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from
 - Answers selected-text questions through a lightweight selection-grounded context pack, using the configured AI provider.
 - Shows selected-text AI questions and answers as a conversation thread for the current selection.
 - Persists each active conversation thread by canonical paper key in IndexedDB, so switching tabs does not erase the paper's chat memory.
+- Adds a fixed top conversation thread rail: the left button creates a new thread, older threads scroll horizontally to the right, and existing threads can be selected or deleted.
 - Supports slash prompt presets in the selected-text question box, backed by extension-local settings.
 - Supports Debug mode in Options, which returns deterministic placeholder answers without making AI API requests.
 - Provides an Options page for local AI provider settings. API keys are stored in `chrome.storage.local` and are not committed to the repo.

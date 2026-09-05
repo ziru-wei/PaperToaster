@@ -1,12 +1,47 @@
-import { getStoredChatThread, saveStoredChatThread } from "../storage/chat-store.js";
+import {
+  createStoredChatThread,
+  deleteStoredChatThread,
+  getStoredChatThread,
+  listStoredChatThreads,
+  saveStoredChatThread,
+  setActiveStoredChatThread
+} from "../storage/chat-store.js";
 
-export function createConversationPanelController({ threadElement, onDiagnostic, onChange }) {
+export function createConversationPanelController({
+  threadElement,
+  threadBarElement,
+  threadScrollerElement,
+  newThreadButton,
+  onDiagnostic,
+  onChange
+}) {
   let messages = [];
   let currentSelectionText = "";
   let threadUrl = "";
   let activeThreadId = "";
+  let threadSummaries = [];
   let saveTimer = null;
   let documentRequestId = 0;
+
+  newThreadButton.addEventListener("click", () => {
+    createThread().catch(reportError);
+  });
+  threadScrollerElement.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-thread-id]");
+    if (deleteButton) {
+      const threadId = deleteButton.dataset.deleteThreadId;
+      const label = deleteButton.closest(".thread-chip")?.querySelector(".thread-select")?.textContent || "this thread";
+      if (window.confirm(`Delete ${label}?`)) {
+        deleteThread(threadId).catch(reportError);
+      }
+      return;
+    }
+
+    const selectButton = event.target.closest("[data-select-thread-id]");
+    if (selectButton) {
+      selectThread(selectButton.dataset.selectThreadId).catch(reportError);
+    }
+  });
 
   async function setDocumentUrl(url) {
     const requestId = ++documentRequestId;
@@ -26,7 +61,9 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
       messages = [];
       currentSelectionText = "";
       activeThreadId = "";
+      threadSummaries = [];
       render();
+      renderThreadList();
       onChange?.();
       return;
     }
@@ -36,9 +73,12 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
       return;
     }
 
-    messages = thread.messages || [];
-    currentSelectionText = thread.currentThreadSelectionText || "";
-    activeThreadId = thread.threadId || "";
+    applyThread(thread);
+    await refreshThreadList(requestId);
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
     render();
     onChange?.();
   }
@@ -52,7 +92,8 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
     messages.push({
       role: message.role === "assistant" ? "assistant" : "user",
       text,
-      selectionText: String(message.selectionText || "").trim()
+      selectionText: String(message.selectionText || "").trim(),
+      createdAt: Number(message.createdAt) || Date.now()
     });
     render();
     queueSave();
@@ -73,8 +114,62 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
     onChange?.();
   }
 
-  async function persist() {
+  async function createThread() {
     if (!threadUrl) {
+      return;
+    }
+
+    await persist();
+    const requestId = documentRequestId;
+    const thread = await createStoredChatThread(threadUrl);
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
+    applyThread(thread);
+    await refreshThreadList(requestId);
+    render();
+    onChange?.();
+  }
+
+  async function selectThread(threadId) {
+    if (!threadUrl || !threadId || threadId === activeThreadId) {
+      return;
+    }
+
+    await persist();
+    const requestId = documentRequestId;
+    const thread = await setActiveStoredChatThread(threadUrl, threadId);
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
+    applyThread(thread);
+    await refreshThreadList(requestId);
+    render();
+    onChange?.();
+  }
+
+  async function deleteThread(threadId) {
+    if (!threadUrl || !threadId) {
+      return;
+    }
+
+    window.clearTimeout(saveTimer);
+    const requestId = documentRequestId;
+    const thread = await deleteStoredChatThread(threadUrl, threadId);
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
+    applyThread(thread);
+    await refreshThreadList(requestId);
+    render();
+    onChange?.();
+  }
+
+  async function persist() {
+    if (!threadUrl || (!activeThreadId && !messages.length && !currentSelectionText)) {
       return;
     }
 
@@ -95,10 +190,35 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
 
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
-      persist().catch((error) => {
-        onDiagnostic?.(`Chat thread save skipped: ${error.message || String(error)}`);
-      });
+      const requestId = documentRequestId;
+      persist()
+        .then(() => refreshThreadList(requestId))
+        .catch((error) => {
+          onDiagnostic?.(`Chat thread save skipped: ${error.message || String(error)}`);
+        });
     }, 250);
+  }
+
+  function applyThread(thread) {
+    messages = thread.messages || [];
+    currentSelectionText = thread.currentThreadSelectionText || "";
+    activeThreadId = thread.threadId || "";
+  }
+
+  async function refreshThreadList(requestId = documentRequestId) {
+    if (!threadUrl) {
+      threadSummaries = [];
+      renderThreadList();
+      return;
+    }
+
+    const threads = await listStoredChatThreads(threadUrl);
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
+    threadSummaries = threads;
+    renderThreadList();
   }
 
   function render() {
@@ -127,12 +247,79 @@ export function createConversationPanelController({ threadElement, onDiagnostic,
     threadElement.scrollTop = threadElement.scrollHeight;
   }
 
+  function renderThreadList() {
+    threadBarElement.hidden = !threadUrl;
+    newThreadButton.disabled = !threadUrl;
+    threadScrollerElement.textContent = "";
+
+    for (const thread of threadSummaries) {
+      const item = document.createElement("div");
+      item.className = `thread-chip${thread.threadId === activeThreadId ? " active" : ""}`;
+
+      const selectButton = document.createElement("button");
+      selectButton.className = "thread-select";
+      selectButton.type = "button";
+      selectButton.dataset.selectThreadId = thread.threadId;
+      selectButton.title = formatThreadTitle(thread);
+      selectButton.textContent = formatThreadLabel(thread);
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "thread-delete";
+      deleteButton.type = "button";
+      deleteButton.dataset.deleteThreadId = thread.threadId;
+      deleteButton.title = "Delete conversation";
+      deleteButton.setAttribute("aria-label", `Delete ${formatThreadLabel(thread)}`);
+      deleteButton.textContent = "×";
+
+      item.append(selectButton, deleteButton);
+      threadScrollerElement.append(item);
+    }
+  }
+
+  function reportError(error) {
+    onDiagnostic?.(`Conversation thread action failed: ${error.message || String(error)}`);
+  }
+
   return {
     setDocumentUrl,
     appendMessage,
     getMessages,
     getCurrentSelectionText,
     setCurrentSelectionText,
-    persist
+    persist,
+    createThread,
+    selectThread,
+    deleteThread
   };
+}
+
+function formatThreadLabel(thread) {
+  if (!thread?.messageCount) {
+    return "New thread";
+  }
+
+  return formatThreadTime(thread.firstMessageCreatedAt || thread.createdAt || thread.updatedAt);
+}
+
+function formatThreadTitle(thread) {
+  const count = thread?.messageCount || 0;
+  const messageLabel = count === 1 ? "1 message" : `${count} messages`;
+  return `${formatThreadLabel(thread)} · ${messageLabel}`;
+}
+
+function formatThreadTime(timestamp) {
+  const date = new Date(Number(timestamp));
+  if (!Number.isFinite(date.getTime())) {
+    return "Thread";
+  }
+
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }

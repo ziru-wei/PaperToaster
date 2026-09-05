@@ -28,6 +28,9 @@ const elements = getSidePanelElements();
 
 const conversation = createConversationPanelController({
   threadElement: elements.conversationThread,
+  threadBarElement: elements.conversationThreadBar,
+  threadScrollerElement: elements.conversationThreadScroller,
+  newThreadButton: elements.newConversationThread,
   onDiagnostic: addDiagnostic,
   onChange: updateAskReadiness
 });

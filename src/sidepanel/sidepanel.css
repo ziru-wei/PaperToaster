@@ -84,6 +84,92 @@ header,
   display: none;
 }
 
+.thread-bar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0 0 5px;
+}
+
+.thread-bar[hidden] {
+  display: none;
+}
+
+.thread-new-button {
+  display: inline-flex;
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.thread-scroller {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 6px;
+  padding: 1px 0 4px;
+  scrollbar-width: thin;
+}
+
+.thread-chip {
+  display: inline-flex;
+  overflow: hidden;
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 154px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.thread-chip.active {
+  border-color: #64748b;
+  background: #eef2f7;
+}
+
+.thread-select,
+.thread-delete {
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.thread-select {
+  overflow: hidden;
+  min-width: 0;
+  max-width: 124px;
+  padding: 3px 5px 3px 9px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-delete {
+  width: 24px;
+  min-width: 24px;
+  padding: 0 7px 1px 3px;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.thread-delete:hover,
+.thread-select:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
 .document-title:hover,
 .document-title:focus {
   border-color: #b8c0cc;
@@ -438,10 +524,22 @@ form {
 
   button,
   textarea,
+  .thread-chip,
   .prompt-preset-menu {
     border-color: #475467;
     color: #f9fafb;
     background: #1f2937;
+  }
+
+  .thread-chip.active {
+    border-color: #94a3b8;
+    background: #293548;
+  }
+
+  .thread-select,
+  .thread-delete {
+    color: #f9fafb;
+    background: transparent;
   }
 
   .selection-quote {

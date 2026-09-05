@@ -93,6 +93,7 @@ export async function saveStoredChatThread(url, thread) {
     title: normalizedThread.title || existingThread?.title || DEFAULT_THREAD_TITLE,
     currentThreadSelectionText: normalizedThread.currentThreadSelectionText,
     createdAt: existingThread?.createdAt || now,
+    firstMessageCreatedAt: getFirstUserMessageCreatedAt(normalizedThread.messages) || existingThread?.firstMessageCreatedAt || null,
     updatedAt: now,
     messageCount: normalizedThread.messages.length
   });
@@ -123,16 +124,19 @@ export async function listStoredChatThreads(url) {
       .getAll(documentKey)
   );
 
-  return threads
+  const sortedThreads = threads
     .sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0))
-    .map((thread) => ({
+    .map(async (thread) => ({
       threadId: thread.threadId,
       documentKey: thread.documentKey,
       title: thread.title || DEFAULT_THREAD_TITLE,
       createdAt: thread.createdAt || null,
+      firstMessageCreatedAt: thread.firstMessageCreatedAt || (await getFirstThreadUserMessageCreatedAt(db, thread.threadId)),
       updatedAt: thread.updatedAt || null,
       messageCount: thread.messageCount || 0
     }));
+
+  return Promise.all(sortedThreads);
 }
 
 export async function createStoredChatThread(url, options = {}) {
@@ -165,6 +169,7 @@ export async function createStoredChatThread(url, options = {}) {
     title: normalizeThreadTitle(options.title),
     currentThreadSelectionText: "",
     createdAt: now,
+    firstMessageCreatedAt: null,
     updatedAt: now,
     messageCount: 0
   });
@@ -205,6 +210,47 @@ export async function setActiveStoredChatThread(url, threadId) {
     activeThreadId: threadId
   });
   await transactionDone(transaction);
+
+  return getStoredChatThread(url);
+}
+
+export async function deleteStoredChatThread(url, threadId) {
+  const documentKey = getDocumentMemoryKey(url);
+  if (!documentKey || !threadId) {
+    return createEmptyChatThread({ url, documentKey });
+  }
+
+  const db = await openPaperDatabase();
+  const thread = await getThreadRecord(db, threadId);
+  if (!thread || thread.documentKey !== documentKey) {
+    throw new Error("Conversation thread does not belong to the active document.");
+  }
+
+  const paper = await getPaperRecord(db, documentKey);
+  const replacementThread = (await getThreadRecordsForDocument(db, documentKey))
+    .filter((candidate) => candidate.threadId !== threadId)
+    .sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0))[0] || null;
+  const now = Date.now();
+  const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE, CONVERSATION_MESSAGE_STORE], "readwrite");
+
+  transaction.objectStore(CONVERSATION_THREAD_STORE).delete(threadId);
+  deleteThreadMessages(transaction.objectStore(CONVERSATION_MESSAGE_STORE), threadId);
+  transaction.objectStore(PAPER_STORE).put({
+    ...(paper || {}),
+    documentKey,
+    canonicalUrl: url || paper?.canonicalUrl || "",
+    title: paper?.title || "",
+    titleSource: paper?.titleSource || "",
+    metadata: paper?.metadata || null,
+    createdAt: paper?.createdAt || now,
+    updatedAt: now,
+    activeThreadId: replacementThread?.threadId || ""
+  });
+
+  await transactionDone(transaction);
+  if (!replacementThread) {
+    return createEmptyChatThread({ url, documentKey });
+  }
 
   return getStoredChatThread(url);
 }
@@ -255,15 +301,23 @@ async function getThreadRecord(db, threadId) {
   );
 }
 
-async function getLatestThreadForDocument(db, documentKey) {
-  const threads = await requestToPromise(
+async function getThreadRecordsForDocument(db, documentKey) {
+  return requestToPromise(
     db.transaction(CONVERSATION_THREAD_STORE, "readonly")
       .objectStore(CONVERSATION_THREAD_STORE)
       .index("byDocumentKey")
       .getAll(documentKey)
   );
+}
+
+async function getLatestThreadForDocument(db, documentKey) {
+  const threads = await getThreadRecordsForDocument(db, documentKey);
 
   return threads.sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0))[0] || null;
+}
+
+async function getFirstThreadUserMessageCreatedAt(db, threadId) {
+  return getFirstUserMessageCreatedAt(await getThreadMessages(db, threadId));
 }
 
 async function getThreadMessages(db, threadId) {
@@ -302,6 +356,25 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
   for (let index = messages.length; index < previousMessageCount; index += 1) {
     store.delete(createMessageId(threadId, index));
   }
+}
+
+function deleteThreadMessages(store, threadId) {
+  const request = store.index("byThreadId").openCursor(IDBKeyRange.only(threadId));
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (!cursor) {
+      return;
+    }
+
+    cursor.delete();
+    cursor.continue();
+  };
+}
+
+function getFirstUserMessageCreatedAt(messages) {
+  const firstMessage = messages.find((message) => message?.role === "user" && Number(message?.createdAt)) ||
+    messages.find((message) => Number(message?.createdAt));
+  return firstMessage ? Number(firstMessage.createdAt) : null;
 }
 
 async function getLegacyChatThread(url, documentKey) {
