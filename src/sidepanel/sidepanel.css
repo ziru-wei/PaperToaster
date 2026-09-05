@@ -2,7 +2,7 @@
   color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  --chat-text-size: 14px;
+  --chat-text-size: 13.25px;
   --selection-text-size: 13px;
   --thread-selection-text-size: 12px;
   --control-radius: 10px;
@@ -436,7 +436,7 @@ form {
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
   padding: 4px 10px 10px 0;
   scrollbar-color: rgba(107, 114, 128, 0.22) transparent;
   scrollbar-gutter: stable;
@@ -496,12 +496,12 @@ form {
   max-width: 86%;
   max-height: 6em;
   margin: 0 0 4px;
-  color: #6b7280;
+  color: #5f8068;
   cursor: pointer;
   font-size: var(--thread-selection-text-size);
   font-style: italic;
   line-height: 1.33;
-  opacity: 0.62;
+  opacity: 0.76;
   overflow: hidden;
   white-space: pre-wrap;
   word-break: break-word;
@@ -509,6 +509,8 @@ form {
 
 .conversation-selection.scrollable {
   overflow: auto;
+  color: #4f7f5d;
+  background: rgba(95, 128, 104, 0.08);
   scrollbar-color: rgba(107, 114, 128, 0.18) transparent;
   scrollbar-width: thin;
 }
@@ -527,8 +529,7 @@ form {
 }
 
 .conversation-selection:focus {
-  outline: 1px solid rgba(107, 114, 128, 0.28);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .conversation-selection::before {
@@ -625,7 +626,12 @@ form {
   }
 
   .conversation-selection {
-    color: #aeb7c5;
+    color: #8aaa91;
+  }
+
+  .conversation-selection.scrollable {
+    color: #9bbc9e;
+    background: rgba(138, 170, 145, 0.08);
   }
 
   button:hover {
