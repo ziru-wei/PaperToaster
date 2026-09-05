@@ -1,43 +1,24 @@
-import { listLibraryLabels, listLibraryPapers } from "../storage/library-store.js";
-import {
-  assignLabelToPaper,
-  createLabel,
-  deleteLabel,
-  removeLabelFromPaper,
-  reorderLabels,
-  updateLabel
-} from "../storage/label-store.js";
+import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
 
 const SORT_CONFIG = {
   lastOpened: { sortBy: "lastOpened", sortDirection: "desc" },
   firstOpened: { sortBy: "firstOpened", sortDirection: "asc" },
   firstConversation: { sortBy: "firstConversation", sortDirection: "asc" },
   title: { sortBy: "title", sortDirection: "asc" },
-  label: { sortBy: "label", sortDirection: "asc" },
   threadCount: { sortBy: "threadCount", sortDirection: "desc" },
   messageCount: { sortBy: "messageCount", sortDirection: "desc" }
 };
 
 const state = {
   papers: [],
-  labels: [],
-  filterLabelId: "all",
   sort: "lastOpened",
-  query: "",
-  managingLabels: false
+  query: ""
 };
 
 const elements = {
   summary: document.querySelector("#librarySummary"),
   search: document.querySelector("#paperSearch"),
   sort: document.querySelector("#paperSort"),
-  labelFilters: document.querySelector("#labelFilters"),
-  manageLabels: document.querySelector("#manageLabels"),
-  labelManager: document.querySelector("#labelManager"),
-  newLabelForm: document.querySelector("#newLabelForm"),
-  newLabelName: document.querySelector("#newLabelName"),
-  newLabelColor: document.querySelector("#newLabelColor"),
-  labelManagerList: document.querySelector("#labelManagerList"),
   paperList: document.querySelector("#paperList"),
   emptyState: document.querySelector("#emptyState")
 };
@@ -52,36 +33,17 @@ elements.sort.addEventListener("change", () => {
   refreshPapers();
 });
 
-elements.manageLabels.addEventListener("click", () => {
-  state.managingLabels = !state.managingLabels;
-  renderLabelManager();
-});
-
-elements.newLabelForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await createLabel({
-    name: elements.newLabelName.value,
-    color: elements.newLabelColor.value
-  });
-  elements.newLabelName.value = "";
-  await refreshAll();
-});
-
 refreshAll().catch((error) => {
   elements.summary.textContent = `Could not load dashboard: ${error.message || String(error)}`;
 });
 
 async function refreshAll() {
-  state.labels = await listLibraryLabels();
   await refreshPapers();
-  renderLabels();
-  renderLabelManager();
 }
 
 async function refreshPapers() {
   state.papers = await listLibraryPapers({
     ...(SORT_CONFIG[state.sort] || SORT_CONFIG.lastOpened),
-    labelId: state.filterLabelId,
     query: state.query
   });
   renderPapers();
@@ -91,92 +53,6 @@ async function refreshPapers() {
 function renderSummary() {
   const totalMessages = state.papers.reduce((sum, paper) => sum + paper.messageCount, 0);
   elements.summary.textContent = `${state.papers.length} papers · ${totalMessages} messages`;
-}
-
-function renderLabels() {
-  elements.labelFilters.replaceChildren();
-  elements.labelFilters.append(
-    createLabelFilter({ labelId: "all", name: "All" }),
-    createLabelFilter({ labelId: "unlabeled", name: "Unlabeled" }),
-    ...state.labels.map((label) => createLabelFilter(label))
-  );
-}
-
-function createLabelFilter(label) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "label-filter";
-  button.classList.toggle("active", state.filterLabelId === label.labelId);
-  button.textContent = label.name;
-  if (label.color && label.labelId !== state.filterLabelId) {
-    button.style.background = label.color;
-  }
-  button.addEventListener("click", async () => {
-    state.filterLabelId = label.labelId;
-    renderLabels();
-    await refreshPapers();
-  });
-  return button;
-}
-
-function renderLabelManager() {
-  elements.labelManager.hidden = !state.managingLabels;
-  elements.manageLabels.textContent = state.managingLabels ? "Done" : "Manage labels";
-  elements.labelManagerList.replaceChildren(...state.labels.map((label, index) => createLabelManagerRow(label, index)));
-}
-
-function createLabelManagerRow(label, index) {
-  const row = document.createElement("div");
-  row.className = "label-manager-row";
-
-  const swatch = document.createElement("span");
-  swatch.className = "label-swatch";
-  swatch.style.background = label.color || "#eef2f7";
-
-  const nameInput = document.createElement("input");
-  nameInput.type = "text";
-  nameInput.value = label.name;
-  nameInput.maxLength = 40;
-  nameInput.addEventListener("change", async () => {
-    await updateLabel(label.labelId, { name: nameInput.value });
-    await refreshAll();
-  });
-
-  const colorInput = document.createElement("input");
-  colorInput.type = "color";
-  colorInput.value = label.color || "#eef2f7";
-  colorInput.addEventListener("change", async () => {
-    await updateLabel(label.labelId, { color: colorInput.value });
-    await refreshAll();
-  });
-
-  const upButton = createSmallButton("Up", async () => moveLabel(index, -1));
-  const downButton = createSmallButton("Down", async () => moveLabel(index, 1));
-  const deleteButton = createSmallButton("Delete", async () => {
-    await deleteLabel(label.labelId);
-    if (state.filterLabelId === label.labelId) {
-      state.filterLabelId = "all";
-    }
-    await refreshAll();
-  });
-
-  upButton.disabled = index === 0;
-  downButton.disabled = index === state.labels.length - 1;
-  row.append(swatch, nameInput, colorInput, upButton, downButton, deleteButton);
-  return row;
-}
-
-async function moveLabel(index, direction) {
-  const labels = [...state.labels];
-  const targetIndex = index + direction;
-  if (targetIndex < 0 || targetIndex >= labels.length) {
-    return;
-  }
-
-  const [label] = labels.splice(index, 1);
-  labels.splice(targetIndex, 0, label);
-  await reorderLabels(labels.map((item) => item.labelId));
-  await refreshAll();
 }
 
 function renderPapers() {
@@ -189,13 +65,21 @@ function createPaperCard(paper) {
   card.className = "paper-card";
 
   const main = document.createElement("div");
+  main.className = "paper-main";
+
+  const topRow = document.createElement("div");
+  topRow.className = "paper-top-row";
+
   const title = document.createElement("h2");
   title.className = "paper-title";
   title.textContent = paper.title;
 
+  const time = createPaperTimeBlock(paper);
+  topRow.append(title, time);
+
   const url = document.createElement("div");
   url.className = "paper-source-row";
-  url.append(createContextIndicator(paper), createUrlText(paper), createCopyUrlButton(paper), createPaperTimeRow(paper));
+  url.append(createContextIndicator(paper), createUrlLink(paper), createCopyUrlButton(paper));
 
   const meta = document.createElement("div");
   meta.className = "paper-meta";
@@ -204,17 +88,9 @@ function createPaperCard(paper) {
     createMetaText(`${paper.messageCount} messages`)
   );
 
-  const labels = document.createElement("div");
-  labels.className = "paper-labels";
-  labels.append(...paper.labels.map((label) => createPaperLabelChip(paper, label)));
+  main.append(topRow, url, meta);
 
-  main.append(title, url, meta, labels);
-
-  const actions = document.createElement("div");
-  actions.className = "paper-actions";
-  actions.append(createOpenButton(paper), createAssignLabelSelect(paper));
-
-  card.append(main, actions);
+  card.append(main, createStarButton(paper));
   return card;
 }
 
@@ -226,12 +102,17 @@ function createContextIndicator(paper) {
   return indicator;
 }
 
-function createUrlText(paper) {
-  const urlText = document.createElement("span");
-  urlText.className = "paper-url";
-  urlText.textContent = paper.canonicalUrl || paper.documentKey;
-  urlText.title = paper.canonicalUrl || paper.documentKey;
-  return urlText;
+function createUrlLink(paper) {
+  const link = document.createElement("a");
+  link.className = "paper-url";
+  link.textContent = paper.canonicalUrl || paper.documentKey;
+  link.title = paper.canonicalUrl || paper.documentKey;
+  if (paper.canonicalUrl) {
+    link.href = paper.canonicalUrl;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+  }
+  return link;
 }
 
 function createCopyUrlButton(paper) {
@@ -257,79 +138,33 @@ function createCopyUrlButton(paper) {
   return button;
 }
 
-function createPaperTimeRow(paper) {
-  const row = document.createElement("span");
-  row.className = "paper-time-row";
+function createPaperTimeBlock(paper) {
+  const block = document.createElement("div");
+  block.className = "paper-time-block";
   const first = paper.firstConversationAt || paper.firstOpenedAt;
   const latest = paper.lastConversationAt || paper.lastOpenedAt || paper.updatedAt;
-  row.textContent = `First ${formatTime(first)} · Latest ${formatTime(latest)}`;
-  return row;
+
+  const firstRow = document.createElement("span");
+  firstRow.textContent = `First ${formatTime(first)}`;
+  const latestRow = document.createElement("span");
+  latestRow.textContent = `Latest ${formatTime(latest)}`;
+  block.append(firstRow, latestRow);
+  return block;
 }
 
-function createPaperLabelChip(paper, label) {
-  const chip = document.createElement("span");
-  chip.className = "paper-label-chip";
-  chip.style.background = label.color || "#eef2f7";
-
-  const name = document.createElement("span");
-  name.textContent = label.name;
-
-  const removeButton = document.createElement("button");
-  removeButton.type = "button";
-  removeButton.title = `Remove ${label.name}`;
-  removeButton.setAttribute("aria-label", `Remove ${label.name}`);
-  removeButton.textContent = "×";
-  removeButton.addEventListener("click", async () => {
-    await removeLabelFromPaper(paper.documentKey, label.labelId);
-    await refreshAll();
-  });
-
-  chip.append(name, removeButton);
-  return chip;
-}
-
-function createOpenButton(paper) {
+function createStarButton(paper) {
   const button = document.createElement("button");
   button.type = "button";
-  button.textContent = "Open";
-  button.disabled = !paper.canonicalUrl;
-  button.addEventListener("click", () => {
-    if (paper.canonicalUrl) {
-      chrome.tabs.create({ url: paper.canonicalUrl });
-    }
+  button.className = "paper-star";
+  button.classList.toggle("starred", paper.starred);
+  button.title = paper.starred ? "Unstar paper" : "Star paper";
+  button.setAttribute("aria-label", button.title);
+  button.addEventListener("click", async () => {
+    await setLibraryPaperStarred(paper.documentKey, !paper.starred, paper);
+    await refreshPapers();
   });
+
   return button;
-}
-
-function createAssignLabelSelect(paper) {
-  const select = document.createElement("select");
-  select.setAttribute("aria-label", `Assign label to ${paper.title}`);
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Label";
-  select.append(placeholder);
-
-  for (const label of state.labels) {
-    if (paper.labels.some((assigned) => assigned.labelId === label.labelId)) {
-      continue;
-    }
-
-    const option = document.createElement("option");
-    option.value = label.labelId;
-    option.textContent = label.name;
-    select.append(option);
-  }
-
-  select.disabled = state.labels.length === paper.labels.length;
-  select.addEventListener("change", async () => {
-    if (select.value) {
-      await assignLabelToPaper(paper.documentKey, select.value);
-      select.value = "";
-      await refreshAll();
-    }
-  });
-  return select;
 }
 
 function createMetaText(text, className = "") {
@@ -339,15 +174,6 @@ function createMetaText(text, className = "") {
   }
   span.textContent = text;
   return span;
-}
-
-function createSmallButton(label, onClick) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "icon-text-button";
-  button.textContent = label;
-  button.addEventListener("click", onClick);
-  return button;
 }
 
 function formatTime(value) {

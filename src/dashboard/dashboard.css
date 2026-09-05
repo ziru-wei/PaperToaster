@@ -68,8 +68,7 @@ h1 {
 }
 
 .dashboard-controls input,
-.dashboard-controls select,
-.label-create-form input[type="text"] {
+.dashboard-controls select {
   height: 36px;
   border: 1px solid #e5e7eb;
   border-radius: 18px;
@@ -89,160 +88,41 @@ h1 {
 }
 
 .dashboard-controls input:focus,
-.dashboard-controls select:focus,
-.label-create-form input[type="text"]:focus {
+.dashboard-controls select:focus {
   border-color: #d1d5db;
   box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
 }
 
-.label-bar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 7px 0 9px;
-  background: rgba(248, 250, 252, 0.86);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.label-filters {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 1px 2px 5px;
-  scrollbar-width: none;
-}
-
-.label-filters::-webkit-scrollbar {
-  display: none;
-}
-
-.label-filter,
-.soft-button,
-.label-create-form button {
-  height: 27px;
-  flex: 0 0 auto;
-  border-radius: 14px;
-  padding: 0 11px;
-  color: #374151;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 9px rgba(15, 23, 42, 0.08);
-  font-size: 12px;
-}
-
-.label-filter.active {
-  color: #fff;
-  background: #111827;
-  box-shadow: none;
-}
-
-.soft-button:hover,
-.label-filter:hover,
-.label-create-form button:hover {
-  background: #eef2f7;
-}
-
-.label-filter.active:hover {
-  background: #111827;
-}
-
-.label-manager {
-  margin: 2px 0 18px;
-  border: 1px solid #eef2f7;
-  border-radius: 20px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 12px 34px rgba(148, 163, 184, 0.12);
-}
-
-.label-create-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.label-create-form input[type="text"] {
-  width: 220px;
-}
-
-.label-manager-row input[type="text"] {
-  height: 32px;
-  min-width: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 0 12px;
-  color: #111827;
-  background: #fff;
-  outline: none;
-}
-
-.label-create-form input[type="color"],
-.label-manager-row input[type="color"] {
-  width: 36px;
-  height: 32px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.label-manager-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.label-manager-row {
-  display: grid;
-  grid-template-columns: 28px 1fr 36px auto auto auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.label-swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.06);
-}
-
-.icon-text-button {
-  height: 28px;
-  border-radius: 14px;
-  padding: 0 10px;
-  color: #4b5563;
-  background: transparent;
-}
-
-.icon-text-button:hover {
-  background: #eef2f7;
-}
-
 .paper-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   align-items: stretch;
   gap: 14px;
 }
 
 .paper-card {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 14px;
-  min-height: 218px;
+  position: relative;
+  display: block;
+  min-height: 132px;
   border-radius: 18px;
-  padding: 17px;
+  padding: 14px 15px 32px;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 2px 9px rgba(15, 23, 42, 0.05);
 }
 
 .paper-card:hover {
   box-shadow: 0 12px 30px rgba(148, 163, 184, 0.16);
+}
+
+.paper-main {
+  min-width: 0;
+}
+
+.paper-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
 }
 
 .paper-title {
@@ -254,15 +134,27 @@ h1 {
   font-weight: 660;
   letter-spacing: 0;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
+}
+
+.paper-time-block {
+  display: grid;
+  gap: 2px;
+  min-width: 96px;
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .paper-source-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  margin-top: 7px;
+  margin-top: 9px;
 }
 
 .paper-context-check {
@@ -289,8 +181,16 @@ h1 {
   overflow: hidden;
   color: #9ca3af;
   font-size: 11.5px;
+  text-decoration: underline;
+  text-decoration-color: rgba(156, 163, 175, 0.45);
+  text-underline-offset: 3px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.paper-url:hover {
+  color: #6b7280;
+  text-decoration-color: rgba(107, 114, 128, 0.75);
 }
 
 .paper-copy-url {
@@ -325,13 +225,6 @@ h1 {
   background: rgba(148, 163, 184, 0.14);
 }
 
-.paper-time-row {
-  color: #6b7280;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 10.5px;
-  white-space: nowrap;
-}
-
 .paper-meta {
   display: flex;
   flex-wrap: wrap;
@@ -341,67 +234,41 @@ h1 {
   font-size: 11.5px;
 }
 
-.paper-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.paper-labels:empty {
-  display: none;
-}
-
-.paper-label-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.paper-star {
+  position: absolute;
+  right: 12px;
+  bottom: 9px;
+  width: 24px;
   height: 24px;
-  border-radius: 12px;
-  padding: 0 9px;
-  color: #374151;
-  font-size: 12px;
-}
-
-.paper-label-chip button {
-  width: 16px;
-  height: 16px;
   border-radius: 50%;
   padding: 0;
-  color: #6b7280;
+  color: #cbd5e1;
   background: transparent;
 }
 
-.paper-label-chip button:hover {
-  color: #111827;
-  background: rgba(255, 255, 255, 0.45);
+.paper-star::before {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: auto;
+  background: currentColor;
+  content: "";
+  mask-image: url("../assets/icons/star.svg");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-image: url("../assets/icons/star.svg");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
 }
 
-.paper-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.paper-star:hover {
+  background: rgba(148, 163, 184, 0.13);
 }
 
-.paper-actions button,
-.paper-actions select {
-  height: 31px;
-  min-width: 0;
-  border: 0;
-  border-radius: 16px;
-  padding: 0 12px;
-  color: #374151;
-  background: #f3f4f6;
-}
-
-.paper-actions button:hover,
-.paper-actions select:hover {
-  background: #e5e7eb;
-}
-
-.status-pill {
-  color: #0f766e;
+.paper-star.starred {
+  color: #facc15;
 }
 
 .empty-state {

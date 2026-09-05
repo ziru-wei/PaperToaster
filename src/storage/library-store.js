@@ -1,25 +1,20 @@
 import {
   CONVERSATION_THREAD_STORE,
   DOCUMENT_STORE,
-  LABEL_STORE,
-  PAPER_LABEL_STORE,
   PAPER_STORE,
   openPaperDatabase,
-  requestToPromise
+  requestToPromise,
+  transactionDone
 } from "./paper-database.js";
 
 export async function listLibraryPapers(options = {}) {
   const db = await openPaperDatabase();
-  const [papers, documents, threads, labels, paperLabels] = await Promise.all([
+  const [papers, documents, threads] = await Promise.all([
     getAllFromStore(db, PAPER_STORE),
     getAllFromStore(db, DOCUMENT_STORE),
-    getAllFromStore(db, CONVERSATION_THREAD_STORE),
-    getAllFromStore(db, LABEL_STORE),
-    getAllFromStore(db, PAPER_LABEL_STORE)
+    getAllFromStore(db, CONVERSATION_THREAD_STORE)
   ]);
 
-  const labelsById = new Map(labels.map((label) => [label.labelId, label]));
-  const labelsByDocument = groupLabelsByDocument(paperLabels, labelsById);
   const documentsByKey = groupDocumentsByKey(documents);
   const threadsByKey = groupThreadsByKey(threads);
   const summaries = new Map();
@@ -28,8 +23,7 @@ export async function listLibraryPapers(options = {}) {
     summaries.set(paper.documentKey, createPaperSummary({
       paper,
       document: documentsByKey.get(paper.documentKey),
-      threads: threadsByKey.get(paper.documentKey) || [],
-      labels: labelsByDocument.get(paper.documentKey) || []
+      threads: threadsByKey.get(paper.documentKey) || []
     }));
   }
 
@@ -38,8 +32,7 @@ export async function listLibraryPapers(options = {}) {
       summaries.set(documentKey, createPaperSummary({
         paper: { documentKey },
         document,
-        threads: threadsByKey.get(documentKey) || [],
-        labels: labelsByDocument.get(documentKey) || []
+        threads: threadsByKey.get(documentKey) || []
       }));
     }
   }
@@ -49,10 +42,29 @@ export async function listLibraryPapers(options = {}) {
     .sort((left, right) => compareLibraryPapers(left, right, options));
 }
 
-export async function listLibraryLabels() {
+export async function setLibraryPaperStarred(documentKey, starred, fallback = {}) {
+  if (!documentKey) {
+    return;
+  }
+
   const db = await openPaperDatabase();
-  const labels = await getAllFromStore(db, LABEL_STORE);
-  return labels.sort(compareLabels);
+  const now = Date.now();
+  const existing = await requestToPromise(db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE).get(documentKey));
+  const transaction = db.transaction(PAPER_STORE, "readwrite");
+  transaction.objectStore(PAPER_STORE).put({
+    ...(existing || {}),
+    documentKey,
+    canonicalUrl: existing?.canonicalUrl || fallback.canonicalUrl || "",
+    title: existing?.title || fallback.title || "",
+    titleSource: existing?.titleSource || "",
+    metadata: existing?.metadata || null,
+    createdAt: existing?.createdAt || fallback.firstOpenedAt || now,
+    updatedAt: existing?.updatedAt || fallback.lastOpenedAt || now,
+    activeThreadId: existing?.activeThreadId || "",
+    starred: Boolean(starred),
+    starredAt: starred ? now : null
+  });
+  await transactionDone(transaction);
 }
 
 function getAllFromStore(db, storeName) {
@@ -90,30 +102,7 @@ function groupThreadsByKey(threads) {
   return grouped;
 }
 
-function groupLabelsByDocument(paperLabels, labelsById) {
-  const grouped = new Map();
-  for (const assignment of paperLabels) {
-    const label = labelsById.get(assignment.labelId);
-    if (!assignment.documentKey || !label) {
-      continue;
-    }
-
-    if (!grouped.has(assignment.documentKey)) {
-      grouped.set(assignment.documentKey, []);
-    }
-    grouped.get(assignment.documentKey).push({
-      ...label,
-      assignedAt: assignment.assignedAt || null
-    });
-  }
-
-  for (const labels of grouped.values()) {
-    labels.sort(compareLabels);
-  }
-  return grouped;
-}
-
-function createPaperSummary({ paper, document, threads, labels }) {
+function createPaperSummary({ paper, document, threads }) {
   const nonEmptyThreads = threads.filter((thread) => Number(thread.messageCount) > 0);
   const messageCount = nonEmptyThreads.reduce((sum, thread) => sum + (Number(thread.messageCount) || 0), 0);
   const firstConversationAt = minTime(nonEmptyThreads.map((thread) => thread.firstMessageCreatedAt || thread.createdAt));
@@ -127,7 +116,6 @@ function createPaperSummary({ paper, document, threads, labels }) {
     title: paper.title || document?.title || "Untitled paper",
     canonicalUrl,
     domain: getDomain(canonicalUrl),
-    labels,
     hasMarkdown: Boolean(document?.markdown),
     parserId: document?.parserId || "",
     pageCount: Number(document?.pageCount) || 0,
@@ -140,21 +128,13 @@ function createPaperSummary({ paper, document, threads, labels }) {
     firstOpenedAt: minTime([paper.createdAt, document?.parsedAt, document?.updatedAt]),
     lastOpenedAt: maxTime([paper.updatedAt, document?.updatedAt]),
     updatedAt,
-    activeThreadId: paper.activeThreadId || ""
+    activeThreadId: paper.activeThreadId || "",
+    starred: Boolean(paper.starred),
+    starredAt: getTime(paper.starredAt)
   };
 }
 
 function matchesLibraryFilters(paper, options) {
-  if (options.labelId === "unlabeled" && paper.labels.length) {
-    return false;
-  }
-
-  if (options.labelId && options.labelId !== "all" && options.labelId !== "unlabeled") {
-    if (!paper.labels.some((label) => label.labelId === options.labelId)) {
-      return false;
-    }
-  }
-
   const query = String(options.query || "").trim().toLowerCase();
   if (!query) {
     return true;
@@ -163,8 +143,7 @@ function matchesLibraryFilters(paper, options) {
   return [
     paper.title,
     paper.canonicalUrl,
-    paper.domain,
-    ...paper.labels.map((label) => label.name)
+    paper.domain
   ].some((value) => String(value || "").toLowerCase().includes(query));
 }
 
@@ -174,10 +153,6 @@ function compareLibraryPapers(left, right, options) {
 
   if (sortBy === "title") {
     return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
-  }
-
-  if (sortBy === "label") {
-    return compareByLabel(left, right) || compareTitle(left, right);
   }
 
   const leftValue = getSortValue(left, sortBy);
@@ -211,33 +186,6 @@ function getSortValue(paper, sortBy) {
   }
 
   return paper.lastOpenedAt || 0;
-}
-
-function compareByLabel(left, right) {
-  const leftLabel = left.labels[0];
-  const rightLabel = right.labels[0];
-  if (!leftLabel && !rightLabel) {
-    return 0;
-  }
-
-  if (!leftLabel) {
-    return 1;
-  }
-
-  if (!rightLabel) {
-    return -1;
-  }
-
-  return compareLabels(leftLabel, rightLabel);
-}
-
-function compareLabels(left, right) {
-  const orderDifference = (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0);
-  if (orderDifference) {
-    return orderDifference;
-  }
-
-  return String(left.name || "").localeCompare(String(right.name || ""));
 }
 
 function compareTitle(left, right) {

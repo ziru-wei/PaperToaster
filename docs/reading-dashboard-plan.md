@@ -9,8 +9,7 @@ This is a reading dashboard, not an AI chat page. It should help answer:
 - What papers have I opened or discussed?
 - Which papers have conversation history?
 - Which paper did I talk about first or most recently?
-- How are papers grouped by my own labels?
-- Which paper should I jump back into?
+- Which paper should I jump back into or star for later?
 
 The dashboard should reuse the current local IndexedDB memory. It should not create a second source of truth.
 
@@ -22,9 +21,9 @@ Included:
 - Gallery/list view over local `papers`.
 - Paper title, URL/domain, local context status, conversation thread count, message count, first conversation time, latest activity time.
 - Sort controls.
-- Label creation, editing, ordering, and assignment.
 - Open paper URL in browser tab.
 - Open the active side panel context when the paper is already open or after opening the URL.
+- Star/unstar papers as lightweight local triage.
 
 Not included in the first pass:
 
@@ -38,7 +37,7 @@ Important boundary: the dashboard can only show PDFs with local records. If a PD
 
 ## Current Data Foundation
 
-Current database: `pdf-ai-inspector`, version `2`.
+Current database: `pdf-ai-inspector`, version `3`.
 
 Relevant existing stores:
 
@@ -50,6 +49,8 @@ papers
   titleSource
   metadata
   activeThreadId
+  starred
+  starredAt
   createdAt
   updatedAt
 
@@ -90,7 +91,14 @@ The dashboard should be built around `documentKey`, not title. Title remains edi
 
 Upgrade IndexedDB to version `3`.
 
-Add labels as normalized records instead of embedding only a string on `papers`. This keeps label ordering clean and allows multiple labels later without migrating again.
+Current visible triage is a paper-level star on `papers`.
+
+```text
+papers.starred
+papers.starredAt
+```
+
+The database also has normalized label stores from an earlier dashboard pass. They are not exposed in the current dashboard UI, but they can remain for possible future use without affecting the current page.
 
 ```text
 labels
@@ -146,7 +154,6 @@ Primary API:
 listLibraryPapers({
   sortBy,
   sortDirection,
-  labelId,
   query
 })
 ```
@@ -159,7 +166,6 @@ Return shape:
   title,
   canonicalUrl,
   domain,
-  labels,
   hasMarkdown,
   parserId,
   pageCount,
@@ -168,9 +174,12 @@ Return shape:
   messageCount,
   firstConversationAt,
   lastConversationAt,
+  firstOpenedAt,
   lastOpenedAt,
   updatedAt,
-  activeThreadId
+  activeThreadId,
+  starred,
+  starredAt
 }
 ```
 
@@ -194,7 +203,6 @@ Last opened
 First opened
 First conversation
 Title
-Label
 Thread count
 Message count
 ```
@@ -205,7 +213,6 @@ Definitions:
 - First opened: `papers.createdAt`.
 - First conversation: earliest `firstConversationAt`; papers without conversation go last.
 - Title: locale-aware title sort.
-- Label: global label order first, then title.
 - Thread count: non-empty conversation thread count, descending.
 - Message count: total message count, descending.
 
@@ -245,20 +252,13 @@ top bar
   search
   sort control
 
-label rail
-  All
-  Unlabeled
-  user labels in custom order
-  manage labels
-
 paper gallery/list
   paper card/row
     title
-    source URL/domain
-    labels
+    context check / clickable truncated URL / copy URL
+    first/latest timestamps aligned to the right
     conversation/thread summary
-    local context status
-    latest/first conversation timestamp
+    star action
 ```
 
 Recommended first UI shape: list-first gallery.
@@ -269,24 +269,25 @@ Paper item content:
 
 ```text
 Title
-context check / truncated URL / copy URL / First time · Latest time
-label chips
+context check / clickable truncated URL / copy URL
+right-aligned First and Latest timestamps
 3 threads · 14 messages
+star button
 ```
 
 Actions per paper:
 
-- Open PDF.
+- Open PDF by clicking the URL.
 - Continue active thread.
 - Rename title.
-- Assign label.
+- Star/unstar paper.
 - Remove local record, only after a confirmation.
 
 The remove action should be conservative and not prominent.
 
 ## Label Management
 
-Labels should be first-class but light.
+Labels are paused in the current dashboard UI. If labels come back, they should be first-class but light. Current UI uses stars instead.
 
 Label capabilities:
 
@@ -300,8 +301,8 @@ Label capabilities:
 Ordering behavior:
 
 - Global label order lives in `labels.sortOrder`.
-- Dashboard label rail displays labels by `sortOrder`.
-- Sorting by label uses `sortOrder`, then paper title.
+- Dashboard label rail would display labels by `sortOrder`.
+- Sorting by label would use `sortOrder`, then paper title.
 
 Unlabeled behavior:
 
@@ -316,8 +317,6 @@ For the first implementation, the dataset is probably small enough to aggregate 
 getAll(papers)
 getAll(documents)
 getAll(conversationThreads)
-getAll(labels)
-getAll(paperLabels)
 merge by documentKey
 sort/filter in JS
 render
@@ -341,7 +340,7 @@ Full-text search over cached Markdown is feasible, but it should not be implemen
 
 MVP strategy:
 
-- Search title, URL, domain, and labels immediately.
+- Search title, URL, and domain immediately.
 - Only search Markdown after a short debounce, such as 250-350 ms.
 - Search the latest cached document per `documentKey`.
 - Return paper-level matches first, with a small snippet and rough line/section location.
@@ -426,14 +425,13 @@ No cache invalidation is required.
 
 ## Implementation Order
 
-1. Add DB stores and storage APIs for labels and dashboard summaries.
+1. Add storage API for dashboard summaries.
 2. Add `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 3. Render read-only paper list from existing DB.
 4. Add sort controls.
-5. Add label rail and label filter.
-6. Add create/rename/reorder/delete labels.
-7. Add assign/unassign labels on paper items.
-8. Add side panel entry point to open dashboard.
+5. Add clickable URL and URL copy.
+6. Add star/unstar.
+7. Add side panel entry point to open dashboard.
 
 Keep the first milestone read-only until summary aggregation is correct.
 
@@ -443,16 +441,17 @@ Implemented first:
 
 - `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 - `src/storage/library-store.js` for paper summary aggregation.
-- `src/storage/label-store.js` for label CRUD, paper-label assignment, and label ordering.
-- IndexedDB version `3` with `labels` and `paperLabels`.
+- `src/storage/label-store.js` exists for paused label support, but dashboard UI does not currently use labels.
+- IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
 - Responsive dashboard grid: one, two, or three columns depending on available browser width.
+- Compact paper cards with clickable URL, URL copy, right-aligned First/Latest timestamps, thread/message counts, and a bottom-right star.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 
 ## Open Questions
 
-- Should a paper support multiple labels, or exactly one primary label? The normalized plan supports multiple, but the UI can initially expose one.
+- Should labels stay paused permanently, or come back later as a secondary organization layer? The normalized storage can support them if needed.
 - Should papers with only cached Markdown and no conversation appear, or should the dashboard show only papers with at least one non-empty thread? Current recommendation: show all local papers, but visually distinguish `no conversation yet`.
 - Should deleting a paper local record also delete cached Markdown and conversation history, or should these be separate actions?
-- Should dashboard search include Markdown content later, or only title/domain/metadata/labels?
+- Should dashboard search include Markdown content later, or only title/domain/metadata?
