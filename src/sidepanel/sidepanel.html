@@ -10,12 +10,6 @@
     <main>
       <header>
         <div class="title-stack">
-          <div class="title-row">
-            <button id="documentStar" class="document-star" type="button" title="Star paper" aria-label="Star paper" disabled>
-              <span aria-hidden="true"></span>
-            </button>
-            <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
-          </div>
           <div class="url-row">
             <span id="contextReadyIndicator" class="context-ready-indicator loading" title="Preparing context" aria-label="Preparing context">
               <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -45,6 +39,12 @@
               </svg>
             </button>
             <div id="conversationThreadWheel" class="thread-wheel" aria-label="Conversation history" hidden></div>
+          </div>
+          <div class="title-row">
+            <button id="documentStar" class="document-star" type="button" title="Star paper" aria-label="Star paper" disabled>
+              <span aria-hidden="true"></span>
+            </button>
+            <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
           </div>
           <div id="pdfStatus" class="status-line muted">Loading...</div>
         </div>
