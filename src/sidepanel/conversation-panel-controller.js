@@ -289,7 +289,7 @@ export function createConversationPanelController({
         const quote = document.createElement("blockquote");
         quote.className = "conversation-selection";
         quote.tabIndex = 0;
-        quote.title = "Click to scroll selected text";
+        quote.setAttribute("aria-label", "Selected text");
         quote.textContent = message.selectionText;
         item.append(quote);
       }

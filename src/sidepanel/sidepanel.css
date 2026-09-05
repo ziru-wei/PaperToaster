@@ -638,10 +638,10 @@ form {
   float: left;
   margin: 1px 7px 0 0;
   color: #4b5563;
-  font-size: 2.45em;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.82;
+  font-size: 2.15em;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 0.9;
 }
 
 .selection-quote.has-overflow::after {
@@ -755,51 +755,52 @@ form {
 
 .conversation-selection {
   max-width: 86%;
-  max-height: 6em;
-  margin: 0 0 4px;
-  border-left: 2px solid rgba(95, 128, 104, 0.48);
-  padding-left: 8px;
-  color: #5f8068;
+  max-height: 5.2em;
+  margin: 0 0 5px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 13px 12px;
+  color: #374151;
+  background: #e5e7eb;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
   cursor: pointer;
   font-size: var(--thread-selection-text-size);
   font-style: italic;
-  line-height: 1.33;
-  opacity: 0.76;
+  line-height: 1.35;
+  opacity: 0.9;
   overflow: hidden;
+  transform: rotate(-0.8deg);
+  transform-origin: center bottom;
+  transition: max-height 140ms ease, opacity 140ms ease, transform 140ms ease, box-shadow 140ms ease;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .conversation-selection.scrollable {
   overflow: auto;
-  color: #4f7f5d;
-  scrollbar-color: rgba(107, 114, 128, 0.18) transparent;
-  scrollbar-width: thin;
+  max-height: 10.8em;
+  opacity: 1;
+  transform: rotate(0deg);
+  box-shadow: 0 7px 16px rgba(15, 23, 42, 0.12);
+  scrollbar-width: none;
 }
 
 .conversation-selection.scrollable::-webkit-scrollbar {
-  width: 3px;
-}
-
-.conversation-selection.scrollable::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.conversation-selection.scrollable::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(107, 114, 128, 0.18);
+  display: none;
 }
 
 .conversation-selection:focus {
   outline: none;
 }
 
-.conversation-selection::before {
-  content: "“";
-}
-
-.conversation-selection::after {
-  content: "”";
+.conversation-selection::first-letter {
+  float: left;
+  margin: 1px 6px 0 0;
+  color: #4b5563;
+  font-size: 2em;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 0.9;
 }
 
 .muted {
