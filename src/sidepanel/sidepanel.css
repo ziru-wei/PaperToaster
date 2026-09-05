@@ -785,8 +785,8 @@ form {
   position: relative;
   z-index: 1;
   max-width: 82%;
-  border-radius: var(--control-radius);
-  padding: 6px 10px;
+  border-radius: 15px;
+  padding: 5px 13px;
   color: #ffffff;
   background: #000000;
   font-style: normal;
