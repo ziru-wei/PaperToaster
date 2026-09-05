@@ -491,13 +491,13 @@ function formatThreadTitle(thread) {
 function renderThreadLabel(element, thread) {
   element.textContent = "";
   if (!thread?.messageCount) {
-    element.textContent = "New thread";
+    renderThreadDateLabel(element, "New thread");
     return;
   }
 
   const parts = formatThreadTimeParts(getThreadLabelTime(thread));
   if (!parts) {
-    element.textContent = "Thread";
+    renderThreadDateLabel(element, "Thread");
     return;
   }
 
@@ -510,6 +510,13 @@ function renderThreadLabel(element, thread) {
   time.textContent = parts.time;
 
   element.append(date, time);
+}
+
+function renderThreadDateLabel(element, text) {
+  const date = document.createElement("span");
+  date.className = "thread-label-date";
+  date.textContent = text;
+  element.append(date);
 }
 
 function formatThreadTimeParts(timestamp) {
