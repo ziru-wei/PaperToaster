@@ -102,6 +102,7 @@ async function sendMessage(message) {
 async function refreshState() {
   let request = null;
   setBusy(elements.reloadPdf, true);
+  renderContextReady(false);
   clearError();
 
   try {
@@ -170,6 +171,7 @@ async function loadPdf(options = {}) {
   let request = null;
   const bypassCache = options.bypassCache !== false;
   setBusy(elements.reloadPdf, true);
+  renderContextReady(false);
   clearError();
   clearDiagnostics();
 
@@ -316,7 +318,10 @@ async function renderDocument(document) {
 }
 
 function renderContextReady(isReady) {
-  elements.contextReadyIndicator.hidden = !isReady;
+  elements.contextReadyIndicator.classList.toggle("ready", Boolean(isReady));
+  elements.contextReadyIndicator.classList.toggle("loading", !isReady);
+  elements.contextReadyIndicator.title = isReady ? "Context ready" : "Preparing context";
+  elements.contextReadyIndicator.setAttribute("aria-label", elements.contextReadyIndicator.title);
 }
 
 function renderDocumentTitle(document) {
