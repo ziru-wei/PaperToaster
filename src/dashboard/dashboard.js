@@ -86,7 +86,7 @@ function createPaperCard(paper) {
 
   const title = document.createElement("h2");
   title.className = "paper-title";
-  title.textContent = paper.title;
+  title.append(createTitleLink(paper));
 
   const meta = document.createElement("div");
   meta.className = "paper-meta";
@@ -96,30 +96,18 @@ function createPaperCard(paper) {
   );
   topRow.append(title, meta);
 
-  const url = document.createElement("div");
-  url.className = "paper-source-row";
-  url.append(createContextIndicator(paper), createUrlLink(paper));
-
   const time = createPaperTimeLine(paper);
 
-  main.append(topRow, url, time);
+  main.append(topRow, time);
 
   card.append(main, createStarButton(paper));
   return card;
 }
 
-function createContextIndicator(paper) {
-  const indicator = document.createElement("span");
-  indicator.className = paper.hasMarkdown ? "paper-context-check ready" : "paper-context-check";
-  indicator.title = paper.hasMarkdown ? "Context ready" : "Context not ready";
-  indicator.setAttribute("aria-label", indicator.title);
-  return indicator;
-}
-
-function createUrlLink(paper) {
+function createTitleLink(paper) {
   const link = document.createElement("a");
-  link.className = "paper-url";
-  link.textContent = paper.canonicalUrl || paper.documentKey;
+  link.className = "paper-title-link";
+  link.textContent = paper.title;
   link.title = paper.canonicalUrl || paper.documentKey;
   if (paper.canonicalUrl) {
     link.href = paper.canonicalUrl;

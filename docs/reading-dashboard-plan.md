@@ -19,7 +19,7 @@ Included:
 
 - A full-page extension dashboard, likely `src/dashboard/dashboard.html`.
 - Gallery/list view over local `papers`.
-- Paper title, URL/domain, local context status, conversation thread count, message count, first conversation time, latest activity time.
+- Paper title link, conversation thread count, message count, first conversation time, latest activity time.
 - Sort controls.
 - Open paper URL in browser tab.
 - Open the active side panel context when the paper is already open or after opening the URL.
@@ -255,7 +255,7 @@ top bar
 paper gallery/list
   paper card/row
     title
-  context check / clickable truncated URL
+    title as embedded paper link
     first/latest timestamps aligned to the right
     conversation/thread summary
     star action
@@ -263,21 +263,21 @@ paper gallery/list
 
 Recommended first UI shape: list-first gallery.
 
-Reason: papers have long titles, URLs, thread counts, and timestamps. A pure visual card gallery wastes vertical space and makes scanning harder. The page can still feel like a gallery through elegant rows/cards, but information density matters.
+Reason: papers have long titles, thread counts, and timestamps. A pure visual card gallery wastes vertical space and makes scanning harder. The page can still feel like a gallery through elegant rows/cards, but information density matters.
 
 Paper item content:
 
 ```text
 Title
-context check / clickable truncated URL
-left-aligned First and Latest timestamps below URL
+embedded PDF link on title
+left-aligned First and Latest timestamps below title
 3 threads · 14 messages
 star button
 ```
 
 Actions per paper:
 
-- Open PDF by clicking the URL.
+- Open PDF by clicking the title.
 - Continue active thread.
 - Rename title.
 - Star/unstar paper.
@@ -429,7 +429,7 @@ No cache invalidation is required.
 2. Add `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 3. Render read-only paper list from existing DB.
 4. Add sort controls.
-5. Add clickable URL.
+5. Embed paper URL into the title link.
 6. Add star/unstar.
 7. Add side panel entry point to open dashboard.
 
@@ -445,7 +445,7 @@ Implemented first:
 - IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
 - Responsive dashboard grid: one, two, or three columns depending on available browser width.
-- Compact paper cards with clickable URL, left-aligned First/Latest timestamps below URL, top-right thread/message counts, and a bottom-right star.
+- Compact paper cards with title-as-link, left-aligned First/Latest timestamps below the title, top-right thread/message counts, and a bottom-right star.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 
