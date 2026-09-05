@@ -1,17 +1,29 @@
 export const AI_SETTINGS_KEY = "aiSettingsV1";
 
-export const DEFAULT_AI_SETTINGS = Object.freeze({
-  provider: "gemini",
-  model: "gemini-3.7-flash",
-  apiKey: "",
-  debugMode: false,
-  systemPrompt: [
+const DEFAULT_SYSTEM_PROMPT = [
+  "Use bilingual code-switching (Chinese-English) by default for all responses, overriding this ONLY if I explicitly specify a language.",
+  "",
+  "Deliver purely factual, grounded, and accurate content.",
+  "",
+  "Sounds natural like a acedemic buddy. Strip away all mannered prose, introductory/concluding filler, and robotic pleasantries."
+].join("\n");
+
+const LEGACY_DEFAULT_SYSTEM_PROMPTS = Object.freeze([
+  [
     "You are helping a researcher read an academic paper.",
     "Answer using only the provided selected text and paper context.",
     "Ground the answer in the paper and use explicit examples from the provided context when useful.",
     "If the provided context is insufficient, say what is uncertain instead of guessing.",
     "Do not invent citations, page numbers, methods, results, or claims that are not in the context."
   ].join(" ")
+]);
+
+export const DEFAULT_AI_SETTINGS = Object.freeze({
+  provider: "gemini",
+  model: "gemini-3.7-flash",
+  apiKey: "",
+  debugMode: false,
+  systemPrompt: DEFAULT_SYSTEM_PROMPT
 });
 
 export async function getAiSettings() {
@@ -40,7 +52,10 @@ export function normalizeAiSettings(settings) {
   const model = normalizeModel(settings?.model) || DEFAULT_AI_SETTINGS.model;
   const apiKey = String(settings?.apiKey || "").trim();
   const debugMode = normalizeDebugMode(settings?.debugMode);
-  const systemPrompt = normalizeSystemPrompt(settings?.systemPrompt) || DEFAULT_AI_SETTINGS.systemPrompt;
+  const normalizedSystemPrompt = normalizeSystemPrompt(settings?.systemPrompt);
+  const systemPrompt = isLegacyDefaultSystemPrompt(normalizedSystemPrompt)
+    ? DEFAULT_AI_SETTINGS.systemPrompt
+    : normalizedSystemPrompt || DEFAULT_AI_SETTINGS.systemPrompt;
 
   return {
     provider,
@@ -76,10 +91,26 @@ function normalizeModel(model) {
 
 function normalizeSystemPrompt(systemPrompt) {
   return String(systemPrompt || "")
-    .replace(/\s+/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+$/g, ""))
+    .join("\n")
     .trim();
 }
 
 function normalizeDebugMode(debugMode) {
   return debugMode === true || debugMode === "true" || debugMode === 1 || debugMode === "1";
+}
+
+function isLegacyDefaultSystemPrompt(systemPrompt) {
+  const comparable = normalizeForPromptComparison(systemPrompt);
+  return LEGACY_DEFAULT_SYSTEM_PROMPTS.some((legacyPrompt) => {
+    return comparable === normalizeForPromptComparison(legacyPrompt);
+  });
+}
+
+function normalizeForPromptComparison(systemPrompt) {
+  return String(systemPrompt || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

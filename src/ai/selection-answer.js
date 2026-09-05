@@ -1,5 +1,6 @@
 import { generateGeminiText } from "./gemini-client.js";
 import { formatSelectionContextForPrompt } from "./selection-prompt.js";
+import { DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
 
 export async function answerSelectionQuestion({ aiSettings, contextPack, conversationMessages = [], signal }) {
   const provider = aiSettings?.provider || "gemini";
@@ -33,7 +34,7 @@ export async function answerSelectionQuestion({ aiSettings, contextPack, convers
 export function buildSelectionQuestionPrompt({ contextPack, systemPrompt, conversationMessages = [] }) {
   const normalizedSystemPrompt = String(systemPrompt || "").trim();
   return [
-    normalizedSystemPrompt || "You are helping a researcher read an academic paper. Answer using only the provided selected text and paper context.",
+    normalizedSystemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
     "",
     "Previous conversation in this selected-text thread:",
     formatConversationMessages(conversationMessages),
