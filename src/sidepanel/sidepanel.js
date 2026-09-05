@@ -17,6 +17,7 @@ import { createSelectionPanelController } from "./selection-panel-controller.js"
 import { getSidePanelElements } from "./sidepanel-elements.js";
 
 const DOCUMENT_CACHE_VERSION = "v15";
+const NEW_THREAD_COMMAND = "---";
 let activeTab = null;
 let currentDocument = null;
 let titleSaveTimer = null;
@@ -28,10 +29,8 @@ const elements = getSidePanelElements();
 
 const conversation = createConversationPanelController({
   threadElement: elements.conversationThread,
-  threadBarElement: elements.conversationThreadBar,
   threadArchiveButton: elements.conversationThreadArchive,
   threadWheelElement: elements.conversationThreadWheel,
-  newThreadButton: elements.newConversationThread,
   onDiagnostic: addDiagnostic,
   onChange: updateAskReadiness
 });
@@ -57,7 +56,7 @@ elements.documentTitle.addEventListener("input", () => {
   updateManualDocumentTitle();
 });
 elements.selectionQuestionForm.addEventListener("submit", askAiAboutSelection);
-elements.selectionQuestion.addEventListener("input", promptPresetMenu.update);
+elements.selectionQuestion.addEventListener("input", handleSelectionQuestionInput);
 elements.selectionQuestion.addEventListener("keydown", handleSelectionQuestionKeydown);
 elements.selectionQuestion.addEventListener("focus", promptPresetMenu.update);
 elements.selectionQuestion.addEventListener("blur", () => {
@@ -392,18 +391,26 @@ function updateAskReadiness() {
 }
 
 function handleSelectionQuestionKeydown(event) {
+  const isPlainEnter = (
+    event.key === "Enter" &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.isComposing
+  );
+
+  if (isPlainEnter && isNewThreadCommand()) {
+    event.preventDefault();
+    startNewThreadFromComposer();
+    return;
+  }
+
   if (promptPresetMenu.handleKeydown(event)) {
     return;
   }
 
-  if (
-    event.key !== "Enter" ||
-    event.shiftKey ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.isComposing
-  ) {
+  if (!isPlainEnter) {
     return;
   }
 
@@ -413,6 +420,39 @@ function handleSelectionQuestionKeydown(event) {
   }
 
   elements.selectionQuestionForm.requestSubmit();
+}
+
+function handleSelectionQuestionInput() {
+  promptPresetMenu.update();
+  updateNewThreadPromptHint();
+}
+
+function isNewThreadCommand() {
+  return elements.selectionQuestion.value.trim() === NEW_THREAD_COMMAND;
+}
+
+function updateNewThreadPromptHint() {
+  const active = isNewThreadCommand();
+  elements.newThreadPromptHint.hidden = !active;
+  elements.selectionQuestion.classList.toggle("new-thread-command", active);
+  if (active) {
+    promptPresetMenu.hide();
+  }
+}
+
+async function startNewThreadFromComposer() {
+  clearError();
+  elements.selectionQuestion.value = "";
+  updateNewThreadPromptHint();
+  selectionPanel.clearComposerSelection();
+
+  try {
+    await conversation.createThread();
+    updateAskReadiness();
+    elements.selectionQuestion.focus();
+  } catch (error) {
+    showError(error.message || String(error));
+  }
 }
 
 async function askAiAboutSelection(event) {

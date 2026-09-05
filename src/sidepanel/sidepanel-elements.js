@@ -11,13 +11,12 @@ export function getSidePanelElements(root = document) {
     toggleSelectionText: root.querySelector("#toggleSelectionText"),
     selectionQuestionForm: root.querySelector("#selectionQuestionForm"),
     selectionQuestion: root.querySelector("#selectionQuestion"),
+    newThreadPromptHint: root.querySelector("#newThreadPromptHint"),
     promptPresetMenu: root.querySelector("#promptPresetMenu"),
     selectionContextStatus: root.querySelector("#selectionContextStatus"),
     conversationThread: root.querySelector("#conversationThread"),
-    conversationThreadBar: root.querySelector("#conversationThreadBar"),
     conversationThreadArchive: root.querySelector("#conversationThreadArchive"),
-    conversationThreadWheel: root.querySelector("#conversationThreadWheel"),
-    newConversationThread: root.querySelector("#newConversationThread")
+    conversationThreadWheel: root.querySelector("#conversationThreadWheel")
   };
 
   for (const [name, element] of Object.entries(elements)) {

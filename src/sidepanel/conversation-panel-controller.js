@@ -14,10 +14,8 @@ const THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT = 72;
 
 export function createConversationPanelController({
   threadElement,
-  threadBarElement,
   threadArchiveButton,
   threadWheelElement,
-  newThreadButton,
   onDiagnostic,
   onChange
 }) {
@@ -32,9 +30,6 @@ export function createConversationPanelController({
   let threadWheelTargetScroll = 0;
   let threadWheelAnimationFrame = 0;
 
-  newThreadButton.addEventListener("click", () => {
-    createThread().catch(reportError);
-  });
   threadArchiveButton.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleThreadWheel();
@@ -58,7 +53,7 @@ export function createConversationPanelController({
   });
   document.addEventListener("wheel", handleThreadWheel, { passive: false });
   document.addEventListener("click", (event) => {
-    if (!threadBarElement.contains(event.target)) {
+    if (!threadArchiveButton.contains(event.target) && !threadWheelElement.contains(event.target)) {
       closeThreadWheel();
     }
   });
@@ -289,8 +284,6 @@ export function createConversationPanelController({
 
   function renderThreadList() {
     const wheelThreads = getWheelThreads();
-    threadBarElement.hidden = !threadUrl;
-    newThreadButton.disabled = !threadUrl;
     threadArchiveButton.disabled = !threadUrl || !wheelThreads.length;
     threadArchiveButton.classList.toggle("active", threadWheelOpen && wheelThreads.length > 0);
     threadWheelElement.hidden = !threadWheelOpen || !wheelThreads.length;

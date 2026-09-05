@@ -42,10 +42,6 @@
           </div>
           <div id="pdfStatus" class="status-line muted">Loading...</div>
         </div>
-        <div id="conversationThreadBar" class="thread-bar" hidden>
-          <button id="newConversationThread" class="thread-new-button" type="button" title="New conversation" aria-label="New conversation">+</button>
-          <div class="thread-bar-spacer"></div>
-        </div>
       </header>
 
       <section class="chat-panel">
@@ -56,7 +52,8 @@
             <blockquote id="selectionText" class="selection-quote" tabindex="0" aria-expanded="false"></blockquote>
             <form id="selectionQuestionForm">
               <div class="prompt-field">
-                <textarea id="selectionQuestion" rows="4" placeholder="Type slash for prompts"></textarea>
+                <textarea id="selectionQuestion" rows="4" placeholder="Type / for prompts"></textarea>
+                <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden>Press ↵ to start a new thread</div>
                 <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
               </div>
             </form>

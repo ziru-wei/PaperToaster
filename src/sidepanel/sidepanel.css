@@ -162,38 +162,6 @@ header {
   padding-left: 5px;
 }
 
-.thread-bar {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0 0 5px;
-}
-
-.thread-bar[hidden] {
-  display: none;
-}
-
-.thread-new-button {
-  display: inline-flex;
-  width: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 0;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.thread-bar-spacer {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
 .thread-archive-button.active {
   position: relative;
   z-index: 31;
@@ -536,9 +504,29 @@ textarea {
   overflow: auto;
 }
 
+#selectionQuestion.new-thread-command {
+  padding-bottom: 25px;
+}
+
 .prompt-field {
   position: relative;
   width: 100%;
+}
+
+.new-thread-prompt-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 2;
+  color: #9ca3af;
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.new-thread-prompt-hint[hidden] {
+  display: none;
 }
 
 .prompt-preset-menu {
