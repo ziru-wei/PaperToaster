@@ -162,6 +162,7 @@ header {
 .url-line {
   max-width: min(178px, 46vw);
   flex: 0 1 min(178px, 46vw);
+  color: #9ca3af;
 }
 
 .status-line:empty {
@@ -713,7 +714,7 @@ form {
 }
 
 .selection-quote.expanded {
-  bottom: calc(100% - 36px);
+  bottom: calc(100% - 44px);
   z-index: 1;
   overflow: auto;
   max-height: 50vh;
