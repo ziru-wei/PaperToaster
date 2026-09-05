@@ -385,7 +385,7 @@ section {
   overflow: hidden;
   flex: 1 1 auto;
   border-top: 0;
-  padding-top: 8px;
+  padding-top: 2px;
   transition: opacity 120ms ease;
 }
 
@@ -395,7 +395,7 @@ section {
   top: 0;
   right: 0;
   left: 0;
-  height: 10px;
+  height: 6px;
   pointer-events: none;
   background: linear-gradient(#f7f8fa, rgba(247, 248, 250, 0));
   content: "";
