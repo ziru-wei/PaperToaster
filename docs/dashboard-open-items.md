@@ -21,6 +21,9 @@ Expected behavior:
 - The side panel displays the same document title, URL, context ready state, conversation thread wheel, chat history, selected-text composer, and RAG-backed ask flow that it displays when the PDF itself is open.
 - The side panel should hydrate from local storage by `documentKey`; it should not fetch or parse the PDF again.
 - If the user switches from the dashboard to a real PDF tab, the side panel should return to active PDF tab mode.
+- The selected dashboard card shows a subtle active state.
+- Dashboard cards refresh when side panel conversation activity changes.
+- Placeholder title records such as `Untitled paper` and `Title not found` are hidden from the dashboard list.
 
 ## Architecture
 
@@ -109,6 +112,7 @@ Rationale:
 - Message-density ring currently uses fixed circle size with proportional conic fill. If desired later, the circle diameter itself could also scale by message count, but fixed-size rings are easier to scan in a card grid.
 - The exact message count is currently available through tooltip/aria-label, not visible text.
 - Cards intentionally do not show thread count text.
+- Cards with placeholder titles are filtered from the visible dashboard, but their raw database records are not deleted.
 
 ## Search Open Item
 

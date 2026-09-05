@@ -14,6 +14,7 @@ const SORT_CONFIG = {
 };
 
 const state = {
+  activeDocumentKey: "",
   papers: [],
   sort: "latestThread",
   query: ""
@@ -38,6 +39,12 @@ elements.sortButton.addEventListener("click", (event) => {
   setSortMenuOpen(elements.sortMenu.hidden);
 });
 
+window.addEventListener("focus", () => {
+  refreshAll().catch((error) => {
+    console.debug("[PDF AI] Dashboard focus refresh failed", error);
+  });
+});
+
 document.addEventListener("click", (event) => {
   if (elements.sortMenu.hidden || elements.sortMenu.contains(event.target) || elements.sortButton.contains(event.target)) {
     return;
@@ -46,20 +53,34 @@ document.addEventListener("click", (event) => {
   setSortMenuOpen(false);
 });
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === MessageType.LIBRARY_PAPER_CONTEXT_CHANGED) {
+    state.activeDocumentKey = String(message.context?.documentKey || "");
+    renderPapers();
+    return;
+  }
+
+  if (message?.type === MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED) {
+    refreshPapers();
+  }
+});
+
 refreshAll().catch((error) => {
   elements.summary.textContent = `Could not load dashboard: ${error.message || String(error)}`;
 });
 renderSortMenu();
 
 async function refreshAll() {
+  await refreshActivePaperContext();
   await refreshPapers();
 }
 
 async function refreshPapers() {
-  state.papers = await listLibraryPapers({
+  const papers = await listLibraryPapers({
     ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread),
     query: state.query
   });
+  state.papers = papers.filter(isDisplayablePaper);
   renderPapers();
   renderSummary();
 }
@@ -77,14 +98,25 @@ function renderPapers() {
 
 function createPaperCard(paper, maxMessageCount) {
   const card = document.createElement("article");
+  const isActive = paper.documentKey === state.activeDocumentKey;
   card.className = "paper-card";
+  card.classList.toggle("active", isActive);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
+  card.setAttribute("aria-pressed", String(isActive));
   card.setAttribute("aria-label", `Open side panel context for ${paper.title || "paper"}`);
-  card.addEventListener("click", () => {
+  card.addEventListener("click", (event) => {
+    if (isCardActionIgnored(event.target)) {
+      return;
+    }
+
     openPaperContextInSidePanel(paper.documentKey);
   });
   card.addEventListener("keydown", (event) => {
+    if (isCardActionIgnored(event.target)) {
+      return;
+    }
+
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
@@ -136,6 +168,9 @@ async function openPaperContextInSidePanel(documentKey) {
     return;
   }
 
+  state.activeDocumentKey = documentKey;
+  renderPapers();
+
   try {
     await chrome.runtime.sendMessage({
       type: MessageType.OPEN_LIBRARY_PAPER_CONTEXT,
@@ -144,6 +179,37 @@ async function openPaperContextInSidePanel(documentKey) {
   } catch (error) {
     console.debug("[PDF AI] Could not open paper context in side panel", error);
   }
+}
+
+async function refreshActivePaperContext() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_LIBRARY_PAPER_CONTEXT
+    });
+    state.activeDocumentKey = String(response?.context?.documentKey || "");
+  } catch (error) {
+    console.debug("[PDF AI] Could not read active paper context", error);
+  }
+}
+
+function isDisplayablePaper(paper) {
+  const title = normalizeTitleForDisplay(paper?.title);
+  return title && !isPlaceholderTitle(title);
+}
+
+function normalizeTitleForDisplay(title) {
+  return String(title || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function isCardActionIgnored(target) {
+  return Boolean(target?.closest?.(".paper-star"));
+}
+
+function isPlaceholderTitle(title) {
+  return title === "untitled paper" || title === "title not found";
 }
 
 function createTitleLink(paper) {

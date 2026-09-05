@@ -175,6 +175,7 @@ h1 {
   flex-direction: column;
   box-sizing: border-box;
   min-height: 78px;
+  border: 1px solid transparent;
   border-radius: 15px;
   padding: 10px 12px 9px;
   background: rgba(255, 255, 255, 0.84);
@@ -184,6 +185,12 @@ h1 {
 
 .paper-card:hover {
   box-shadow: 0 12px 30px rgba(148, 163, 184, 0.16);
+}
+
+.paper-card.active {
+  border-color: rgba(17, 24, 39, 0.13);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(148, 163, 184, 0.16);
 }
 
 .paper-card:focus-visible {

@@ -101,6 +101,9 @@ async function handleMessage(message, sender) {
     case MessageType.LIBRARY_PAPER_CONTEXT_CHANGED:
       return { ok: true };
 
+    case MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED:
+      return { ok: true };
+
     default:
       throw new Error(`Unknown message type: ${message?.type}`);
   }

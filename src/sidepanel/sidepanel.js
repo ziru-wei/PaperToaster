@@ -264,7 +264,7 @@ async function renderLibraryPaperContextIfCurrent(request) {
   const documentKey = String(response.context?.documentKey || "").trim();
   if (!documentKey) {
     await renderDocumentIfCurrent(null, request);
-    setStatus("Select a paper activity ring in Reading Dashboard.");
+    setStatus("Select a paper card in Reading Dashboard.");
     return;
   }
 
@@ -550,6 +550,8 @@ async function askAiAboutSelection(event) {
       role: "assistant",
       text: answer.text
     });
+    await conversation.persist();
+    notifyLibraryPaperActivityChanged();
     selectionPanel.setContextStatus(`Answered by ${answer.model}.`);
   } catch (error) {
     selectionPanel.clearContextStatus();
@@ -559,6 +561,19 @@ async function askAiAboutSelection(event) {
     selectionPanel.setAnswerBusy(false);
     updateAskReadiness();
   }
+}
+
+function notifyLibraryPaperActivityChanged() {
+  if (!currentDocument?.documentKey) {
+    return;
+  }
+
+  chrome.runtime.sendMessage({
+    type: MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED,
+    documentKey: currentDocument.documentKey
+  }).catch(() => {
+    // Dashboard may be closed; it will refresh from storage next time.
+  });
 }
 
 function getContextStatusForAsk(contextPack, hasSelection) {
