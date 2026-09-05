@@ -87,10 +87,11 @@ The first multi-thread UI pass is implemented in the fixed top title area.
 Current UI behavior:
 
 1. The left `+` button creates a new active thread for the current paper.
-2. Existing thread chips scroll horizontally to the right, with newer threads shown first.
-3. Thread chips are labeled by the first message timestamp when available.
-4. Selecting a chip calls `setActiveStoredChatThread(activeDocument.url, threadId)`.
-5. Deleting a chip removes the thread and its messages, then activates the newest remaining thread if one exists.
+2. The archive/inbox button opens a circular thread wheel near the URL controls.
+3. The current thread appears as a dark chip; inactive thread chips use light cards.
+4. Thread chips are labeled by first message timestamp when available, plus a compact message count.
+5. Selecting a chip calls `setActiveStoredChatThread(activeDocument.url, threadId)`.
+6. Deleting the current chip removes the thread and its messages, then activates the newest remaining thread if one exists.
 
 Controller API:
 
@@ -115,6 +116,85 @@ deleteStoredChatThread(url, threadId)
 - Consider editable thread titles only if timestamp labels become insufficient.
 - Keep UI compact; this is utility chrome, not a notes app.
 
+## Selection Reference Plan
+
+Problem: conversation messages currently store the full selected quote in `selectionText`. This is simple and reliable for the MVP, but it can make conversation memory heavy when users quote long passages repeatedly.
+
+Goal: store a compact reference into the cached cleaned Markdown, then resolve the quote dynamically when rendering the conversation or building an AI prompt.
+
+Proposed storage primitive:
+
+```js
+{
+  version: 1,
+  documentKey,
+  parserId,
+  markdownHash,
+  startOffset,
+  endOffset,
+  startLine,
+  startColumn,
+  endLine,
+  endColumn,
+  method: "normalized-exact" | "compact-exact" | "token-overlap",
+  score,
+  prefix,
+  suffix,
+  preview
+}
+```
+
+Field roles:
+
+- `startOffset` and `endOffset`: primary exact span in the cached cleaned Markdown.
+- `startLine`, `startColumn`, `endLine`, `endColumn`: human-readable/debuggable position.
+- `markdownHash`: verifies that the stored span belongs to the same cleaned Markdown text.
+- `prefix` and `suffix`: short surrounding text used to relocate the span if offsets drift after parser or cleanup changes.
+- `preview`: short fallback display text, not the full quote.
+- `method` and `score`: confidence metadata for UI/debugging and prompt warnings.
+
+Recommended modules:
+
+- `src/pdf/locate-selection-in-markdown.js`
+  - Input: `document.markdown`, selected text, optional chunk anchor.
+  - Output: `selectionRef`.
+  - Matching order:
+    1. Normalized exact match.
+    2. Compact exact match that ignores whitespace, line breaks, and hyphenation.
+    3. Token overlap fuzzy match, preferably constrained to the already detected anchor chunk neighborhood.
+- `src/pdf/resolve-selection-ref.js`
+  - Input: `document.markdown`, `selectionRef`.
+  - Output: recovered quote text plus confidence.
+  - Resolution order:
+    1. Use offsets if `markdownHash` matches and the span still passes sanity checks.
+    2. Relocate with `prefix + preview + suffix`.
+    3. Fall back to `preview`.
+
+Runtime integration:
+
+```text
+captured PDF selection
+  -> buildSelectionContextPack()
+  -> find chunk anchor
+  -> locate span in document.markdown
+  -> store selectionRef + short preview on the user message
+  -> resolve selectionRef from currentDocument.markdown for display and prompt construction
+```
+
+Storage migration:
+
+1. Keep reading legacy `message.selectionText`.
+2. New messages should write `selectionRef` and `selectionPreview`.
+3. During an interim phase, optionally keep a capped `selectionText` only for failed location cases.
+4. After confidence is good across real PDFs, stop writing full `selectionText` by default.
+
+Important constraints:
+
+- Do not rely only on line/column positions. Cleaner and parser changes can move line breaks.
+- Do not rely only on absolute offsets. Cache-version changes can move text.
+- The robust reference is the combination of `markdownHash`, offsets, line/column, and surrounding text.
+- Dynamic quote recovery should happen close to the side panel/document context, not inside the low-level chat store. The chat store should persist structured records; the side panel should hydrate them with the active document Markdown.
+
 ## TODO: Key Promotion And Aliases
 
 `documentAliases` is reserved but not wired yet.
@@ -135,4 +215,5 @@ This should happen before building a serious library UI, otherwise the same pape
 
 - Should a new thread inherit the latest selected text, or start with no selected text?
 - Should thread titles be user-editable immediately, or inferred from the first user question first?
-- Should all messages keep full `selectionText`, or should very long selections be stored separately to keep message records smaller?
+- What is the minimum confidence threshold for replacing full `selectionText` with `selectionRef` only?
+- Should failed or low-confidence references keep a longer fallback preview than successful exact references?
