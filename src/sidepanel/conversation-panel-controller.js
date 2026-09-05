@@ -344,6 +344,7 @@ function formatThreadTime(timestamp) {
     day: "numeric",
     year: sameYear ? undefined : "numeric",
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
+    hour12: false
   }).format(date);
 }

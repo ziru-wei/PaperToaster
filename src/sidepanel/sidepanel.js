@@ -51,6 +51,7 @@ const promptPresetMenu = createPromptPresetMenuController({
 elements.reloadPdf.addEventListener("click", () => {
   loadPdf({ bypassCache: true });
 });
+elements.copyTabUrl.addEventListener("click", copyActiveTabUrl);
 elements.documentTitle.addEventListener("input", () => {
   updateManualDocumentTitle();
 });
@@ -263,11 +264,28 @@ function renderTab(tab) {
   if (!tab) {
     elements.tabStatus.textContent = "No active tab found.";
     elements.tabStatus.removeAttribute("title");
+    elements.copyTabUrl.disabled = true;
     return;
   }
 
   elements.tabStatus.textContent = tab.url;
   elements.tabStatus.title = tab.url;
+  elements.copyTabUrl.disabled = !tab.url;
+}
+
+async function copyActiveTabUrl() {
+  const url = activeTab?.url || elements.tabStatus.textContent.trim();
+  if (!url) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+    elements.copyTabUrl.classList.add("copied");
+    window.setTimeout(() => elements.copyTabUrl.classList.remove("copied"), 700);
+  } catch (error) {
+    showError(`Could not copy URL.\n${error.message || String(error)}`);
+  }
 }
 
 async function renderDocumentIfCurrent(document, request) {
