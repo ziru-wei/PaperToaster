@@ -6,7 +6,7 @@ Build a separate extension dashboard page that shows every paper already known t
 
 This is a reading dashboard, not an AI chat page. It should help answer:
 
-- What papers have I opened or discussed?
+- What papers have local reading context or discussion history?
 - Which papers have conversation history?
 - Which paper did I talk about first or most recently?
 - Which paper should I jump back into or star for later?
@@ -176,8 +176,6 @@ Return shape:
   firstThreadStartedAt,
   lastThreadStartedAt,
   lastConversationAt,
-  firstOpenedAt,
-  lastOpenedAt,
   updatedAt,
   activeThreadId,
   starred,
@@ -193,7 +191,6 @@ Most fields are derived:
 - `firstConversationAt` / `firstThreadStartedAt`: earliest non-empty thread start time.
 - `lastThreadStartedAt`: latest non-empty thread start time.
 - `lastConversationAt`: maximum `conversationThreads.updatedAt` among threads with messages; not used for the card First/Last thread label.
-- `lastOpenedAt`: `papers.updatedAt` or a future explicit field if needed.
 
 Recommendation: empty threads should not make a paper look active. They can exist as active working state, but dashboard counters and dates should prefer threads with `messageCount > 0`.
 
@@ -202,8 +199,7 @@ Recommendation: empty threads should not make a paper look active. They can exis
 Initial sort options:
 
 ```text
-Last opened
-First opened
+Latest thread
 First conversation
 Title
 Thread count
@@ -212,8 +208,7 @@ Message count
 
 Definitions:
 
-- Last opened: `papers.updatedAt` for now; can become an explicit `lastOpenedAt` later.
-- First opened: `papers.createdAt`.
+- Latest thread: latest non-empty thread start time.
 - First conversation: earliest `firstConversationAt`; papers without conversation go last.
 - Title: locale-aware title sort.
 - Thread count: non-empty conversation thread count, descending.
@@ -222,10 +217,10 @@ Definitions:
 Default sort:
 
 ```text
-Last opened desc
+Latest thread desc
 ```
 
-This matches the way a reading dashboard is usually used: resume what was recently opened.
+This matches the current dashboard semantics: resume what was recently discussed, without treating passive PDF loads as reading activity.
 
 ## Dashboard UI
 
@@ -260,7 +255,7 @@ paper gallery/list
     title
     title as embedded paper link
     first/latest timestamps aligned to the right
-    conversation/thread summary
+    message-density ring
     star action
 ```
 
@@ -274,9 +269,11 @@ Paper item content:
 Title
 embedded PDF link on title
 left-aligned thread start timestamp below title
-3 threads · 14 messages
+message-density ring
 star button
 ```
+
+Message-density ring scale: the visible paper with the highest `messageCount` is treated as 100%; other visible papers are drawn proportionally.
 
 Actions per paper:
 
@@ -448,7 +445,7 @@ Implemented first:
 - IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
 - Responsive dashboard grid: one, two, or three columns depending on available browser width.
-- Compact paper cards with title-as-link, left-aligned thread start timestamp below the title, top-right thread/message counts, and a bottom-right star.
+- Compact paper cards with title-as-link, left-aligned thread start timestamp below the title, top-right message-density ring, and a bottom-right star.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 

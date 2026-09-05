@@ -172,9 +172,9 @@ h1 {
 .paper-card {
   position: relative;
   display: block;
-  min-height: 96px;
+  min-height: 78px;
   border-radius: 15px;
-  padding: 12px 14px 26px;
+  padding: 10px 12px 9px;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 2px 9px rgba(15, 23, 42, 0.05);
 }
@@ -184,13 +184,16 @@ h1 {
 }
 
 .paper-main {
+  display: grid;
+  min-height: 59px;
   min-width: 0;
+  grid-template-rows: 1fr auto;
 }
 
 .paper-top-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -217,21 +220,34 @@ h1 {
   text-underline-offset: 3px;
 }
 
-.paper-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 5px 8px;
-  color: #6b7280;
-  font-size: 11px;
-  line-height: 1.25;
-  text-align: right;
-  white-space: nowrap;
+.message-ring {
+  --message-ratio: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.94) 40%, transparent 42%),
+    conic-gradient(#111827 calc(var(--message-ratio) * 1turn), rgba(203, 213, 225, 0.45) 0);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.message-ring.empty {
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.94) 40%, transparent 42%),
+    conic-gradient(rgba(203, 213, 225, 0.45) 1turn, rgba(203, 213, 225, 0.45) 0);
+}
+
+.paper-footer {
+  display: grid;
+  min-width: 0;
+  margin-top: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .paper-time-line {
   overflow: hidden;
-  margin-top: 6px;
   color: #6b7280;
   font-size: 10.75px;
   text-overflow: ellipsis;
@@ -239,9 +255,6 @@ h1 {
 }
 
 .paper-star {
-  position: absolute;
-  right: 12px;
-  bottom: 7px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -252,8 +265,8 @@ h1 {
 
 .paper-star::before {
   display: block;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   margin: auto;
   background: currentColor;
   content: "";

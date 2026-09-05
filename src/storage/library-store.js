@@ -58,8 +58,8 @@ export async function setLibraryPaperStarred(documentKey, starred, fallback = {}
     title: existing?.title || fallback.title || "",
     titleSource: existing?.titleSource || "",
     metadata: existing?.metadata || null,
-    createdAt: existing?.createdAt || fallback.firstOpenedAt || now,
-    updatedAt: existing?.updatedAt || fallback.lastOpenedAt || now,
+    createdAt: existing?.createdAt || now,
+    updatedAt: existing?.updatedAt || now,
     activeThreadId: existing?.activeThreadId || "",
     starred: Boolean(starred),
     starredAt: starred ? now : null
@@ -129,8 +129,6 @@ function createPaperSummary({ paper, document, threads }) {
     firstThreadStartedAt: firstConversationAt,
     lastThreadStartedAt,
     lastConversationAt,
-    firstOpenedAt: minTime([paper.createdAt, document?.parsedAt, document?.updatedAt]),
-    lastOpenedAt: maxTime([paper.updatedAt, document?.updatedAt]),
     updatedAt,
     activeThreadId: paper.activeThreadId || "",
     starred: Boolean(paper.starred),
@@ -153,7 +151,7 @@ function matchesLibraryFilters(paper, options) {
 
 function compareLibraryPapers(left, right, options) {
   const direction = options.sortDirection === "asc" ? 1 : -1;
-  const sortBy = options.sortBy || "lastOpened";
+  const sortBy = options.sortBy || "latestThread";
 
   if (sortBy === "title") {
     return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
@@ -173,12 +171,8 @@ function getSortValue(paper, sortBy) {
     return paper.firstConversationAt || Number.MAX_SAFE_INTEGER;
   }
 
-  if (sortBy === "firstOpened") {
-    return paper.firstOpenedAt || Number.MAX_SAFE_INTEGER;
-  }
-
-  if (sortBy === "lastOpened") {
-    return paper.lastOpenedAt || 0;
+  if (sortBy === "latestThread") {
+    return paper.lastThreadStartedAt || 0;
   }
 
   if (sortBy === "threadCount") {
@@ -189,7 +183,7 @@ function getSortValue(paper, sortBy) {
     return paper.messageCount || 0;
   }
 
-  return paper.lastOpenedAt || 0;
+  return paper.lastThreadStartedAt || 0;
 }
 
 function compareTitle(left, right) {

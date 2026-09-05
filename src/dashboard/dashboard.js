@@ -1,8 +1,7 @@
 import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
 
 const SORT_OPTIONS = [
-  { id: "lastOpened", label: "Last opened", sortBy: "lastOpened", sortDirection: "desc" },
-  { id: "firstOpened", label: "First opened", sortBy: "firstOpened", sortDirection: "asc" },
+  { id: "latestThread", label: "Latest thread", sortBy: "latestThread", sortDirection: "desc" },
   { id: "firstConversation", label: "First conversation", sortBy: "firstConversation", sortDirection: "asc" },
   { id: "title", label: "Title", sortBy: "title", sortDirection: "asc" },
   { id: "threadCount", label: "Thread count", sortBy: "threadCount", sortDirection: "desc" },
@@ -15,7 +14,7 @@ const SORT_CONFIG = {
 
 const state = {
   papers: [],
-  sort: "lastOpened",
+  sort: "latestThread",
   query: ""
 };
 
@@ -57,7 +56,7 @@ async function refreshAll() {
 
 async function refreshPapers() {
   state.papers = await listLibraryPapers({
-    ...(SORT_CONFIG[state.sort] || SORT_CONFIG.lastOpened),
+    ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread),
     query: state.query
   });
   renderPapers();
@@ -70,11 +69,12 @@ function renderSummary() {
 }
 
 function renderPapers() {
-  elements.paperList.replaceChildren(...state.papers.map(createPaperCard));
+  const maxMessageCount = getMaxMessageCount();
+  elements.paperList.replaceChildren(...state.papers.map((paper) => createPaperCard(paper, maxMessageCount)));
   elements.emptyState.hidden = state.papers.length > 0;
 }
 
-function createPaperCard(paper) {
+function createPaperCard(paper, maxMessageCount) {
   const card = document.createElement("article");
   card.className = "paper-card";
 
@@ -88,20 +88,32 @@ function createPaperCard(paper) {
   title.className = "paper-title";
   title.append(createTitleLink(paper));
 
-  const meta = document.createElement("div");
-  meta.className = "paper-meta";
-  meta.append(
-    createMetaText(`${paper.threadCount} threads`),
-    createMetaText(`${paper.messageCount} messages`)
-  );
-  topRow.append(title, meta);
+  topRow.append(title, createMessageRing(paper, maxMessageCount));
+
+  const footer = document.createElement("div");
+  footer.className = "paper-footer";
 
   const time = createPaperTimeLine(paper);
+  if (time) {
+    footer.append(time);
+  }
+  footer.append(createStarButton(paper));
 
-  main.append(topRow, time);
-
-  card.append(main, createStarButton(paper));
+  main.append(topRow, footer);
+  card.append(main);
   return card;
+}
+
+function createMessageRing(paper, maxMessageCount) {
+  const ring = document.createElement("span");
+  const count = Number(paper.messageCount) || 0;
+  const ratio = maxMessageCount > 0 ? count / maxMessageCount : 0;
+  ring.className = "message-ring";
+  ring.classList.toggle("empty", count === 0);
+  ring.style.setProperty("--message-ratio", ratio.toFixed(3));
+  ring.title = `${count} messages`;
+  ring.setAttribute("aria-label", `${count} messages`);
+  return ring;
 }
 
 function createTitleLink(paper) {
@@ -118,14 +130,16 @@ function createTitleLink(paper) {
 }
 
 function createPaperTimeLine(paper) {
+  if (!paper.threadCount) {
+    return null;
+  }
+
   const line = document.createElement("div");
   line.className = "paper-time-line";
   if (paper.threadCount > 1) {
     line.textContent = `First ${formatTime(paper.firstThreadStartedAt)} · Last ${formatTime(paper.lastThreadStartedAt)}`;
-  } else if (paper.threadCount === 1) {
-    line.textContent = `Started ${formatTime(paper.firstThreadStartedAt)}`;
   } else {
-    line.textContent = `Opened ${formatTime(paper.firstOpenedAt || paper.lastOpenedAt || paper.updatedAt)}`;
+    line.textContent = `Started ${formatTime(paper.firstThreadStartedAt)}`;
   }
   return line;
 }
@@ -143,15 +157,6 @@ function createStarButton(paper) {
   });
 
   return button;
-}
-
-function createMetaText(text, className = "") {
-  const span = document.createElement("span");
-  if (className) {
-    span.className = className;
-  }
-  span.textContent = text;
-  return span;
 }
 
 function renderSortMenu() {
@@ -173,6 +178,10 @@ function renderSortMenu() {
     });
     return button;
   }));
+}
+
+function getMaxMessageCount() {
+  return state.papers.reduce((max, paper) => Math.max(max, Number(paper.messageCount) || 0), 0);
 }
 
 function setSortMenuOpen(open) {
