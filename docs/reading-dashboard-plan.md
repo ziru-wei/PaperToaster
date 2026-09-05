@@ -190,32 +190,32 @@ Recommendation: empty threads should not make a paper look active. They can exis
 Initial sort options:
 
 ```text
-Latest activity
+Last opened
+First opened
 First conversation
 Title
 Label
-Recently opened
-Largest PDF
-Most messages
+Thread count
+Message count
 ```
 
 Definitions:
 
-- Latest activity: `max(lastConversationAt, updatedAt)`.
+- Last opened: `papers.updatedAt` for now; can become an explicit `lastOpenedAt` later.
+- First opened: `papers.createdAt`.
 - First conversation: earliest `firstConversationAt`; papers without conversation go last.
 - Title: locale-aware title sort.
 - Label: global label order first, then title.
-- Recently opened: `papers.updatedAt` for now; can become `lastOpenedAt` later.
-- Largest PDF: `documents.byteLength`, descending.
-- Most messages: total message count, descending.
+- Thread count: non-empty conversation thread count, descending.
+- Message count: total message count, descending.
 
 Default sort:
 
 ```text
-Latest activity desc
+Last opened desc
 ```
 
-This matches the way a reading dashboard is usually used: resume what was recently touched.
+This matches the way a reading dashboard is usually used: resume what was recently opened.
 
 ## Dashboard UI
 
@@ -269,12 +269,9 @@ Paper item content:
 
 ```text
 Title
-domain / short URL
+context check / truncated URL / copy URL / First time · Latest time
 label chips
 3 threads · 14 messages
-Context ready / metadata only
-First talked: Sep/05 14:31
-Latest: Today 16:02
 ```
 
 Actions per paper:

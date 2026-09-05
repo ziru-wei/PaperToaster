@@ -9,20 +9,20 @@ import {
 } from "../storage/label-store.js";
 
 const SORT_CONFIG = {
-  latestActivity: { sortBy: "latestActivity", sortDirection: "desc" },
+  lastOpened: { sortBy: "lastOpened", sortDirection: "desc" },
+  firstOpened: { sortBy: "firstOpened", sortDirection: "asc" },
   firstConversation: { sortBy: "firstConversation", sortDirection: "asc" },
   title: { sortBy: "title", sortDirection: "asc" },
   label: { sortBy: "label", sortDirection: "asc" },
-  recentlyOpened: { sortBy: "recentlyOpened", sortDirection: "desc" },
-  largestPdf: { sortBy: "largestPdf", sortDirection: "desc" },
-  mostMessages: { sortBy: "mostMessages", sortDirection: "desc" }
+  threadCount: { sortBy: "threadCount", sortDirection: "desc" },
+  messageCount: { sortBy: "messageCount", sortDirection: "desc" }
 };
 
 const state = {
   papers: [],
   labels: [],
   filterLabelId: "all",
-  sort: "latestActivity",
+  sort: "lastOpened",
   query: "",
   managingLabels: false
 };
@@ -80,7 +80,7 @@ async function refreshAll() {
 
 async function refreshPapers() {
   state.papers = await listLibraryPapers({
-    ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestActivity),
+    ...(SORT_CONFIG[state.sort] || SORT_CONFIG.lastOpened),
     labelId: state.filterLabelId,
     query: state.query
   });
@@ -194,26 +194,19 @@ function createPaperCard(paper) {
   title.textContent = paper.title;
 
   const url = document.createElement("div");
-  url.className = "paper-url";
-  url.textContent = paper.canonicalUrl || paper.documentKey;
+  url.className = "paper-source-row";
+  url.append(createContextIndicator(paper), createUrlText(paper), createCopyUrlButton(paper), createPaperTimeRow(paper));
 
   const meta = document.createElement("div");
   meta.className = "paper-meta";
   meta.append(
     createMetaText(`${paper.threadCount} threads`),
-    createMetaText(`${paper.messageCount} messages`),
-    createMetaText(paper.hasMarkdown ? "Context ready" : "Metadata only", paper.hasMarkdown ? "status-pill" : ""),
-    createMetaText(`First ${formatTime(paper.firstConversationAt)}`),
-    createMetaText(`Latest ${formatTime(paper.lastConversationAt || paper.updatedAt)}`),
-    createMetaText(formatPdfSize(paper.byteLength))
+    createMetaText(`${paper.messageCount} messages`)
   );
 
   const labels = document.createElement("div");
   labels.className = "paper-labels";
   labels.append(...paper.labels.map((label) => createPaperLabelChip(paper, label)));
-  if (!paper.labels.length) {
-    labels.append(createMetaText("Unlabeled"));
-  }
 
   main.append(title, url, meta, labels);
 
@@ -223,6 +216,54 @@ function createPaperCard(paper) {
 
   card.append(main, actions);
   return card;
+}
+
+function createContextIndicator(paper) {
+  const indicator = document.createElement("span");
+  indicator.className = paper.hasMarkdown ? "paper-context-check ready" : "paper-context-check";
+  indicator.title = paper.hasMarkdown ? "Context ready" : "Context not ready";
+  indicator.setAttribute("aria-label", indicator.title);
+  return indicator;
+}
+
+function createUrlText(paper) {
+  const urlText = document.createElement("span");
+  urlText.className = "paper-url";
+  urlText.textContent = paper.canonicalUrl || paper.documentKey;
+  urlText.title = paper.canonicalUrl || paper.documentKey;
+  return urlText;
+}
+
+function createCopyUrlButton(paper) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "paper-copy-url";
+  button.title = "Copy URL";
+  button.setAttribute("aria-label", "Copy URL");
+  button.disabled = !paper.canonicalUrl;
+  button.addEventListener("click", async () => {
+    if (!paper.canonicalUrl) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(paper.canonicalUrl);
+      button.classList.add("copied");
+      window.setTimeout(() => button.classList.remove("copied"), 700);
+    } catch {
+      button.classList.remove("copied");
+    }
+  });
+  return button;
+}
+
+function createPaperTimeRow(paper) {
+  const row = document.createElement("span");
+  row.className = "paper-time-row";
+  const first = paper.firstConversationAt || paper.firstOpenedAt;
+  const latest = paper.lastConversationAt || paper.lastOpenedAt || paper.updatedAt;
+  row.textContent = `First ${formatTime(first)} · Latest ${formatTime(latest)}`;
+  return row;
 }
 
 function createPaperLabelChip(paper, label) {
@@ -331,14 +372,4 @@ function formatTime(value) {
 
   const day = date.toLocaleDateString([], { month: "short", day: "2-digit" });
   return `${day} ${time}`;
-}
-
-function formatPdfSize(byteLength) {
-  const bytes = Number(byteLength) || 0;
-  if (!bytes) {
-    return "Size unknown";
-  }
-
-  const megabytes = bytes / 1024 / 1024;
-  return `${megabytes.toFixed(megabytes >= 10 ? 0 : 1)} MB`;
 }

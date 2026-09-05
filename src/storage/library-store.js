@@ -137,7 +137,8 @@ function createPaperSummary({ paper, document, threads, labels }) {
     messageCount,
     firstConversationAt,
     lastConversationAt,
-    lastOpenedAt: getTime(paper.updatedAt),
+    firstOpenedAt: minTime([paper.createdAt, document?.parsedAt, document?.updatedAt]),
+    lastOpenedAt: maxTime([paper.updatedAt, document?.updatedAt]),
     updatedAt,
     activeThreadId: paper.activeThreadId || ""
   };
@@ -169,7 +170,7 @@ function matchesLibraryFilters(paper, options) {
 
 function compareLibraryPapers(left, right, options) {
   const direction = options.sortDirection === "asc" ? 1 : -1;
-  const sortBy = options.sortBy || "latestActivity";
+  const sortBy = options.sortBy || "lastOpened";
 
   if (sortBy === "title") {
     return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
@@ -193,19 +194,23 @@ function getSortValue(paper, sortBy) {
     return paper.firstConversationAt || Number.MAX_SAFE_INTEGER;
   }
 
-  if (sortBy === "recentlyOpened") {
+  if (sortBy === "firstOpened") {
+    return paper.firstOpenedAt || Number.MAX_SAFE_INTEGER;
+  }
+
+  if (sortBy === "lastOpened") {
     return paper.lastOpenedAt || 0;
   }
 
-  if (sortBy === "largestPdf") {
-    return paper.byteLength || 0;
+  if (sortBy === "threadCount") {
+    return paper.threadCount || 0;
   }
 
-  if (sortBy === "mostMessages") {
+  if (sortBy === "messageCount") {
     return paper.messageCount || 0;
   }
 
-  return Math.max(paper.lastConversationAt || 0, paper.updatedAt || 0);
+  return paper.lastOpenedAt || 0;
 }
 
 function compareByLabel(left, right) {
