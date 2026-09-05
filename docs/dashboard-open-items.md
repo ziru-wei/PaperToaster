@@ -6,9 +6,9 @@ Last updated: 2026-09-05
 
 The Reading Dashboard is a separate extension page that lists papers already known to the local IndexedDB database. It shows compact paper cards, title-as-link, thread start timestamps, star state, and a message-density ring.
 
-The side panel still primarily assumes that the active browser tab is a PDF or publisher PDF viewer. This is correct for normal reading, but incorrect when the active tab is the Reading Dashboard.
+The side panel supports two context sources: the active PDF tab and a dashboard-selected library paper.
 
-## Unfinished Feature: Dashboard Paper Context In Side Panel
+## Implemented Feature: Dashboard Paper Context In Side Panel
 
 Goal:
 
@@ -22,7 +22,7 @@ Expected behavior:
 - The side panel should hydrate from local storage by `documentKey`; it should not fetch or parse the PDF again.
 - If the user switches from the dashboard to a real PDF tab, the side panel should return to active PDF tab mode.
 
-## Proposed Architecture
+## Architecture
 
 Add two explicit side panel context sources:
 
@@ -38,9 +38,8 @@ library-paper
 
 `library-paper`:
 
-- New behavior for dashboard-driven context.
 - The dashboard sends a message containing `documentKey`.
-- Background or session storage records the selected dashboard paper context.
+- Background/session storage records the selected dashboard paper context.
 - Side panel loads the document, paper summary, and threads by `documentKey`.
 - No PDF fetch, no tab DOM inspection, and no active-tab URL validation should run in this mode.
 
@@ -69,27 +68,28 @@ Side panel:
 
 ## Storage APIs Needed
 
-Add a storage helper, probably in `src/storage/library-store.js` or a new `src/storage/library-context-store.js`:
+Storage helpers:
 
 ```js
-getLibraryPaperContext(documentKey)
+getStoredDocumentByDocumentKey(documentKey)
+getLibraryPaperSummary(documentKey)
 ```
 
-Return shape:
+The final side panel state is composed from:
 
 ```js
 {
   paper,
-  document,
-  threads,
-  activeThread
+  document
 }
 ```
+
+Conversation threads/messages are still loaded by the existing conversation controller after the hydrated document URL is set.
 
 Requirements:
 
 - Use the newest cached document for the `documentKey` from `documents.byDocumentKey`.
-- Use existing conversation thread/message stores.
+- Use existing conversation thread/message stores through the current conversation controller.
 - Preserve the current active thread if present.
 - Ignore duplicate empty threads the same way current chat storage does.
 

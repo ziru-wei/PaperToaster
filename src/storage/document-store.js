@@ -28,6 +28,23 @@ export async function getStoredDocument({ url, parserId, cacheVersion }) {
   return record ? hydrateStoredDocument(record, url) : null;
 }
 
+export async function getStoredDocumentByDocumentKey(documentKey) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return null;
+  }
+
+  const db = await openPaperDatabase();
+  const records = await requestToPromise(
+    db.transaction(DOCUMENT_STORE, "readonly")
+      .objectStore(DOCUMENT_STORE)
+      .index("byDocumentKey")
+      .getAll(normalizedDocumentKey)
+  );
+  const record = selectBestDocumentRecord(records);
+  return record ? hydrateStoredDocument(record, record.url) : null;
+}
+
 export async function saveStoredDocument({ url, parserId, cacheVersion, document }) {
   const db = await openPaperDatabase();
   const key = getDocumentStoreKey({ url, parserId, cacheVersion });
@@ -109,6 +126,20 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     parsedAt: record.parsedAt || null,
     storedAt: record.updatedAt || null
   };
+}
+
+function selectBestDocumentRecord(records) {
+  return [...(records || [])]
+    .filter((record) => record?.documentKey && record.markdown)
+    .sort((left, right) => {
+      const leftHasMarkdown = left.markdown ? 1 : 0;
+      const rightHasMarkdown = right.markdown ? 1 : 0;
+      if (leftHasMarkdown !== rightHasMarkdown) {
+        return rightHasMarkdown - leftHasMarkdown;
+      }
+
+      return (Number(right.updatedAt) || 0) - (Number(left.updatedAt) || 0);
+    })[0] || null;
 }
 
 function upsertPaperRecord(store, { documentKey, url, title, titleSource, metadata, now }) {

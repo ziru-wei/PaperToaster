@@ -1,4 +1,5 @@
 import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
+import { MessageType } from "../shared/messages.js";
 
 const SORT_OPTIONS = [
   { id: "latestThread", label: "Latest thread", sortBy: "latestThread", sortDirection: "desc" },
@@ -105,15 +106,36 @@ function createPaperCard(paper, maxMessageCount) {
 }
 
 function createMessageRing(paper, maxMessageCount) {
-  const ring = document.createElement("span");
+  const ring = document.createElement("button");
   const count = Number(paper.messageCount) || 0;
   const ratio = maxMessageCount > 0 ? count / maxMessageCount : 0;
+  ring.type = "button";
   ring.className = "message-ring";
   ring.classList.toggle("empty", count === 0);
   ring.style.setProperty("--message-ratio", ratio.toFixed(3));
   ring.title = `${count} messages`;
   ring.setAttribute("aria-label", `${count} messages`);
+  ring.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await openPaperContextInSidePanel(paper.documentKey);
+  });
   return ring;
+}
+
+async function openPaperContextInSidePanel(documentKey) {
+  if (!documentKey) {
+    return;
+  }
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: MessageType.OPEN_LIBRARY_PAPER_CONTEXT,
+      documentKey
+    });
+  } catch (error) {
+    console.debug("[PDF AI] Could not open paper context in side panel", error);
+  }
 }
 
 function createTitleLink(paper) {

@@ -42,6 +42,41 @@ export async function listLibraryPapers(options = {}) {
     .sort((left, right) => compareLibraryPapers(left, right, options));
 }
 
+export async function getLibraryPaperSummary(documentKey) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return null;
+  }
+
+  const db = await openPaperDatabase();
+  const [paper, documents, threads] = await Promise.all([
+    requestToPromise(db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE).get(normalizedDocumentKey)),
+    requestToPromise(
+      db.transaction(DOCUMENT_STORE, "readonly")
+        .objectStore(DOCUMENT_STORE)
+        .index("byDocumentKey")
+        .getAll(normalizedDocumentKey)
+    ),
+    requestToPromise(
+      db.transaction(CONVERSATION_THREAD_STORE, "readonly")
+        .objectStore(CONVERSATION_THREAD_STORE)
+        .index("byDocumentKey")
+        .getAll(normalizedDocumentKey)
+    )
+  ]);
+  const document = selectBestDocumentForSummary(documents);
+
+  if (!paper && !document) {
+    return null;
+  }
+
+  return createPaperSummary({
+    paper: paper || { documentKey: normalizedDocumentKey },
+    document,
+    threads
+  });
+}
+
 export async function setLibraryPaperStarred(documentKey, starred, fallback = {}) {
   if (!documentKey) {
     return;
@@ -85,6 +120,20 @@ function groupDocumentsByKey(documents) {
     }
   }
   return grouped;
+}
+
+function selectBestDocumentForSummary(documents) {
+  return [...(documents || [])]
+    .filter((document) => document?.documentKey)
+    .sort((left, right) => {
+      const leftHasMarkdown = left.markdown ? 1 : 0;
+      const rightHasMarkdown = right.markdown ? 1 : 0;
+      if (leftHasMarkdown !== rightHasMarkdown) {
+        return rightHasMarkdown - leftHasMarkdown;
+      }
+
+      return getTime(right.updatedAt) - getTime(left.updatedAt);
+    })[0] || null;
 }
 
 function groupThreadsByKey(threads) {

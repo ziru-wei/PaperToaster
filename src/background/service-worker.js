@@ -1,7 +1,9 @@
 import { MessageType } from "../shared/messages.js";
 
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
+const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
 const selectionsByTab = new Map();
+let fallbackLibraryPaperContext = null;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -87,9 +89,66 @@ async function handleMessage(message, sender) {
         selection: getSelectionForTab(message.tabId, message.tabUrl)
       };
 
+    case MessageType.OPEN_LIBRARY_PAPER_CONTEXT:
+      return openLibraryPaperContext(message, sender);
+
+    case MessageType.GET_LIBRARY_PAPER_CONTEXT:
+      return {
+        ok: true,
+        context: await getLibraryPaperContext()
+      };
+
+    case MessageType.LIBRARY_PAPER_CONTEXT_CHANGED:
+      return { ok: true };
+
     default:
       throw new Error(`Unknown message type: ${message?.type}`);
   }
+}
+
+async function openLibraryPaperContext(message, sender) {
+  const documentKey = String(message.documentKey || "").trim();
+  if (!documentKey) {
+    throw new Error("No document key was provided.");
+  }
+
+  const context = {
+    documentKey,
+    source: "dashboard",
+    selectedAt: Date.now()
+  };
+  await setLibraryPaperContext(context);
+
+  if (sender.tab) {
+    await openPanelForTab(sender.tab);
+  }
+
+  chrome.runtime.sendMessage({
+    type: MessageType.LIBRARY_PAPER_CONTEXT_CHANGED,
+    context
+  }).catch(() => {
+    // Side panel may be closed; it will read session state when opened.
+  });
+
+  return { ok: true, context };
+}
+
+async function setLibraryPaperContext(context) {
+  fallbackLibraryPaperContext = context;
+  if (chrome.storage?.session) {
+    await chrome.storage.session.set({
+      [LIBRARY_PAPER_CONTEXT_KEY]: context
+    });
+  }
+}
+
+async function getLibraryPaperContext() {
+  if (chrome.storage?.session) {
+    const data = await chrome.storage.session.get(LIBRARY_PAPER_CONTEXT_KEY);
+    return data[LIBRARY_PAPER_CONTEXT_KEY] || fallbackLibraryPaperContext;
+  }
+
+  return fallbackLibraryPaperContext;
 }
 
 function saveSelectionForTab(tab, selection) {

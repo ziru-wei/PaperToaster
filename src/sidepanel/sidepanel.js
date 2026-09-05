@@ -8,6 +8,8 @@ import {
   loadDocumentForTab,
   saveDocumentForUrl
 } from "../document/load-document.js";
+import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
+import { getLibraryPaperSummary } from "../storage/library-store.js";
 import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
 import { getAiSettings, hasConfiguredAiApiKey, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
@@ -71,6 +73,10 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === MessageType.PDF_SELECTION_CHANGED) {
     refreshSelection();
   }
+
+  if (message?.type === MessageType.LIBRARY_PAPER_CONTEXT_CHANGED) {
+    scheduleRefreshState();
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -112,6 +118,11 @@ async function refreshState() {
     activeTab = await getActiveTab();
     renderTab(activeTab);
     request = beginDocumentRequest(activeTab);
+
+    if (isReadingDashboardTab(activeTab)) {
+      await renderLibraryPaperContextIfCurrent(request);
+      return;
+    }
 
     if (!canLoadDocumentFromTab(activeTab)) {
       await renderDocumentIfCurrent(null, request);
@@ -159,6 +170,10 @@ function scheduleRefreshState() {
 async function refreshSelection() {
   try {
     activeTab = await getActiveTab();
+    if (isReadingDashboardTab(activeTab)) {
+      return;
+    }
+
     const response = await sendMessage({
       type: MessageType.GET_LATEST_SELECTION,
       tabId: activeTab.id,
@@ -184,6 +199,12 @@ async function loadPdf(options = {}) {
     renderTab(activeTab);
     request = beginDocumentRequest(activeTab);
     addDiagnostic(`Active tab URL: ${activeTab.url}`);
+
+    if (isReadingDashboardTab(activeTab)) {
+      await renderLibraryPaperContextIfCurrent(request);
+      addDiagnostic("Load skipped: Reading Dashboard uses stored paper context.");
+      return;
+    }
 
     if (!canLoadDocumentFromTab(activeTab)) {
       await renderDocumentIfCurrent(null, request);
@@ -229,6 +250,40 @@ async function loadPdf(options = {}) {
       setBusy(elements.reloadPdf, false);
     }
   }
+}
+
+async function renderLibraryPaperContextIfCurrent(request) {
+  selectionPanel.clearComposerSelection();
+  const response = await sendMessage({
+    type: MessageType.GET_LIBRARY_PAPER_CONTEXT
+  });
+  if (!isCurrentDocumentRequest(request)) {
+    return;
+  }
+
+  const documentKey = String(response.context?.documentKey || "").trim();
+  if (!documentKey) {
+    await renderDocumentIfCurrent(null, request);
+    setStatus("Select a paper activity ring in Reading Dashboard.");
+    return;
+  }
+
+  const [document, paper] = await Promise.all([
+    getStoredDocumentByDocumentKey(documentKey),
+    getLibraryPaperSummary(documentKey)
+  ]);
+  if (!isCurrentDocumentRequest(request)) {
+    return;
+  }
+
+  if (!document) {
+    await renderDocumentIfCurrent(null, request);
+    renderLibraryPaperHeader(paper);
+    setStatus("No cached paper context found for this dashboard item.");
+    return;
+  }
+
+  await renderDocumentIfCurrent(mergeLibraryDocument(document, paper), request);
 }
 
 async function getActiveTab() {
@@ -278,8 +333,25 @@ function renderTab(tab) {
   elements.copyTabUrl.disabled = !tab.url;
 }
 
+function renderLibraryPaperHeader(paper) {
+  if (!paper) {
+    return;
+  }
+
+  renderDocumentTitle({
+    title: paper.title || "Untitled paper"
+  });
+  renderUrlLine(paper.canonicalUrl || paper.documentKey || "");
+}
+
+function renderUrlLine(url) {
+  elements.tabStatus.textContent = url || "";
+  elements.tabStatus.title = url || "";
+  elements.copyTabUrl.disabled = !url;
+}
+
 async function copyActiveTabUrl() {
-  const url = activeTab?.url || elements.tabStatus.textContent.trim();
+  const url = currentDocument?.url || elements.tabStatus.textContent.trim() || activeTab?.url || "";
   if (!url) {
     return;
   }
@@ -291,6 +363,20 @@ async function copyActiveTabUrl() {
   } catch (error) {
     showError(`Could not copy URL.\n${error.message || String(error)}`);
   }
+}
+
+function isReadingDashboardTab(tab) {
+  const dashboardUrl = chrome.runtime.getURL("src/dashboard/dashboard.html");
+  return Boolean(tab?.url?.startsWith(dashboardUrl));
+}
+
+function mergeLibraryDocument(document, paper) {
+  return {
+    ...document,
+    url: document.url || paper?.canonicalUrl || "",
+    title: document.title || paper?.title || "",
+    titleSource: document.titleSource || paper?.titleSource || ""
+  };
 }
 
 function openDashboard() {
@@ -320,6 +406,7 @@ async function renderDocument(document) {
 
   currentDocument = document;
   renderDocumentTitle(document);
+  renderUrlLine(document.url || "");
   renderContextReady(true);
   elements.pdfStatus.textContent = "";
   await conversation.setDocumentUrl(document.url);
@@ -374,7 +461,8 @@ function normalizeManualTitle(title) {
 }
 
 function queueCurrentDocumentCacheSave() {
-  if (!currentDocument || !activeTab?.url) {
+  const documentUrl = currentDocument?.url || activeTab?.url || "";
+  if (!currentDocument || !documentUrl) {
     return;
   }
 
@@ -382,7 +470,7 @@ function queueCurrentDocumentCacheSave() {
   titleSaveTimer = window.setTimeout(async () => {
     try {
       await saveDocumentForUrl({
-        url: activeTab.url,
+        url: documentUrl,
         parserId: getSelectedParserId(),
         cacheVersion: DOCUMENT_CACHE_VERSION,
         document: currentDocument
