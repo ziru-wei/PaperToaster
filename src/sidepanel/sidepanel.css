@@ -2,6 +2,8 @@
   color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
+  --chat-text-size: 14.5px;
+  --control-radius: 6px;
 }
 
 html,
@@ -231,7 +233,7 @@ section {
 button {
   min-height: 32px;
   border: 1px solid #b8c0cc;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   padding: 6px 10px;
   color: #111827;
   background: #ffffff;
@@ -266,7 +268,7 @@ textarea {
   width: 100%;
   resize: vertical;
   border: 1px solid #b8c0cc;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   padding: 8px;
   color: #111827;
   background: #ffffff;
@@ -274,6 +276,8 @@ textarea {
 }
 
 #selectionQuestion {
+  font-size: var(--chat-text-size);
+  line-height: 1.42;
   max-height: 150px;
   overflow: auto;
 }
@@ -350,14 +354,15 @@ form {
 .selection-quote {
   position: relative;
   overflow: hidden;
-  max-height: 3.875em;
+  max-height: 3.55em;
   margin: 0 0 0 22px;
   border-left: 2px solid #9ca3af;
-  padding: 0 4px 0 22px;
+  padding: 0 4px 0 18px;
   color: #374151;
   background: transparent;
+  font-size: var(--chat-text-size);
   font-style: italic;
-  line-height: 1.5;
+  line-height: 1.42;
   opacity: 0.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -380,7 +385,7 @@ form {
 
 .selection-quote.expanded {
   overflow: auto;
-  max-height: 6.2em;
+  max-height: 5.7em;
 }
 
 .selection-quote:empty {
@@ -446,7 +451,8 @@ form {
 .conversation-text {
   overflow: auto;
   color: #111827;
-  line-height: 1.45;
+  font-size: var(--chat-text-size);
+  line-height: 1.42;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -457,10 +463,10 @@ form {
 
 .conversation-message.user .conversation-text {
   max-width: 86%;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 8px 10px;
-  color: #111827;
-  background: #e8eef8;
+  color: #ffffff;
+  background: #000000;
   font-style: normal;
 }
 
@@ -565,8 +571,8 @@ form {
   }
 
   .conversation-message.user .conversation-text {
-    color: #f9fafb;
-    background: #293548;
+    color: #ffffff;
+    background: #000000;
   }
 
   .conversation-selection {
