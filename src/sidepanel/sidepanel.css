@@ -429,8 +429,8 @@ section {
   border-radius: 999px;
   padding: 0;
   color: #4b5563;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.14);
+  background: rgba(229, 231, 235, 0.82);
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.1);
   opacity: 0.92;
 }
 
@@ -450,7 +450,7 @@ section {
 
 .scroll-to-latest:hover {
   color: #111827;
-  background: #ffffff;
+  background: rgba(209, 213, 219, 0.88);
   opacity: 1;
 }
 
