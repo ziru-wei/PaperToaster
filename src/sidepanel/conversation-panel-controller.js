@@ -22,7 +22,6 @@ export function createConversationPanelController({
   onChange
 }) {
   let messages = [];
-  let currentSelectionText = "";
   let threadUrl = "";
   let activeThreadId = "";
   let threadSummaries = [];
@@ -106,7 +105,6 @@ export function createConversationPanelController({
 
     if (!threadUrl) {
       messages = [];
-      currentSelectionText = "";
       activeThreadId = "";
       threadSummaries = [];
       closeThreadWheel();
@@ -150,16 +148,6 @@ export function createConversationPanelController({
 
   function getMessages() {
     return messages.map((message) => ({ ...message }));
-  }
-
-  function getCurrentSelectionText() {
-    return currentSelectionText;
-  }
-
-  function setCurrentSelectionText(selectionText) {
-    currentSelectionText = String(selectionText || "").trim();
-    queueSave();
-    onChange?.();
   }
 
   async function createThread() {
@@ -220,7 +208,7 @@ export function createConversationPanelController({
   }
 
   async function persist() {
-    if (!threadUrl || (!activeThreadId && !messages.length && !currentSelectionText)) {
+    if (!threadUrl || (!activeThreadId && !messages.length)) {
       return;
     }
 
@@ -228,7 +216,6 @@ export function createConversationPanelController({
     const savedThread = await saveStoredChatThread(threadUrl, {
       threadId: activeThreadId,
       url: threadUrl,
-      currentThreadSelectionText: currentSelectionText,
       messages
     });
     activeThreadId = savedThread.threadId || activeThreadId;
@@ -252,7 +239,6 @@ export function createConversationPanelController({
 
   function applyThread(thread) {
     messages = thread.messages || [];
-    currentSelectionText = thread.currentThreadSelectionText || "";
     activeThreadId = thread.threadId || "";
   }
 
@@ -467,8 +453,6 @@ export function createConversationPanelController({
     setDocumentUrl,
     appendMessage,
     getMessages,
-    getCurrentSelectionText,
-    setCurrentSelectionText,
     persist,
     createThread,
     selectThread,

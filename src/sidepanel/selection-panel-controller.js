@@ -6,7 +6,6 @@ export function createSelectionPanelController({
 }) {
   let lastRenderedSelectionText = "";
   let hasDocument = false;
-  let hasThreadSelection = false;
   let answerBusy = false;
   let readyToAsk = false;
 
@@ -102,12 +101,7 @@ export function createSelectionPanelController({
       hasDocument = Boolean(state.hasDocument);
     }
 
-    if (Object.hasOwn(state, "hasThreadSelection")) {
-      hasThreadSelection = Boolean(state.hasThreadSelection);
-    }
-
-    const hasSelection = Boolean(getVisibleText() || hasThreadSelection);
-    readyToAsk = hasDocument && hasSelection && !answerBusy;
+    readyToAsk = hasDocument && !answerBusy;
   }
 
   function canAsk() {

@@ -1,13 +1,14 @@
 export function formatSelectionContextForPrompt(contextPack) {
   const paperTitle = contextPack.paper.title || "Untitled paper";
+  const hasSelection = Boolean(contextPack.selection.text);
   const lines = [
     `Paper: ${paperTitle}`,
     `URL: ${contextPack.paper.url || "unknown"}`,
     "",
-    "Selected text:",
-    contextPack.selection.text,
+    hasSelection ? "Selected text:" : "Scope:",
+    hasSelection ? contextPack.selection.text : "No selected text was provided. Answer from the paper context.",
     "",
-    "Nearby paper context:",
+    hasSelection ? "Nearby paper context:" : "Opening paper context:",
     formatChunks(contextPack.context.local),
     "",
     "Retrieved paper context:",

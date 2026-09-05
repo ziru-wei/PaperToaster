@@ -520,7 +520,7 @@ button:disabled {
 
 textarea {
   width: 100%;
-  resize: vertical;
+  resize: none;
   border: 1px solid #b8c0cc;
   border-radius: var(--control-radius);
   padding: 8px;

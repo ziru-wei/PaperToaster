@@ -21,15 +21,14 @@ export function buildSelectionContextPack({ document, selectionText, question = 
     throw new Error("No active paper is loaded.");
   }
 
-  if (!normalizedSelectionText) {
-    throw new Error("No selected text is available.");
-  }
-
   const chunks = Array.isArray(document.chunks) ? document.chunks : [];
-  const anchor = findSelectionAnchor(chunks, normalizedSelectionText);
+  const hasSelection = Boolean(normalizedSelectionText);
+  const anchor = hasSelection ? findSelectionAnchor(chunks, normalizedSelectionText) : null;
   const localContext = anchor
     ? selectLocalContextChunks(chunks, anchor.chunkIndex, options.localContextChars)
-    : [];
+    : hasSelection
+      ? []
+      : selectOpeningContextChunks(chunks, options.localContextChars);
   const retrievedContext = selectRetrievedContextChunks({
     chunks,
     query: [normalizedSelectionText, normalizedQuestion].filter(Boolean).join("\n"),
@@ -50,13 +49,14 @@ export function buildSelectionContextPack({ document, selectionText, question = 
     question: normalizedQuestion,
     selection: {
       text: normalizedSelectionText,
+      mode: hasSelection ? "selected-text" : "whole-paper",
       anchor
     },
     context: {
       local: localContext,
       retrieved: retrievedContext
     },
-    warnings: buildWarnings({ anchor, localContext, retrievedContext })
+    warnings: buildWarnings({ hasSelection, anchor, localContext, retrievedContext })
   };
 }
 
@@ -152,6 +152,24 @@ function selectRetrievedContextChunks({ chunks, query, excludeIds, limit, maxCha
   return selected;
 }
 
+function selectOpeningContextChunks(chunks, maxChars = DEFAULT_LOCAL_CONTEXT_CHARS) {
+  const budget = Math.max(1600, maxChars || DEFAULT_LOCAL_CONTEXT_CHARS);
+  const selected = [];
+  let usedChars = 0;
+
+  for (const chunk of chunks) {
+    const text = chunk.text || "";
+    if (usedChars + text.length > budget && selected.length) {
+      break;
+    }
+
+    selected.push(packChunk(chunk));
+    usedChars += text.length;
+  }
+
+  return selected;
+}
+
 function createAnchor({ chunk, chunkIndex, method, score, selectionText }) {
   return {
     found: true,
@@ -189,19 +207,23 @@ function buildMatchedPreview(chunkText, selectionText) {
   return chunkText.slice(approximateStart, approximateStart + 420).trim();
 }
 
-function buildWarnings({ anchor, localContext, retrievedContext }) {
+function buildWarnings({ hasSelection, anchor, localContext, retrievedContext }) {
   const warnings = [];
 
-  if (!anchor) {
+  if (hasSelection && !anchor) {
     warnings.push("Selected text could not be confidently located in the cleaned paper text.");
   }
 
   if (!localContext.length) {
-    warnings.push("No nearby context was available for the selected text.");
+    warnings.push(hasSelection
+      ? "No nearby context was available for the selected text."
+      : "No opening paper context was available.");
   }
 
   if (!retrievedContext.length) {
-    warnings.push("No additional paper context matched the selection or question.");
+    warnings.push(hasSelection
+      ? "No additional paper context matched the selection or question."
+      : "No additional paper context matched the question.");
   }
 
   return warnings;

@@ -387,8 +387,7 @@ function queueCurrentDocumentCacheSave() {
 
 function updateAskReadiness() {
   selectionPanel.updateReadiness({
-    hasDocument: Boolean(currentDocument),
-    hasThreadSelection: Boolean(conversation.getCurrentSelectionText())
+    hasDocument: Boolean(currentDocument)
   });
 }
 
@@ -423,9 +422,9 @@ async function askAiAboutSelection(event) {
   try {
     const question = elements.selectionQuestion.value.trim();
     const visibleSelectionText = selectionPanel.getVisibleText();
-    const selectionText = visibleSelectionText || conversation.getCurrentSelectionText();
+    const selectionText = visibleSelectionText;
     if (!question) {
-      throw new Error("Enter a question about the selected text.");
+      throw new Error("Enter a question.");
     }
 
     const contextPack = buildSelectionContextPack({
@@ -442,7 +441,6 @@ async function askAiAboutSelection(event) {
     }
 
     const previousMessages = conversation.getMessages();
-    conversation.setCurrentSelectionText(selectionText);
     conversation.appendMessage({
       role: "user",
       text: question,
@@ -453,9 +451,7 @@ async function askAiAboutSelection(event) {
 
     currentAnswerAbortController = new AbortController();
     selectionPanel.setAnswerBusy(true);
-    selectionPanel.setContextStatus(contextPack.selection.anchor
-      ? "Asking..."
-      : "Asking with available context. Selected text was not confidently located in the paper.");
+    selectionPanel.setContextStatus(getContextStatusForAsk(contextPack, Boolean(selectionText)));
 
     const answer = await answerSelectionQuestion({
       aiSettings,
@@ -477,6 +473,16 @@ async function askAiAboutSelection(event) {
     selectionPanel.setAnswerBusy(false);
     updateAskReadiness();
   }
+}
+
+function getContextStatusForAsk(contextPack, hasSelection) {
+  if (!hasSelection) {
+    return "Asking with whole-paper context...";
+  }
+
+  return contextPack.selection.anchor
+    ? "Asking..."
+    : "Asking with available context. Selected text was not confidently located in the paper.";
 }
 
 function setBusy(button, busy) {
