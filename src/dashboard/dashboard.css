@@ -16,8 +16,7 @@ body {
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }
 
@@ -67,8 +66,7 @@ h1 {
   gap: 10px;
 }
 
-.dashboard-controls input,
-.dashboard-controls select {
+.dashboard-controls input {
   height: 36px;
   border: 1px solid #e5e7eb;
   border-radius: 18px;
@@ -83,14 +81,81 @@ h1 {
   width: 310px;
 }
 
-.dashboard-controls select {
-  width: 158px;
-}
-
-.dashboard-controls input:focus,
-.dashboard-controls select:focus {
+.dashboard-controls input:focus {
   border-color: #d1d5db;
   box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+}
+
+.sort-control {
+  position: relative;
+}
+
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #6b7280;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
+}
+
+.sort-button:hover,
+.sort-button.active {
+  color: #374151;
+  background: #eef2f7;
+}
+
+.sort-icon {
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask-image: url("../assets/icons/arrow-down-wide-narrow.svg");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-image: url("../assets/icons/arrow-down-wide-narrow.svg");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.sort-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 168px;
+  gap: 2px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 12px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 36px rgba(148, 163, 184, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.sort-menu-option {
+  height: 29px;
+  border-radius: 8px;
+  padding: 0 9px;
+  color: #4b5563;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+}
+
+.sort-menu-option:hover {
+  background: #eef2f7;
+}
+
+.sort-menu-option.active {
+  color: #fff;
+  background: #111827;
 }
 
 .paper-list {
@@ -103,9 +168,9 @@ h1 {
 .paper-card {
   position: relative;
   display: block;
-  min-height: 132px;
-  border-radius: 18px;
-  padding: 14px 15px 32px;
+  min-height: 112px;
+  border-radius: 15px;
+  padding: 12px 14px 28px;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 2px 9px rgba(15, 23, 42, 0.05);
 }
@@ -121,7 +186,7 @@ h1 {
 .paper-top-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -137,24 +202,12 @@ h1 {
   -webkit-line-clamp: 2;
 }
 
-.paper-time-block {
-  display: grid;
-  gap: 2px;
-  min-width: 96px;
-  color: #6b7280;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 10.5px;
-  line-height: 1.25;
-  text-align: right;
-  white-space: nowrap;
-}
-
 .paper-source-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px;
-  margin-top: 9px;
+  margin-top: 8px;
 }
 
 .paper-context-check {
@@ -193,51 +246,31 @@ h1 {
   text-decoration-color: rgba(107, 114, 128, 0.75);
 }
 
-.paper-copy-url {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  padding: 0;
-  color: #9ca3af;
-  background: transparent;
-}
-
-.paper-copy-url::before {
-  display: block;
-  width: 12px;
-  height: 12px;
-  margin: auto;
-  background: currentColor;
-  content: "";
-  mask-image: url("../assets/icons/copy.svg");
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-  -webkit-mask-image: url("../assets/icons/copy.svg");
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-}
-
-.paper-copy-url:hover,
-.paper-copy-url.copied {
-  color: #4b5563;
-  background: rgba(148, 163, 184, 0.14);
-}
-
 .paper-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px 10px;
-  margin-top: 10px;
+  justify-content: flex-end;
+  gap: 5px 8px;
   color: #6b7280;
-  font-size: 11.5px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.paper-time-line {
+  overflow: hidden;
+  margin-top: 5px;
+  color: #6b7280;
+  font-size: 10.75px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .paper-star {
   position: absolute;
   right: 12px;
-  bottom: 9px;
+  bottom: 7px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -302,7 +335,18 @@ h1 {
   }
 
   .dashboard-controls input,
-  .dashboard-controls select {
+  .sort-control {
+    width: 100%;
+  }
+
+  .sort-button {
+    width: 100%;
+    border-radius: 18px;
+  }
+
+  .sort-menu {
+    right: auto;
+    left: 0;
     width: 100%;
   }
 

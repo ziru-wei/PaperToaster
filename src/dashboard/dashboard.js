@@ -1,12 +1,16 @@
 import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
 
+const SORT_OPTIONS = [
+  { id: "lastOpened", label: "Last opened", sortBy: "lastOpened", sortDirection: "desc" },
+  { id: "firstOpened", label: "First opened", sortBy: "firstOpened", sortDirection: "asc" },
+  { id: "firstConversation", label: "First conversation", sortBy: "firstConversation", sortDirection: "asc" },
+  { id: "title", label: "Title", sortBy: "title", sortDirection: "asc" },
+  { id: "threadCount", label: "Thread count", sortBy: "threadCount", sortDirection: "desc" },
+  { id: "messageCount", label: "Message count", sortBy: "messageCount", sortDirection: "desc" }
+];
+
 const SORT_CONFIG = {
-  lastOpened: { sortBy: "lastOpened", sortDirection: "desc" },
-  firstOpened: { sortBy: "firstOpened", sortDirection: "asc" },
-  firstConversation: { sortBy: "firstConversation", sortDirection: "asc" },
-  title: { sortBy: "title", sortDirection: "asc" },
-  threadCount: { sortBy: "threadCount", sortDirection: "desc" },
-  messageCount: { sortBy: "messageCount", sortDirection: "desc" }
+  ...Object.fromEntries(SORT_OPTIONS.map((option) => [option.id, option]))
 };
 
 const state = {
@@ -18,7 +22,8 @@ const state = {
 const elements = {
   summary: document.querySelector("#librarySummary"),
   search: document.querySelector("#paperSearch"),
-  sort: document.querySelector("#paperSort"),
+  sortButton: document.querySelector("#paperSortButton"),
+  sortMenu: document.querySelector("#paperSortMenu"),
   paperList: document.querySelector("#paperList"),
   emptyState: document.querySelector("#emptyState")
 };
@@ -28,14 +33,23 @@ elements.search.addEventListener("input", () => {
   refreshPapers();
 });
 
-elements.sort.addEventListener("change", () => {
-  state.sort = elements.sort.value;
-  refreshPapers();
+elements.sortButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSortMenuOpen(elements.sortMenu.hidden);
+});
+
+document.addEventListener("click", (event) => {
+  if (elements.sortMenu.hidden || elements.sortMenu.contains(event.target) || elements.sortButton.contains(event.target)) {
+    return;
+  }
+
+  setSortMenuOpen(false);
 });
 
 refreshAll().catch((error) => {
   elements.summary.textContent = `Could not load dashboard: ${error.message || String(error)}`;
 });
+renderSortMenu();
 
 async function refreshAll() {
   await refreshPapers();
@@ -74,21 +88,21 @@ function createPaperCard(paper) {
   title.className = "paper-title";
   title.textContent = paper.title;
 
-  const time = createPaperTimeBlock(paper);
-  topRow.append(title, time);
-
-  const url = document.createElement("div");
-  url.className = "paper-source-row";
-  url.append(createContextIndicator(paper), createUrlLink(paper), createCopyUrlButton(paper));
-
   const meta = document.createElement("div");
   meta.className = "paper-meta";
   meta.append(
     createMetaText(`${paper.threadCount} threads`),
     createMetaText(`${paper.messageCount} messages`)
   );
+  topRow.append(title, meta);
 
-  main.append(topRow, url, meta);
+  const url = document.createElement("div");
+  url.className = "paper-source-row";
+  url.append(createContextIndicator(paper), createUrlLink(paper));
+
+  const time = createPaperTimeLine(paper);
+
+  main.append(topRow, url, time);
 
   card.append(main, createStarButton(paper));
   return card;
@@ -115,41 +129,13 @@ function createUrlLink(paper) {
   return link;
 }
 
-function createCopyUrlButton(paper) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "paper-copy-url";
-  button.title = "Copy URL";
-  button.setAttribute("aria-label", "Copy URL");
-  button.disabled = !paper.canonicalUrl;
-  button.addEventListener("click", async () => {
-    if (!paper.canonicalUrl) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(paper.canonicalUrl);
-      button.classList.add("copied");
-      window.setTimeout(() => button.classList.remove("copied"), 700);
-    } catch {
-      button.classList.remove("copied");
-    }
-  });
-  return button;
-}
-
-function createPaperTimeBlock(paper) {
-  const block = document.createElement("div");
-  block.className = "paper-time-block";
+function createPaperTimeLine(paper) {
+  const line = document.createElement("div");
+  line.className = "paper-time-line";
   const first = paper.firstConversationAt || paper.firstOpenedAt;
   const latest = paper.lastConversationAt || paper.lastOpenedAt || paper.updatedAt;
-
-  const firstRow = document.createElement("span");
-  firstRow.textContent = `First ${formatTime(first)}`;
-  const latestRow = document.createElement("span");
-  latestRow.textContent = `Latest ${formatTime(latest)}`;
-  block.append(firstRow, latestRow);
-  return block;
+  line.textContent = `First ${formatTime(first)} · Latest ${formatTime(latest)}`;
+  return line;
 }
 
 function createStarButton(paper) {
@@ -174,6 +160,33 @@ function createMetaText(text, className = "") {
   }
   span.textContent = text;
   return span;
+}
+
+function renderSortMenu() {
+  const activeOption = SORT_OPTIONS.find((option) => option.id === state.sort) || SORT_OPTIONS[0];
+  elements.sortButton.title = `Sort: ${activeOption.label}`;
+  elements.sortMenu.replaceChildren(...SORT_OPTIONS.map((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sort-menu-option";
+    button.classList.toggle("active", option.id === state.sort);
+    button.setAttribute("role", "menuitemradio");
+    button.setAttribute("aria-checked", String(option.id === state.sort));
+    button.textContent = option.label;
+    button.addEventListener("click", async () => {
+      state.sort = option.id;
+      renderSortMenu();
+      setSortMenuOpen(false);
+      await refreshPapers();
+    });
+    return button;
+  }));
+}
+
+function setSortMenuOpen(open) {
+  elements.sortMenu.hidden = !open;
+  elements.sortButton.setAttribute("aria-expanded", String(open));
+  elements.sortButton.classList.toggle("active", open);
 }
 
 function formatTime(value) {

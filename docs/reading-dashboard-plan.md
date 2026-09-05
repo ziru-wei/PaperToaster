@@ -255,7 +255,7 @@ top bar
 paper gallery/list
   paper card/row
     title
-    context check / clickable truncated URL / copy URL
+  context check / clickable truncated URL
     first/latest timestamps aligned to the right
     conversation/thread summary
     star action
@@ -269,8 +269,8 @@ Paper item content:
 
 ```text
 Title
-context check / clickable truncated URL / copy URL
-right-aligned First and Latest timestamps
+context check / clickable truncated URL
+left-aligned First and Latest timestamps below URL
 3 threads · 14 messages
 star button
 ```
@@ -429,7 +429,7 @@ No cache invalidation is required.
 2. Add `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 3. Render read-only paper list from existing DB.
 4. Add sort controls.
-5. Add clickable URL and URL copy.
+5. Add clickable URL.
 6. Add star/unstar.
 7. Add side panel entry point to open dashboard.
 
@@ -445,7 +445,7 @@ Implemented first:
 - IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
 - Responsive dashboard grid: one, two, or three columns depending on available browser width.
-- Compact paper cards with clickable URL, URL copy, right-aligned First/Latest timestamps, thread/message counts, and a bottom-right star.
+- Compact paper cards with clickable URL, left-aligned First/Latest timestamps below URL, top-right thread/message counts, and a bottom-right star.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 
