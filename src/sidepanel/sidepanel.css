@@ -236,8 +236,8 @@ header {
   position: absolute;
   right: -8px;
   top: 0;
-  width: 132px;
-  max-width: 132px;
+  width: 150px;
+  max-width: 150px;
   opacity: var(--thread-wheel-opacity, 0);
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
   pointer-events: none;
@@ -270,15 +270,35 @@ header {
 }
 
 .thread-select {
+  display: inline-flex;
   overflow: hidden;
   min-width: 0;
   flex: 1 1 auto;
-  max-width: 102px;
+  max-width: 120px;
+  align-items: center;
+  gap: 10px;
   padding: 3px 5px 3px 9px;
+  font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 10px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.thread-label-date,
+.thread-label-time {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.thread-label-date {
+  flex: 1 1 auto;
+}
+
+.thread-label-time {
+  flex: 0 0 auto;
+  color: #98a2b3;
 }
 
 .thread-delete {
@@ -302,6 +322,10 @@ header {
 
 .thread-wheel-chip.current .thread-select {
   color: #ffffff;
+}
+
+.thread-wheel-chip.current .thread-label-time {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .thread-wheel-chip.current .thread-delete:hover,

@@ -327,7 +327,7 @@ export function createConversationPanelController({
       selectButton.type = "button";
       selectButton.dataset.selectThreadId = thread.threadId;
       selectButton.title = formatThreadTitle(thread);
-      selectButton.textContent = formatThreadLabel(thread);
+      renderThreadLabel(selectButton, thread);
 
       const deleteButton = item.querySelector(".thread-delete") || document.createElement("button");
       deleteButton.className = "thread-delete";
@@ -474,7 +474,12 @@ function formatThreadLabel(thread) {
     return "New thread";
   }
 
-  return formatThreadTime(getThreadLabelTime(thread));
+  const parts = formatThreadTimeParts(getThreadLabelTime(thread));
+  if (!parts) {
+    return "Thread";
+  }
+
+  return `${parts.date}  ${parts.time}`;
 }
 
 function formatThreadTitle(thread) {
@@ -483,22 +488,63 @@ function formatThreadTitle(thread) {
   return `${formatThreadLabel(thread)} · ${messageLabel}`;
 }
 
-function formatThreadTime(timestamp) {
+function renderThreadLabel(element, thread) {
+  element.textContent = "";
+  if (!thread?.messageCount) {
+    element.textContent = "New thread";
+    return;
+  }
+
+  const parts = formatThreadTimeParts(getThreadLabelTime(thread));
+  if (!parts) {
+    element.textContent = "Thread";
+    return;
+  }
+
+  const date = document.createElement("span");
+  date.className = "thread-label-date";
+  date.textContent = parts.date;
+
+  const time = document.createElement("span");
+  time.className = "thread-label-time";
+  time.textContent = parts.time;
+
+  element.append(date, time);
+}
+
+function formatThreadTimeParts(timestamp) {
   const date = new Date(Number(timestamp));
   if (!Number.isFinite(date.getTime())) {
-    return "Thread";
+    return null;
   }
 
   const now = new Date();
-  const sameYear = date.getFullYear() === now.getFullYear();
-  return new Intl.DateTimeFormat(undefined, {
-    month: "numeric",
-    day: "numeric",
-    year: sameYear ? undefined : "2-digit",
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const dateLabel = isSameDate(date, now)
+    ? "Today"
+    : isSameDate(date, yesterday)
+      ? "Yesterday"
+      : new Intl.DateTimeFormat("en", {
+        month: "short",
+        day: "numeric"
+      }).format(date).replace(" ", "/");
+  const timeLabel = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false
   }).format(date);
+
+  return {
+    date: dateLabel,
+    time: timeLabel
+  };
+}
+
+function isSameDate(first, second) {
+  return first.getFullYear() === second.getFullYear()
+    && first.getMonth() === second.getMonth()
+    && first.getDate() === second.getDate();
 }
 
 function getThreadLabelTime(thread) {
