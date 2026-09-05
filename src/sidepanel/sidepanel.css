@@ -436,7 +436,27 @@ form {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 0 10px;
+  padding: 4px 10px 10px 0;
+  scrollbar-color: rgba(107, 114, 128, 0.22) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.conversation-thread::-webkit-scrollbar {
+  width: 4px;
+}
+
+.conversation-thread::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-thread::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(107, 114, 128, 0.18);
+}
+
+.conversation-thread:hover::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.32);
 }
 
 .conversation-thread[hidden] {
