@@ -38,7 +38,7 @@ main::after {
   position: absolute;
   z-index: 20;
   inset: 0;
-  background: rgba(247, 248, 250, 0);
+  background: rgba(156, 163, 175, 0);
   backdrop-filter: grayscale(0) blur(0);
   content: "";
   pointer-events: none;
@@ -46,7 +46,7 @@ main::after {
 }
 
 .thread-wheel-open main::after {
-  background: rgba(247, 248, 250, 0.58);
+  background: rgba(156, 163, 175, 0.36);
   backdrop-filter: grayscale(1) blur(1.2px);
 }
 
