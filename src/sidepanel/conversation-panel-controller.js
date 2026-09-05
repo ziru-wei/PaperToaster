@@ -7,10 +7,13 @@ import {
   setActiveStoredChatThread
 } from "../storage/chat-store.js";
 
+const THREAD_WHEEL_VISIBLE_COUNT = 5;
+
 export function createConversationPanelController({
   threadElement,
   threadBarElement,
-  threadScrollerElement,
+  threadArchiveButton,
+  threadWheelElement,
   newThreadButton,
   onDiagnostic,
   onChange
@@ -22,11 +25,18 @@ export function createConversationPanelController({
   let threadSummaries = [];
   let saveTimer = null;
   let documentRequestId = 0;
+  let threadWheelOpen = false;
+  let threadWheelOffset = 0;
 
   newThreadButton.addEventListener("click", () => {
     createThread().catch(reportError);
   });
-  threadScrollerElement.addEventListener("click", (event) => {
+  threadArchiveButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleThreadWheel();
+  });
+  threadWheelElement.addEventListener("click", (event) => {
+    event.stopPropagation();
     const deleteButton = event.target.closest("[data-delete-thread-id]");
     if (deleteButton) {
       const threadId = deleteButton.dataset.deleteThreadId;
@@ -40,6 +50,26 @@ export function createConversationPanelController({
     const selectButton = event.target.closest("[data-select-thread-id]");
     if (selectButton) {
       selectThread(selectButton.dataset.selectThreadId).catch(reportError);
+    }
+  });
+  threadWheelElement.addEventListener("wheel", (event) => {
+    const archivedThreads = getArchivedThreads();
+    const maxOffset = Math.max(0, archivedThreads.length - THREAD_WHEEL_VISIBLE_COUNT);
+    if (!threadWheelOpen || maxOffset <= 0) {
+      return;
+    }
+
+    event.preventDefault();
+    setThreadWheelOffset(threadWheelOffset + (event.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
+  document.addEventListener("click", (event) => {
+    if (!threadBarElement.contains(event.target)) {
+      closeThreadWheel();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeThreadWheel();
     }
   });
   threadElement.addEventListener("click", (event) => {
@@ -77,6 +107,7 @@ export function createConversationPanelController({
       currentSelectionText = "";
       activeThreadId = "";
       threadSummaries = [];
+      closeThreadWheel();
       render();
       renderThreadList();
       onChange?.();
@@ -143,6 +174,7 @@ export function createConversationPanelController({
 
     applyThread(thread);
     await refreshThreadList(requestId);
+    closeThreadWheel();
     render();
     onChange?.();
   }
@@ -161,6 +193,7 @@ export function createConversationPanelController({
 
     applyThread(thread);
     await refreshThreadList(requestId);
+    closeThreadWheel();
     render();
     onChange?.();
   }
@@ -179,6 +212,7 @@ export function createConversationPanelController({
 
     applyThread(thread);
     await refreshThreadList(requestId);
+    closeThreadWheel();
     render();
     onChange?.();
   }
@@ -233,6 +267,7 @@ export function createConversationPanelController({
     }
 
     threadSummaries = threads;
+    clampThreadWheelOffset();
     renderThreadList();
   }
 
@@ -265,13 +300,23 @@ export function createConversationPanelController({
   }
 
   function renderThreadList() {
+    const archivedThreads = getArchivedThreads();
     threadBarElement.hidden = !threadUrl;
     newThreadButton.disabled = !threadUrl;
-    threadScrollerElement.textContent = "";
+    threadArchiveButton.disabled = !threadUrl || !archivedThreads.length;
+    threadArchiveButton.classList.toggle("active", threadWheelOpen && archivedThreads.length > 0);
+    threadWheelElement.hidden = !threadWheelOpen || !archivedThreads.length;
+    threadWheelElement.textContent = "";
 
-    for (const thread of threadSummaries) {
+    if (!threadWheelOpen || !archivedThreads.length) {
+      return;
+    }
+
+    clampThreadWheelOffset();
+    const visibleThreads = archivedThreads.slice(threadWheelOffset, threadWheelOffset + THREAD_WHEEL_VISIBLE_COUNT);
+    visibleThreads.forEach((thread, index) => {
       const item = document.createElement("div");
-      item.className = `thread-chip${thread.threadId === activeThreadId ? " active" : ""}`;
+      item.className = `thread-chip thread-wheel-chip slot-${index}`;
 
       const selectButton = document.createElement("button");
       selectButton.className = "thread-select";
@@ -289,8 +334,43 @@ export function createConversationPanelController({
       deleteButton.textContent = "×";
 
       item.append(selectButton, deleteButton);
-      threadScrollerElement.append(item);
+      threadWheelElement.append(item);
+    });
+  }
+
+  function getArchivedThreads() {
+    return threadSummaries.filter((thread) => thread.threadId !== activeThreadId);
+  }
+
+  function toggleThreadWheel() {
+    if (!threadUrl || !getArchivedThreads().length) {
+      closeThreadWheel();
+      return;
     }
+
+    threadWheelOpen = !threadWheelOpen;
+    clampThreadWheelOffset();
+    renderThreadList();
+  }
+
+  function closeThreadWheel() {
+    if (!threadWheelOpen && threadWheelElement.hidden) {
+      return;
+    }
+
+    threadWheelOpen = false;
+    renderThreadList();
+  }
+
+  function setThreadWheelOffset(offset) {
+    const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    threadWheelOffset = Math.min(Math.max(0, offset), maxOffset);
+    renderThreadList();
+  }
+
+  function clampThreadWheelOffset() {
+    const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    threadWheelOffset = Math.min(Math.max(0, threadWheelOffset), maxOffset);
   }
 
   function reportError(error) {
@@ -339,11 +419,20 @@ function formatThreadTime(timestamp) {
 
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
+  const sameDay = sameYear && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  if (sameDay) {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(date);
+  }
+
   return new Intl.DateTimeFormat(undefined, {
-    month: "short",
+    month: "numeric",
     day: "numeric",
-    year: sameYear ? undefined : "numeric",
-    hour: "numeric",
+    year: sameYear ? undefined : "2-digit",
+    hour: "2-digit",
     minute: "2-digit",
     hour12: false
   }).format(date);

@@ -15,7 +15,8 @@ export function getSidePanelElements(root = document) {
     selectionContextStatus: root.querySelector("#selectionContextStatus"),
     conversationThread: root.querySelector("#conversationThread"),
     conversationThreadBar: root.querySelector("#conversationThreadBar"),
-    conversationThreadScroller: root.querySelector("#conversationThreadScroller"),
+    conversationThreadArchive: root.querySelector("#conversationThreadArchive"),
+    conversationThreadWheel: root.querySelector("#conversationThreadWheel"),
     newConversationThread: root.querySelector("#newConversationThread")
   };
 
