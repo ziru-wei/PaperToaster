@@ -16,6 +16,13 @@ export function createSelectionPanelController({
       toggle();
     }
   });
+  document.addEventListener("click", (event) => {
+    if (!quoteElement.classList.contains("expanded") || quoteElement.contains(event.target)) {
+      return;
+    }
+
+    collapse();
+  });
   quoteElement.addEventListener("keydown", (event) => {
     if (!quoteElement.textContent.trim() || (event.key !== "Enter" && event.key !== " ")) {
       return;
@@ -114,9 +121,17 @@ export function createSelectionPanelController({
     toggleButton.classList.toggle("expanded", expanded);
     toggleButton.setAttribute("aria-label", expanded ? "Collapse selected text" : "Expand selected text");
     if (!expanded) {
-      quoteElement.scrollTop = 0;
-      updateOverflow();
+      collapse();
     }
+  }
+
+  function collapse() {
+    quoteElement.classList.remove("expanded");
+    quoteElement.setAttribute("aria-expanded", "false");
+    toggleButton.classList.remove("expanded");
+    toggleButton.setAttribute("aria-label", "Expand selected text");
+    quoteElement.scrollTop = 0;
+    updateOverflow();
   }
 
   function updateOverflow() {

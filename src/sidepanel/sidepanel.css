@@ -447,7 +447,7 @@ section {
 }
 
 .composer-input-stack:has(.selection-quote:not(:empty)) {
-  padding-top: 22px;
+  padding-top: 28px;
 }
 
 button {
@@ -609,11 +609,11 @@ form {
 .selection-quote {
   position: absolute;
   right: 12px;
-  bottom: calc(100% - 42px);
+  bottom: calc(100% - 48px);
   left: 12px;
   z-index: 1;
   overflow: hidden;
-  max-height: 44px;
+  max-height: 52px;
   margin: 0;
   border: 0;
   border-radius: 8px;
