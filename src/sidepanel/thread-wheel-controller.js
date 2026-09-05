@@ -2,6 +2,7 @@ const THREAD_WHEEL_VISIBLE_COUNT = 5;
 const THREAD_WHEEL_ANGLE_STEP = 10;
 const THREAD_WHEEL_EASING = 0.32;
 const THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT = 72;
+const THREAD_WHEEL_END_OVERSCROLL_SLOTS = 1.3;
 
 export function createThreadWheelController({
   archiveButton,
@@ -136,13 +137,13 @@ export function createThreadWheelController({
   }
 
   function setTargetScroll(offset) {
-    const maxOffset = Math.max(0, getWheelThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    const maxOffset = getMaxScrollOffset(getWheelThreads());
     targetScroll = Math.min(Math.max(0, offset), maxOffset);
     startAnimation();
   }
 
   function clampScroll() {
-    const maxOffset = Math.max(0, getWheelThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    const maxOffset = getMaxScrollOffset(getWheelThreads());
     scroll = Math.min(Math.max(0, scroll), maxOffset);
     targetScroll = Math.min(Math.max(0, targetScroll), maxOffset);
   }
@@ -194,7 +195,7 @@ export function createThreadWheelController({
 
   function handleWheel(event) {
     const threads = getWheelThreads();
-    const maxOffset = Math.max(0, threads.length - THREAD_WHEEL_VISIBLE_COUNT);
+    const maxOffset = getMaxScrollOffset(threads);
     if (!open || maxOffset <= 0) {
       return;
     }
@@ -221,6 +222,14 @@ export function createThreadWheelController({
     render,
     close
   };
+}
+
+function getMaxScrollOffset(threads) {
+  if (!threads.length || threads.length <= THREAD_WHEEL_VISIBLE_COUNT) {
+    return 0;
+  }
+
+  return Math.max(0, threads.length - THREAD_WHEEL_VISIBLE_COUNT + THREAD_WHEEL_END_OVERSCROLL_SLOTS);
 }
 
 function formatThreadLabel(thread) {
