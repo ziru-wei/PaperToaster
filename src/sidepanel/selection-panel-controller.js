@@ -11,6 +11,19 @@ export function createSelectionPanelController({
   let readyToAsk = false;
 
   toggleButton.addEventListener("click", toggle);
+  quoteElement.addEventListener("click", () => {
+    if (quoteElement.textContent.trim()) {
+      toggle();
+    }
+  });
+  quoteElement.addEventListener("keydown", (event) => {
+    if (!quoteElement.textContent.trim() || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+
+    event.preventDefault();
+    toggle();
+  });
 
   function render(selection) {
     if (!selection?.text) {
@@ -18,6 +31,8 @@ export function createSelectionPanelController({
       statusElement.textContent = "";
       quoteElement.textContent = "";
       quoteElement.classList.remove("expanded");
+      quoteElement.classList.remove("has-overflow");
+      quoteElement.setAttribute("aria-expanded", "false");
       toggleButton.classList.remove("expanded");
       toggleButton.hidden = true;
       toggleButton.setAttribute("aria-label", "Expand selected text");
@@ -36,6 +51,8 @@ export function createSelectionPanelController({
     statusElement.textContent = "";
     quoteElement.textContent = selection.text;
     quoteElement.classList.remove("expanded");
+    quoteElement.classList.remove("has-overflow");
+    quoteElement.setAttribute("aria-expanded", "false");
     toggleButton.classList.remove("expanded");
     toggleButton.setAttribute("aria-label", "Expand selected text");
     contextStatusElement.textContent = "";
@@ -52,6 +69,8 @@ export function createSelectionPanelController({
     statusElement.textContent = "";
     quoteElement.textContent = "";
     quoteElement.classList.remove("expanded");
+    quoteElement.classList.remove("has-overflow");
+    quoteElement.setAttribute("aria-expanded", "false");
     toggleButton.classList.remove("expanded");
     toggleButton.hidden = true;
     toggleButton.setAttribute("aria-label", "Expand selected text");
@@ -91,6 +110,7 @@ export function createSelectionPanelController({
   function toggle() {
     const expanded = !quoteElement.classList.contains("expanded");
     quoteElement.classList.toggle("expanded", expanded);
+    quoteElement.setAttribute("aria-expanded", String(expanded));
     toggleButton.classList.toggle("expanded", expanded);
     toggleButton.setAttribute("aria-label", expanded ? "Collapse selected text" : "Expand selected text");
     if (!expanded) {
@@ -106,7 +126,8 @@ export function createSelectionPanelController({
     }
 
     const hasOverflow = quoteElement.scrollHeight > quoteElement.clientHeight + 1;
-    toggleButton.hidden = !hasOverflow && !quoteElement.classList.contains("expanded");
+    quoteElement.classList.toggle("has-overflow", hasOverflow || quoteElement.classList.contains("expanded"));
+    toggleButton.hidden = true;
   }
 
   return {

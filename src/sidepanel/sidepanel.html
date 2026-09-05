@@ -52,16 +52,18 @@
         <div id="conversationThread" class="conversation-thread" hidden></div>
         <div class="composer">
           <div id="selectionStatus" class="muted"></div>
-          <blockquote id="selectionText" class="selection-quote"></blockquote>
+          <div class="composer-input-stack">
+            <blockquote id="selectionText" class="selection-quote" tabindex="0" aria-expanded="false"></blockquote>
+            <form id="selectionQuestionForm">
+              <div class="prompt-field">
+                <textarea id="selectionQuestion" rows="4" placeholder="Ask about selected text. Type / for prompts."></textarea>
+                <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
+              </div>
+            </form>
+          </div>
           <button id="toggleSelectionText" class="selection-toggle" type="button" aria-label="Expand selected text" hidden>
             <span aria-hidden="true">⌄</span>
           </button>
-          <form id="selectionQuestionForm">
-            <div class="prompt-field">
-              <textarea id="selectionQuestion" rows="4" placeholder="Ask about selected text. Type / for prompts."></textarea>
-              <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
-            </div>
-          </form>
           <div id="selectionContextStatus" class="muted"></div>
         </div>
       </section>
