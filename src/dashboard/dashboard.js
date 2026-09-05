@@ -4,9 +4,9 @@ import { MessageType } from "../shared/messages.js";
 const SORT_OPTIONS = [
   { id: "latestThread", label: "Latest thread", sortBy: "latestThread", sortDirection: "desc" },
   { id: "firstConversation", label: "First conversation", sortBy: "firstConversation", sortDirection: "asc" },
-  { id: "title", label: "Title", sortBy: "title", sortDirection: "asc" },
-  { id: "threadCount", label: "Thread count", sortBy: "threadCount", sortDirection: "desc" },
-  { id: "messageCount", label: "Message count", sortBy: "messageCount", sortDirection: "desc" }
+  { id: "messageCount", label: "Message count", sortBy: "messageCount", sortDirection: "desc" },
+  { id: "starred", label: "Starred", sortBy: "starred", sortDirection: "desc" },
+  { id: "title", label: "Title", sortBy: "title", sortDirection: "asc" }
 ];
 
 const SORT_CONFIG = {

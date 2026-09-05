@@ -206,6 +206,16 @@ function compareLibraryPapers(left, right, options) {
     return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
   }
 
+  if (sortBy === "starred") {
+    const starredComparison = compareBoolean(left.starred, right.starred);
+    if (starredComparison) {
+      return starredComparison * direction;
+    }
+
+    const latestComparison = compareNumber(left.lastThreadStartedAt || 0, right.lastThreadStartedAt || 0, "desc");
+    return latestComparison || compareTitle(left, right);
+  }
+
   const leftValue = getSortValue(left, sortBy);
   const rightValue = getSortValue(right, sortBy);
   if (leftValue !== rightValue) {
@@ -224,10 +234,6 @@ function getSortValue(paper, sortBy) {
     return paper.lastThreadStartedAt || 0;
   }
 
-  if (sortBy === "threadCount") {
-    return paper.threadCount || 0;
-  }
-
   if (sortBy === "messageCount") {
     return paper.messageCount || 0;
   }
@@ -237,6 +243,23 @@ function getSortValue(paper, sortBy) {
 
 function compareTitle(left, right) {
   return String(left.title || "").localeCompare(String(right.title || ""), undefined, { sensitivity: "base" });
+}
+
+function compareBoolean(left, right) {
+  if (Boolean(left) === Boolean(right)) {
+    return 0;
+  }
+
+  return Boolean(left) ? 1 : -1;
+}
+
+function compareNumber(left, right, direction = "asc") {
+  if (left === right) {
+    return 0;
+  }
+
+  const multiplier = direction === "desc" ? -1 : 1;
+  return (left > right ? 1 : -1) * multiplier;
 }
 
 function minTime(values) {

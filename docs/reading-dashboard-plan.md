@@ -202,8 +202,8 @@ Initial sort options:
 Latest thread
 First conversation
 Title
-Thread count
 Message count
+Starred
 ```
 
 Definitions:
@@ -211,8 +211,8 @@ Definitions:
 - Latest thread: latest non-empty thread start time.
 - First conversation: earliest `firstConversationAt`; papers without conversation go last.
 - Title: locale-aware title sort.
-- Thread count: non-empty conversation thread count, descending.
 - Message count: total message count, descending.
+- Starred: starred papers first, then latest thread time.
 
 Default sort:
 
