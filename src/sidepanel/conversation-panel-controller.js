@@ -130,7 +130,7 @@ export function createConversationPanelController({
   }
 
   async function createThread() {
-    if (!threadUrl) {
+    if (!threadUrl || !messages.length) {
       return;
     }
 

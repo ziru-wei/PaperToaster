@@ -60,6 +60,7 @@ Settings and prompt presets still use `chrome.storage.local`.
 - Each document has an `activeThreadId`.
 - If the user does not create a new thread, messages continue appending to the current active thread.
 - The side panel still displays only the active thread.
+- Empty thread accumulation is guarded in two places: the composer command does nothing when the active thread is already empty, and storage reuses one existing empty thread while pruning duplicate empty threads.
 - Existing legacy conversation data in `chrome.storage.local.paperChatThreadsV1` is read lazily and written into IndexedDB when that paper is opened.
 - Chunks are not stored. They are rebuilt from cleaned Markdown when cached content is hydrated.
 - Raw Markdown is not stored.

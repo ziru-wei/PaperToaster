@@ -115,6 +115,7 @@ export async function listStoredChatThreads(url) {
   }
 
   const db = await openPaperDatabase();
+  await pruneDuplicateEmptyThreads(db, documentKey);
   const threads = await requestToPromise(
     db.transaction(CONVERSATION_THREAD_STORE, "readonly")
       .objectStore(CONVERSATION_THREAD_STORE)
@@ -144,9 +145,45 @@ export async function createStoredChatThread(url, options = {}) {
   }
 
   const now = Date.now();
-  const threadId = createThreadId();
   const db = await openPaperDatabase();
   const existingPaper = await getPaperRecord(db, documentKey);
+  const existingThreads = await getThreadRecordsForDocument(db, documentKey);
+  const reusableThread = selectReusableEmptyThread(existingThreads, existingPaper?.activeThreadId);
+  if (reusableThread) {
+    const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE], "readwrite");
+    const threadStore = transaction.objectStore(CONVERSATION_THREAD_STORE);
+    const normalizedTitle = normalizeThreadTitle(reusableThread.title || options.title);
+
+    transaction.objectStore(PAPER_STORE).put({
+      ...(existingPaper || {}),
+      documentKey,
+      canonicalUrl: url || existingPaper?.canonicalUrl || "",
+      title: existingPaper?.title || "",
+      titleSource: existingPaper?.titleSource || "",
+      metadata: existingPaper?.metadata || null,
+      createdAt: existingPaper?.createdAt || now,
+      updatedAt: now,
+      activeThreadId: reusableThread.threadId
+    });
+
+    threadStore.put({
+      ...reusableThread,
+      title: normalizedTitle,
+      updatedAt: now,
+      messageCount: 0
+    });
+    deleteDuplicateEmptyThreads(threadStore, existingThreads, reusableThread.threadId);
+
+    await transactionDone(transaction);
+    return createEmptyChatThread({
+      url,
+      documentKey,
+      threadId: reusableThread.threadId,
+      title: normalizedTitle
+    });
+  }
+
+  const threadId = createThreadId();
   const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE], "readwrite");
 
   transaction.objectStore(PAPER_STORE).put({
@@ -309,6 +346,41 @@ async function getLatestThreadForDocument(db, documentKey) {
   return threads.sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0))[0] || null;
 }
 
+async function pruneDuplicateEmptyThreads(db, documentKey) {
+  const threads = await getThreadRecordsForDocument(db, documentKey);
+  const emptyThreads = threads.filter(isEmptyThreadRecord);
+  if (emptyThreads.length <= 1) {
+    return;
+  }
+
+  const paper = await getPaperRecord(db, documentKey);
+  const keepThread = selectReusableEmptyThread(emptyThreads, paper?.activeThreadId);
+  if (!keepThread) {
+    return;
+  }
+
+  const now = Date.now();
+  const activeThreadId = paper?.activeThreadId || "";
+  const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
+  const nextActiveThreadId = !activeThread || isEmptyThreadRecord(activeThread)
+    ? keepThread.threadId
+    : activeThreadId;
+  const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE], "readwrite");
+  transaction.objectStore(PAPER_STORE).put({
+    ...(paper || {}),
+    documentKey,
+    canonicalUrl: paper?.canonicalUrl || "",
+    title: paper?.title || "",
+    titleSource: paper?.titleSource || "",
+    metadata: paper?.metadata || null,
+    createdAt: paper?.createdAt || now,
+    updatedAt: now,
+    activeThreadId: nextActiveThreadId
+  });
+  deleteDuplicateEmptyThreads(transaction.objectStore(CONVERSATION_THREAD_STORE), emptyThreads, keepThread.threadId);
+  await transactionDone(transaction);
+}
+
 async function getFirstThreadUserMessageCreatedAt(db, threadId) {
   return getFirstUserMessageCreatedAt(await getThreadMessages(db, threadId));
 }
@@ -368,6 +440,35 @@ function getFirstUserMessageCreatedAt(messages) {
   const firstMessage = messages.find((message) => message?.role === "user" && Number(message?.createdAt)) ||
     messages.find((message) => Number(message?.createdAt));
   return firstMessage ? Number(firstMessage.createdAt) : null;
+}
+
+function selectReusableEmptyThread(threads, activeThreadId = "") {
+  const emptyThreads = threads.filter(isEmptyThreadRecord);
+  const activeEmptyThread = emptyThreads.find((thread) => thread.threadId === activeThreadId);
+  if (activeEmptyThread) {
+    return activeEmptyThread;
+  }
+
+  return emptyThreads
+    .sort((left, right) => getThreadSortTime(right) - getThreadSortTime(left))[0] || null;
+}
+
+function deleteDuplicateEmptyThreads(store, threads, keepThreadId) {
+  for (const thread of threads) {
+    if (thread.threadId !== keepThreadId && isEmptyThreadRecord(thread)) {
+      store.delete(thread.threadId);
+    }
+  }
+}
+
+function isEmptyThreadRecord(thread) {
+  return Boolean(thread?.threadId)
+    && Number(thread.messageCount) === 0
+    && !Number(thread.firstMessageCreatedAt);
+}
+
+function getThreadSortTime(thread) {
+  return Number(thread?.updatedAt || thread?.createdAt) || 0;
 }
 
 async function getLegacyChatThread(url, documentKey) {
