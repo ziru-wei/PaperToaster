@@ -2,9 +2,9 @@
   color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  --chat-text-size: 13.25px;
-  --selection-text-size: 13px;
-  --thread-selection-text-size: 12px;
+  --chat-text-size: 12.75px;
+  --selection-text-size: 12px;
+  --thread-selection-text-size: 11.25px;
   --control-radius: 10px;
 }
 
