@@ -5,7 +5,7 @@
   --selection-text-size: 12px;
   --thread-selection-text-size: 11.25px;
   --control-radius: 12px;
-  --composer-width: min(calc(100% - 14px), 360px);
+  --composer-width: min(calc(100% - 28px), 360px);
 }
 
 html,
@@ -544,7 +544,7 @@ textarea {
 textarea:focus {
   border-color: #e3e7ee;
   outline: none;
-  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.08), 0 0 18px 2px rgba(148, 163, 184, 0.16);
+  box-shadow: 0 0 26px 6px rgba(148, 163, 184, 0.1);
 }
 
 #selectionQuestion {
