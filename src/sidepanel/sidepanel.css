@@ -513,9 +513,13 @@ button:disabled {
   font-weight: 500;
 }
 
-.mini-icon-button svg {
+.mini-icon-button svg,
+.mini-icon-button .icon-mask {
   width: 14px;
   height: 14px;
+}
+
+.mini-icon-button svg {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -533,9 +537,26 @@ button:disabled {
   opacity: 0.72;
 }
 
-.mini-icon-button svg {
+.mini-icon-button svg,
+.mini-icon-button .icon-mask {
   width: 12px;
   height: 12px;
+}
+
+.mini-icon-button .icon-mask {
+  display: block;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.dashboard-entry-icon {
+  mask-image: url("../assets/icons/waves-arrow-down.svg");
+  -webkit-mask-image: url("../assets/icons/waves-arrow-down.svg");
 }
 
 .mini-icon-button:hover,
@@ -720,7 +741,7 @@ form {
   max-height: 50vh;
   opacity: 1;
   transform: rotate(0deg);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.11);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
   scrollbar-width: none;
 }
 
@@ -736,6 +757,11 @@ form {
 .selection-quote:focus-visible {
   opacity: 1;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+}
+
+.selection-quote.expanded:hover,
+.selection-quote.expanded:focus-visible {
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
 .selection-quote:empty {

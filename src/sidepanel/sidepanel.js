@@ -61,6 +61,7 @@ const composer = createComposerController({
 elements.reloadPdf.addEventListener("click", () => {
   loadPdf({ bypassCache: true });
 });
+elements.openDashboard.addEventListener("click", openDashboard);
 elements.copyTabUrl.addEventListener("click", copyActiveTabUrl);
 elements.documentTitle.addEventListener("input", () => {
   updateManualDocumentTitle();
@@ -290,6 +291,12 @@ async function copyActiveTabUrl() {
   } catch (error) {
     showError(`Could not copy URL.\n${error.message || String(error)}`);
   }
+}
+
+function openDashboard() {
+  chrome.tabs.create({
+    url: chrome.runtime.getURL("src/dashboard/dashboard.html")
+  });
 }
 
 async function renderDocumentIfCurrent(document, request) {

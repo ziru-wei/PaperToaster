@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reading Dashboard</title>
+    <link rel="stylesheet" href="./dashboard.css">
+  </head>
+  <body>
+    <main class="dashboard-shell">
+      <header class="dashboard-header">
+        <div>
+          <h1>Reading Dashboard</h1>
+          <p id="librarySummary" class="muted">Loading local papers...</p>
+        </div>
+        <div class="dashboard-controls">
+          <input id="paperSearch" type="search" placeholder="Search papers, URLs, labels" aria-label="Search papers">
+          <select id="paperSort" aria-label="Sort papers">
+            <option value="latestActivity">Latest activity</option>
+            <option value="firstConversation">First conversation</option>
+            <option value="title">Title</option>
+            <option value="label">Label</option>
+            <option value="recentlyOpened">Recently opened</option>
+            <option value="largestPdf">Largest PDF</option>
+            <option value="mostMessages">Most messages</option>
+          </select>
+        </div>
+      </header>
+
+      <section class="label-bar" aria-label="Labels">
+        <div id="labelFilters" class="label-filters"></div>
+        <button id="manageLabels" class="soft-button" type="button">Manage labels</button>
+      </section>
+
+      <section id="labelManager" class="label-manager" hidden>
+        <form id="newLabelForm" class="label-create-form">
+          <input id="newLabelName" type="text" maxlength="40" placeholder="New label" aria-label="New label name">
+          <input id="newLabelColor" type="color" value="#eef2f7" aria-label="New label color">
+          <button type="submit">Add</button>
+        </form>
+        <div id="labelManagerList" class="label-manager-list"></div>
+      </section>
+
+      <section id="paperList" class="paper-list" aria-label="Local papers"></section>
+      <div id="emptyState" class="empty-state" hidden>
+        <h2>No local papers yet</h2>
+        <p>Open a PDF with the side panel once, then it will appear here.</p>
+      </div>
+    </main>
+    <script type="module" src="./dashboard.js"></script>
+  </body>
+</html>

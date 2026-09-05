@@ -25,7 +25,7 @@ Title is not a storage key. Title is editable and can be missing, duplicated, or
 
 Database: `pdf-ai-inspector`
 
-Version: `2`
+Version: `3`
 
 Stores:
 
@@ -49,6 +49,14 @@ Stores:
   - Key: `aliasKey`.
   - Reserved for future key promotion.
   - Intended shape: `aliasKey -> documentKey`.
+- `labels`
+  - Key: `labelId`.
+  - Holds dashboard/library labels.
+  - Important fields: `labelId`, `name`, `color`, `sortOrder`, `createdAt`, `updatedAt`.
+- `paperLabels`
+  - Key: `paperLabelId`.
+  - Joins papers to labels.
+  - Important fields: `paperLabelId`, `documentKey`, `labelId`, `assignedAt`.
 
 Settings and prompt presets still use `chrome.storage.local`.
 
@@ -65,6 +73,7 @@ Settings and prompt presets still use `chrome.storage.local`.
 - Chunks are not stored. They are rebuilt from cleaned Markdown when cached content is hydrated.
 - Raw Markdown is not stored.
 - Selected text is one-shot composer state. Once a prompt is sent, the quote belongs only to that user message through `conversationMessages.selectionText`.
+- Dashboard labels are paper-level metadata keyed by `documentKey`; they do not belong to a specific conversation thread.
 
 ## Current Runtime Behavior
 

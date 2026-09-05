@@ -1,11 +1,13 @@
 export const DB_NAME = "pdf-ai-inspector";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const PAPER_STORE = "papers";
 export const DOCUMENT_STORE = "documents";
 export const CONVERSATION_THREAD_STORE = "conversationThreads";
 export const CONVERSATION_MESSAGE_STORE = "conversationMessages";
 export const DOCUMENT_ALIAS_STORE = "documentAliases";
+export const LABEL_STORE = "labels";
+export const PAPER_LABEL_STORE = "paperLabels";
 
 let databasePromise = null;
 
@@ -42,6 +44,14 @@ export function openPaperDatabase() {
 
       const aliases = ensureStore(db, transaction, DOCUMENT_ALIAS_STORE, { keyPath: "aliasKey" });
       ensureIndex(aliases, "byDocumentKey", "documentKey", { unique: false });
+
+      const labels = ensureStore(db, transaction, LABEL_STORE, { keyPath: "labelId" });
+      ensureIndex(labels, "byName", "name", { unique: false });
+      ensureIndex(labels, "bySortOrder", "sortOrder", { unique: false });
+
+      const paperLabels = ensureStore(db, transaction, PAPER_LABEL_STORE, { keyPath: "paperLabelId" });
+      ensureIndex(paperLabels, "byDocumentKey", "documentKey", { unique: false });
+      ensureIndex(paperLabels, "byLabelId", "labelId", { unique: false });
     };
 
     request.onsuccess = () => resolve(request.result);
