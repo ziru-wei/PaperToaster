@@ -61,12 +61,18 @@ export function createConversationPanelController({
       closeThreadWheel();
     }
   });
+  document.addEventListener("pointerdown", (event) => {
+    collapseOpenConversationSelections(event.target.closest(".conversation-selection"));
+  }, true);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeThreadWheel();
     }
   });
-  window.addEventListener("blur", closeThreadWheel);
+  window.addEventListener("blur", () => {
+    closeThreadWheel();
+    collapseOpenConversationSelections();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       closeThreadWheel();
@@ -468,8 +474,21 @@ export function createConversationPanelController({
   }
 
   function toggleConversationSelection(quote) {
-    quote.classList.toggle("scrollable");
-    if (!quote.classList.contains("scrollable")) {
+    const shouldExpand = !quote.classList.contains("scrollable");
+    collapseOpenConversationSelections(quote);
+    quote.classList.toggle("scrollable", shouldExpand);
+    if (!shouldExpand) {
+      quote.scrollTop = 0;
+    }
+  }
+
+  function collapseOpenConversationSelections(except = null) {
+    for (const quote of threadElement.querySelectorAll(".conversation-selection.scrollable")) {
+      if (quote === except) {
+        continue;
+      }
+
+      quote.classList.remove("scrollable");
       quote.scrollTop = 0;
     }
   }

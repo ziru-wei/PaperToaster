@@ -15,13 +15,21 @@ export function createSelectionPanelController({
       toggle();
     }
   });
-  document.addEventListener("click", (event) => {
+  document.addEventListener("pointerdown", (event) => {
+    if (!quoteElement.classList.contains("expanded") || quoteElement.contains(event.target)) {
+      return;
+    }
+
+    collapse();
+  }, true);
+  document.addEventListener("focusin", (event) => {
     if (!quoteElement.classList.contains("expanded") || quoteElement.contains(event.target)) {
       return;
     }
 
     collapse();
   });
+  window.addEventListener("blur", collapse);
   quoteElement.addEventListener("keydown", (event) => {
     if (!quoteElement.textContent.trim() || (event.key !== "Enter" && event.key !== " ")) {
       return;
