@@ -198,6 +198,10 @@ header {
   background: rgba(148, 163, 184, 0.16);
 }
 
+.thread-archive-button {
+  margin-left: auto;
+}
+
 .thread-archive-button:disabled {
   opacity: 0.38;
 }
@@ -205,7 +209,7 @@ header {
 .thread-wheel {
   position: absolute;
   top: 0;
-  right: 16px;
+  right: 0;
   z-index: 32;
   width: min(330px, calc(100vw - 30px));
   height: 172px;
@@ -221,6 +225,7 @@ header {
   overflow: hidden;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: space-between;
   max-width: 124px;
   border: 1px solid #e4e7ec;
   border-radius: 999px;
@@ -267,6 +272,7 @@ header {
 .thread-select {
   overflow: hidden;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: 102px;
   padding: 3px 5px 3px 9px;
   font-size: 10px;
@@ -278,6 +284,7 @@ header {
 .thread-delete {
   width: 24px;
   min-width: 24px;
+  margin-left: auto;
   padding: 0 7px 1px 3px;
   color: #6b7280;
   font-size: 13px;
@@ -290,7 +297,7 @@ header {
 }
 
 .thread-wheel-chip.current .thread-delete {
-  color: rgba(255, 255, 255, 0.7);
+  color: #ffffff;
 }
 
 .thread-wheel-chip.current .thread-select {

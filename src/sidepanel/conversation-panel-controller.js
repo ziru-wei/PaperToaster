@@ -9,8 +9,8 @@ import {
 
 const THREAD_WHEEL_VISIBLE_COUNT = 5;
 const THREAD_WHEEL_ANGLE_STEP = 10;
-const THREAD_WHEEL_EASING = 0.22;
-const THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT = 170;
+const THREAD_WHEEL_EASING = 0.32;
+const THREAD_WHEEL_SCROLL_PIXELS_PER_SLOT = 72;
 
 export function createConversationPanelController({
   threadElement,
