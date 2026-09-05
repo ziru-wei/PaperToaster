@@ -225,39 +225,29 @@ header {
   overflow: hidden;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
   max-width: 124px;
   border: 1px solid #e4e7ec;
   border-radius: 999px;
   background: #ffffff;
 }
 
-.thread-wheel-chip {
+.thread-wheel-item {
   position: absolute;
   right: -8px;
   top: 0;
-  width: 150px;
-  max-width: 150px;
+  display: inline-flex;
+  width: 180px;
+  max-width: 180px;
+  align-items: center;
+  gap: 5px;
   opacity: var(--thread-wheel-opacity, 0);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
   pointer-events: none;
   transform: rotate(var(--thread-wheel-angle, 0deg));
   transform-origin: calc(100% + 186px) center;
 }
 
-.thread-wheel-chip.visible {
+.thread-wheel-item.visible {
   pointer-events: auto;
-}
-
-.thread-wheel-chip.current {
-  border-color: transparent;
-  color: #ffffff;
-  background: #111827;
-}
-
-.thread-wheel-chip:not(.current):hover {
-  border-color: transparent;
-  background: #eef1f4;
 }
 
 .thread-select,
@@ -274,7 +264,7 @@ header {
   overflow: hidden;
   min-width: 0;
   flex: 1 1 auto;
-  max-width: 120px;
+  max-width: 150px;
   align-items: center;
   gap: 5px;
   padding: 3px 5px;
@@ -304,33 +294,51 @@ header {
 .thread-delete {
   width: 24px;
   min-width: 24px;
-  margin-left: auto;
-  padding: 0 7px 1px 3px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 24px;
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  padding: 0 0 1px;
   color: #6b7280;
+  background: #ffffff;
   font-size: 13px;
   line-height: 1;
 }
 
-.thread-wheel-chip:not(.current) .thread-delete:hover,
-.thread-wheel-chip:not(.current) .thread-select:hover {
+.thread-wheel-item:not(.current) .thread-delete:hover {
+  border-color: transparent;
   background: rgba(148, 163, 184, 0.18);
 }
 
-.thread-wheel-chip.current .thread-delete {
-  color: #ffffff;
+.thread-wheel-item:not(.current) .thread-select:hover {
+  border-color: transparent;
+  background: #eef1f4;
 }
 
-.thread-wheel-chip.current .thread-select {
+.thread-wheel-item.current .thread-select {
+  border-color: transparent;
   color: #ffffff;
+  background: #111827;
 }
 
-.thread-wheel-chip.current .thread-label-time {
+.thread-wheel-item.current .thread-delete {
+  border-color: transparent;
+  color: #ffffff;
+  background: #111827;
+}
+
+.thread-wheel-item.current .thread-label-time {
   color: rgba(255, 255, 255, 0.72);
 }
 
-.thread-wheel-chip.current .thread-delete:hover,
-.thread-wheel-chip.current .thread-select:hover {
-  background: rgba(255, 255, 255, 0.14);
+.thread-wheel-item.current .thread-delete:hover,
+.thread-wheel-item.current .thread-select:hover {
+  background: #1f2937;
+}
+
+.thread-wheel-item.current .thread-delete:hover {
+  color: #ffffff;
 }
 
 .document-title:hover,

@@ -45,7 +45,7 @@ export function createConversationPanelController({
     const deleteButton = event.target.closest("[data-delete-thread-id]");
     if (deleteButton) {
       const threadId = deleteButton.dataset.deleteThreadId;
-      const label = deleteButton.closest(".thread-chip")?.querySelector(".thread-select")?.textContent || "this thread";
+      const label = deleteButton.closest(".thread-wheel-item")?.querySelector(".thread-select")?.textContent || "this thread";
       if (window.confirm(`Delete ${label}?`)) {
         deleteThread(threadId).catch(reportError);
       }
@@ -310,7 +310,7 @@ export function createConversationPanelController({
     }
 
     clampThreadWheelScroll();
-    const existingItems = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"), (item) => [
+    const existingItems = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-item"), (item) => [
       item.dataset.threadId,
       item
     ]));
@@ -318,12 +318,12 @@ export function createConversationPanelController({
     wheelThreads.forEach((thread) => {
       renderedThreadIds.add(thread.threadId);
       const item = existingItems.get(thread.threadId) || document.createElement("div");
-      item.className = "thread-chip thread-wheel-chip";
+      item.className = "thread-wheel-item";
       item.dataset.threadId = thread.threadId;
       item.classList.toggle("current", thread.threadId === activeThreadId);
 
       const selectButton = item.querySelector(".thread-select") || document.createElement("button");
-      selectButton.className = "thread-select";
+      selectButton.className = "thread-chip thread-select";
       selectButton.type = "button";
       selectButton.dataset.selectThreadId = thread.threadId;
       selectButton.title = formatThreadTitle(thread);
@@ -338,12 +338,12 @@ export function createConversationPanelController({
       deleteButton.textContent = "×";
 
       if (!item.isConnected) {
-        item.append(selectButton, deleteButton);
+        item.append(deleteButton, selectButton);
         threadWheelElement.append(item);
       }
     });
 
-    for (const item of Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"))) {
+    for (const item of Array.from(threadWheelElement.querySelectorAll(".thread-wheel-item"))) {
       if (!renderedThreadIds.has(item.dataset.threadId)) {
         item.remove();
       }
@@ -414,7 +414,7 @@ export function createConversationPanelController({
   }
 
   function updateThreadWheelPositions(wheelThreads = getWheelThreads()) {
-    const items = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"), (item) => [
+    const items = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-item"), (item) => [
       item.dataset.threadId,
       item
     ]));
