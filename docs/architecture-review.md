@@ -1,6 +1,6 @@
 # Architecture Review Notes
 
-Status: MVP works, and the main pipeline is modular enough for continued iteration. The remaining concentration is mostly in side panel orchestration and CSS polish, not in the PDF/RAG/agent pipeline.
+Status: MVP works, and the main pipeline is modular enough for continued iteration. Side panel orchestration is now grouped into a thin wiring file plus three coarse controllers, so the remaining concentration is mostly in document-context details and CSS polish.
 
 ## Current Pipeline
 
@@ -11,18 +11,19 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 5. Canonical document creation: `src/document/create-document.js`
 6. RAG preparation: `src/pdf/chunk-document.js`, `src/pdf/retrieve.js`, `src/pdf/selection-context.js`
 7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`
-8. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`
-9. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
+8. Side panel orchestration: `src/sidepanel/sidepanel.js`, `src/sidepanel/sidepanel-document-context.js`, `src/sidepanel/paper-actions-controller.js`, `src/sidepanel/ask-flow-controller.js`
+9. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`
+10. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
 
 ## Architectural Risks
 
-- `src/sidepanel/sidepanel.js` is smaller than before, but it still mixes active-tab state, PDF loading orchestration, title editing, document cache saves, and AI calls.
+- `src/sidepanel/sidepanel.js` is now a thin coordinator. The largest remaining side panel module is `sidepanel-document-context.js`, because active PDF tab mode and dashboard-selected library mode both belong to document context.
 - Document cache and chat memory share the same canonical paper key. The remaining key risk is alias/key promotion for URLs that later reveal a better identifier.
 - Chat memory has been moved toward the same IndexedDB database as document memory. Settings and prompt presets still use `chrome.storage.local`.
 - `formatSelectionContextForPrompt()` belongs in the AI prompt layer, not the PDF/RAG layer.
 - `src/markdown/clean-markdown.js` has the right profile idea, but it needs fixture-based tests before adding many more publisher rules.
 - `docmarrow` code is currently experimental/dead unless registered in `parser-registry.js`.
-- The side panel UI has several focused controllers now. Further cleanup should avoid putting composer, thread wheel, or scroll behavior back into `sidepanel.js`.
+- Side panel cleanup should stay grouped by coarse responsibility. Avoid creating many tiny model/controller files unless a responsibility becomes independently reusable or difficult to test.
 
 ## Refactor Order
 
@@ -35,8 +36,9 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 7. Move chat memory from one `chrome.storage.local` object into IndexedDB multi-thread stores. Done in `src/storage/chat-store.js`.
 8. Extract composer input behavior into `src/sidepanel/composer-controller.js`. Done.
 9. Extract conversation rendering, thread wheel, and scroll-to-latest behavior into focused side panel modules. Done.
-10. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
-11. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
+10. Group side panel document context, paper actions, and ask flow into coarse modules. Done.
+11. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
+12. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
 
 ## Memory Key Rule
 
