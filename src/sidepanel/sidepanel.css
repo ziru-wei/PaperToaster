@@ -38,14 +38,16 @@ main::after {
   position: absolute;
   z-index: 20;
   inset: 0;
-  background: rgba(17, 24, 39, 0);
+  background: rgba(247, 248, 250, 0);
+  backdrop-filter: grayscale(0) blur(0);
   content: "";
   pointer-events: none;
-  transition: background 120ms ease;
+  transition: background 120ms ease, backdrop-filter 120ms ease;
 }
 
 .thread-wheel-open main::after {
-  background: rgba(17, 24, 39, 0.22);
+  background: rgba(247, 248, 250, 0.58);
+  backdrop-filter: grayscale(1) blur(1.2px);
 }
 
 header {
