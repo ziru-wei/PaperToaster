@@ -26,7 +26,7 @@ export async function getStoredChatThread(url) {
 
   if (!threadId) {
     const legacyThread = await getLegacyChatThread(url, documentKey);
-    if (legacyThread.messages.length || legacyThread.currentThreadSelectionText) {
+    if (legacyThread.messages.length) {
       return saveStoredChatThread(url, legacyThread);
     }
 
@@ -50,7 +50,6 @@ export async function getStoredChatThread(url) {
   return normalizeChatThread({
     ...thread,
     url,
-    currentThreadSelectionText: thread.currentThreadSelectionText,
     messages
   }, url);
 }
@@ -91,7 +90,6 @@ export async function saveStoredChatThread(url, thread) {
     threadId,
     documentKey,
     title: normalizedThread.title || existingThread?.title || DEFAULT_THREAD_TITLE,
-    currentThreadSelectionText: normalizedThread.currentThreadSelectionText,
     createdAt: existingThread?.createdAt || now,
     firstMessageCreatedAt: getFirstUserMessageCreatedAt(normalizedThread.messages) || existingThread?.firstMessageCreatedAt || null,
     updatedAt: now,
@@ -167,7 +165,6 @@ export async function createStoredChatThread(url, options = {}) {
     threadId,
     documentKey,
     title: normalizeThreadTitle(options.title),
-    currentThreadSelectionText: "",
     createdAt: now,
     firstMessageCreatedAt: null,
     updatedAt: now,
@@ -259,16 +256,12 @@ export function normalizeChatThread(thread, url = "") {
   const messages = Array.isArray(thread?.messages)
     ? thread.messages.map(normalizeChatMessage).filter(Boolean).slice(-MAX_MESSAGES_PER_THREAD)
     : [];
-  const currentThreadSelectionText = String(thread?.currentThreadSelectionText || "")
-    .trim()
-    .slice(0, MAX_SELECTION_CHARS);
 
   return {
     threadId: thread?.threadId || "",
     documentKey: thread?.documentKey || "",
     url: thread?.url || url || "",
     title: normalizeThreadTitle(thread?.title),
-    currentThreadSelectionText,
     messages
   };
 }
@@ -400,7 +393,6 @@ function createEmptyChatThread({ url = "", documentKey = "", threadId = "", titl
     documentKey,
     url,
     title,
-    currentThreadSelectionText: "",
     messages: []
   };
 }

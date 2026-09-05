@@ -1,6 +1,6 @@
 # Architecture Review Notes
 
-Status: MVP works, but the codebase is only partially modular. The pipeline stages are visible as files, while several orchestration responsibilities still live in the side panel UI module.
+Status: MVP works, and the main pipeline is modular enough for continued iteration. The remaining concentration is mostly in side panel orchestration and CSS polish, not in the PDF/RAG/agent pipeline.
 
 ## Current Pipeline
 
@@ -11,18 +11,18 @@ Status: MVP works, but the codebase is only partially modular. The pipeline stag
 5. Canonical document creation: `src/document/create-document.js`
 6. RAG preparation: `src/pdf/chunk-document.js`, `src/pdf/retrieve.js`, `src/pdf/selection-context.js`
 7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`
-8. Conversation UI controller: `src/sidepanel/conversation-panel-controller.js`
+8. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`
 9. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
 
 ## Architectural Risks
 
-- `src/sidepanel/sidepanel.js` is too large and mixes UI rendering, active-tab state, PDF loading, title extraction, document caching, prompt presets, AI calls, and conversation memory.
-- Document cache and chat memory should share the same canonical paper key. A raw normalized URL is not enough because publisher URLs often contain volatile query tokens.
+- `src/sidepanel/sidepanel.js` is smaller than before, but it still mixes active-tab state, PDF loading orchestration, title editing, document cache saves, and AI calls.
+- Document cache and chat memory share the same canonical paper key. The remaining key risk is alias/key promotion for URLs that later reveal a better identifier.
 - Chat memory has been moved toward the same IndexedDB database as document memory. Settings and prompt presets still use `chrome.storage.local`.
 - `formatSelectionContextForPrompt()` belongs in the AI prompt layer, not the PDF/RAG layer.
 - `src/markdown/clean-markdown.js` has the right profile idea, but it needs fixture-based tests before adding many more publisher rules.
 - `docmarrow` code is currently experimental/dead unless registered in `parser-registry.js`.
-- Multi-thread storage is implemented, but the plus button and thread switcher UI are still TODO. See `docs/storage-and-threading-plan.md`.
+- The side panel UI has several focused controllers now. Further cleanup should avoid putting composer, thread wheel, or scroll behavior back into `sidepanel.js`.
 
 ## Refactor Order
 
@@ -33,8 +33,10 @@ Status: MVP works, but the codebase is only partially modular. The pipeline stag
 5. Extract selection quote/readiness UI into `src/sidepanel/selection-panel-controller.js`. Done.
 6. Extract side panel DOM lookup into `src/sidepanel/sidepanel-elements.js`. Done.
 7. Move chat memory from one `chrome.storage.local` object into IndexedDB multi-thread stores. Done in `src/storage/chat-store.js`.
-8. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
-9. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
+8. Extract composer input behavior into `src/sidepanel/composer-controller.js`. Done.
+9. Extract conversation rendering, thread wheel, and scroll-to-latest behavior into focused side panel modules. Done.
+10. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
+11. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
 
 ## Memory Key Rule
 

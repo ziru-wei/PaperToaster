@@ -11,13 +11,13 @@ import {
 import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
 import { getAiSettings, hasConfiguredAiApiKey, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
+import { createComposerController } from "./composer-controller.js";
 import { createConversationPanelController } from "./conversation-panel-controller.js";
 import { createPromptPresetMenuController } from "./prompt-preset-menu.js";
 import { createSelectionPanelController } from "./selection-panel-controller.js";
 import { getSidePanelElements } from "./sidepanel-elements.js";
 
 const DOCUMENT_CACHE_VERSION = "v15";
-const NEW_THREAD_COMMAND = "---";
 let activeTab = null;
 let currentDocument = null;
 let titleSaveTimer = null;
@@ -37,9 +37,7 @@ const conversation = createConversationPanelController({
 });
 
 const selectionPanel = createSelectionPanelController({
-  statusElement: elements.selectionStatus,
   quoteElement: elements.selectionText,
-  toggleButton: elements.toggleSelectionText,
   contextStatusElement: elements.selectionContextStatus
 });
 
@@ -49,6 +47,17 @@ const promptPresetMenu = createPromptPresetMenuController({
   onError: (error) => console.debug("[PDF AI] Prompt presets unavailable", error)
 });
 
+const composer = createComposerController({
+  form: elements.selectionQuestionForm,
+  textarea: elements.selectionQuestion,
+  newThreadHintElement: elements.newThreadPromptHint,
+  promptPresetMenu,
+  promptPresetMenuElement: elements.promptPresetMenu,
+  canSubmit: () => selectionPanel.canAsk(),
+  onSubmit: askAiAboutSelection,
+  onNewThread: startNewThreadFromComposer
+});
+
 elements.reloadPdf.addEventListener("click", () => {
   loadPdf({ bypassCache: true });
 });
@@ -56,14 +65,6 @@ elements.copyTabUrl.addEventListener("click", copyActiveTabUrl);
 elements.documentTitle.addEventListener("input", () => {
   updateManualDocumentTitle();
 });
-elements.selectionQuestionForm.addEventListener("submit", askAiAboutSelection);
-elements.selectionQuestion.addEventListener("input", handleSelectionQuestionInput);
-elements.selectionQuestion.addEventListener("keydown", handleSelectionQuestionKeydown);
-elements.selectionQuestion.addEventListener("focus", promptPresetMenu.update);
-elements.selectionQuestion.addEventListener("blur", () => {
-  window.setTimeout(promptPresetMenu.hide, 120);
-});
-elements.promptPresetMenu.addEventListener("mousedown", promptPresetMenu.preventBlurDismissal);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === MessageType.PDF_SELECTION_CHANGED) {
@@ -391,66 +392,15 @@ function updateAskReadiness() {
   });
 }
 
-function handleSelectionQuestionKeydown(event) {
-  const isPlainEnter = (
-    event.key === "Enter" &&
-    !event.shiftKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.isComposing
-  );
-
-  if (isPlainEnter && isNewThreadCommand()) {
-    event.preventDefault();
-    startNewThreadFromComposer();
-    return;
-  }
-
-  if (promptPresetMenu.handleKeydown(event)) {
-    return;
-  }
-
-  if (!isPlainEnter) {
-    return;
-  }
-
-  event.preventDefault();
-  if (!elements.selectionQuestion.value.trim() || !selectionPanel.canAsk()) {
-    return;
-  }
-
-  elements.selectionQuestionForm.requestSubmit();
-}
-
-function handleSelectionQuestionInput() {
-  promptPresetMenu.update();
-  updateNewThreadPromptHint();
-}
-
-function isNewThreadCommand() {
-  return elements.selectionQuestion.value.trim() === NEW_THREAD_COMMAND;
-}
-
-function updateNewThreadPromptHint() {
-  const active = isNewThreadCommand();
-  elements.newThreadPromptHint.hidden = !active;
-  elements.selectionQuestion.classList.toggle("new-thread-command", active);
-  if (active) {
-    promptPresetMenu.hide();
-  }
-}
-
 async function startNewThreadFromComposer() {
   clearError();
-  elements.selectionQuestion.value = "";
-  updateNewThreadPromptHint();
+  composer.clear();
   selectionPanel.clearComposerSelection();
 
   try {
     await conversation.createThread();
     updateAskReadiness();
-    elements.selectionQuestion.focus();
+    composer.focus();
   } catch (error) {
     showError(error.message || String(error));
   }
@@ -461,7 +411,7 @@ async function askAiAboutSelection(event) {
   clearError();
 
   try {
-    const question = elements.selectionQuestion.value.trim();
+    const question = composer.getText();
     const visibleSelectionText = selectionPanel.getVisibleText();
     const selectionText = visibleSelectionText;
     if (!question) {
@@ -487,7 +437,7 @@ async function askAiAboutSelection(event) {
       text: question,
       selectionText: visibleSelectionText
     });
-    elements.selectionQuestion.value = "";
+    composer.clear();
     selectionPanel.clearComposerSelection();
 
     currentAnswerAbortController = new AbortController();

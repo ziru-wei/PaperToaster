@@ -5,7 +5,15 @@
   --selection-text-size: 12px;
   --thread-selection-text-size: 11.25px;
   --control-radius: 12px;
-  --composer-width: min(calc(100% - 28px), 360px);
+  --composer-side-space: 28px;
+  --composer-width: min(calc(100% - var(--composer-side-space)), 360px);
+  --chat-top-fade-height: 6px;
+  --conversation-bottom-space: 156px;
+  --conversation-gap: 28px;
+  --user-bubble-max-width: 82%;
+  --user-bubble-radius: 15px;
+  --selection-card-max-width: 76%;
+  --text-input-radius: 15px;
 }
 
 html,
@@ -395,7 +403,7 @@ section {
   top: 0;
   right: 0;
   left: 0;
-  height: 6px;
+  height: var(--chat-top-fade-height);
   pointer-events: none;
   background: linear-gradient(#f7f8fa, rgba(247, 248, 250, 0));
   content: "";
@@ -542,7 +550,7 @@ textarea {
   width: 100%;
   resize: none;
   border: 1px solid #eceff4;
-  border-radius: 15px;
+  border-radius: var(--text-input-radius);
   padding: 12px 14px;
   color: #111827;
   background: #ffffff;
@@ -649,10 +657,6 @@ form {
   gap: 6px;
 }
 
-#selectionStatus:empty {
-  display: none;
-}
-
 .selection-quote {
   position: absolute;
   right: 12px;
@@ -731,14 +735,6 @@ form {
   display: none;
 }
 
-.selection-toggle {
-  display: none;
-}
-
-.selection-toggle[hidden] {
-  display: none;
-}
-
 .conversation-thread {
   display: flex;
   overflow: auto;
@@ -746,9 +742,9 @@ form {
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--conversation-gap);
   align-self: center;
-  padding: 4px 4px 156px;
+  padding: 4px 4px var(--conversation-bottom-space);
   scrollbar-width: none;
 }
 
@@ -784,8 +780,8 @@ form {
 .conversation-message.user .conversation-text {
   position: relative;
   z-index: 1;
-  max-width: 82%;
-  border-radius: 15px;
+  max-width: var(--user-bubble-max-width);
+  border-radius: var(--user-bubble-radius);
   padding: 5px 13px;
   color: #ffffff;
   background: #000000;
@@ -795,7 +791,7 @@ form {
 .conversation-selection {
   position: relative;
   z-index: 0;
-  max-width: 76%;
+  max-width: var(--selection-card-max-width);
   max-height: 5.2em;
   margin: 0 7px -27px 0;
   border: 0;

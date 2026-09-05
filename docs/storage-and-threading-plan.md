@@ -40,7 +40,7 @@ Stores:
 - `conversationThreads`
   - Key: `threadId`.
   - Holds per-document conversation thread metadata.
-  - Important fields: `threadId`, `documentKey`, `title`, `currentThreadSelectionText`, `messageCount`, `createdAt`, `updatedAt`.
+  - Important fields: `threadId`, `documentKey`, `title`, `messageCount`, `createdAt`, `updatedAt`, `firstMessageCreatedAt`.
 - `conversationMessages`
   - Key: `messageId`.
   - Holds individual messages.
@@ -63,6 +63,7 @@ Settings and prompt presets still use `chrome.storage.local`.
 - Existing legacy conversation data in `chrome.storage.local.paperChatThreadsV1` is read lazily and written into IndexedDB when that paper is opened.
 - Chunks are not stored. They are rebuilt from cleaned Markdown when cached content is hydrated.
 - Raw Markdown is not stored.
+- Selected text is one-shot composer state. Once a prompt is sent, the quote belongs only to that user message through `conversationMessages.selectionText`.
 
 ## Current Runtime Behavior
 
@@ -86,14 +87,26 @@ The first multi-thread UI pass is implemented in the fixed top title area.
 
 Current UI behavior:
 
-1. The left `+` button creates a new active thread for the current paper.
+1. Typing `---` in the prompt box shows a lightweight confirmation hint; pressing `Enter` starts a new active thread.
 2. The archive/inbox button opens a circular thread wheel near the URL controls.
-3. The current thread appears as a dark chip; inactive thread chips use light cards.
+3. The current thread appears as a black chip; inactive thread chips use light cards.
 4. Thread chips are labeled by first message timestamp when available, plus a compact message count.
 5. Selecting a chip calls `setActiveStoredChatThread(activeDocument.url, threadId)`.
 6. Deleting the current chip removes the thread and its messages, then activates the newest remaining thread if one exists.
 
-Controller API:
+Controller modules:
+
+```text
+sidepanel.js
+  -> composer-controller.js
+  -> selection-panel-controller.js
+  -> conversation-panel-controller.js
+       -> conversation-message-renderer.js
+       -> scroll-to-latest-controller.js
+       -> thread-wheel-controller.js
+```
+
+Conversation controller API:
 
 ```js
 conversation.createThread()
