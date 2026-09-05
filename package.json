@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "scripts": {
+    "build:pdf2md": "esbuild node_modules/@pdf2md/core/dist/index.js --bundle --format=esm --platform=browser --outfile=vendor/pdf2md/pdf2md.mjs && mkdir -p vendor/pdf2md/pdfjs-dist/build && cp node_modules/@pdf2md/core/node_modules/pdfjs-dist/build/pdf.worker.min.mjs vendor/pdf2md/pdfjs-dist/build/pdf.worker.min.mjs",
+    "build:docmarrow": "esbuild src/vendor/docmarrow-entry.js --bundle --format=esm --platform=browser --outfile=vendor/docmarrow/docmarrow.mjs && cp node_modules/docmarrow/node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs vendor/docmarrow/pdf.worker.mjs",
+    "build:vendors": "npm run build:pdf2md && npm run build:docmarrow"
+  },
+  "dependencies": {
+    "@pdf2md/core": "^0.3.0",
+    "docmarrow": "^1.1.1",
+    "esbuild": "^0.28.2",
+    "pdfjs-dist": "^6.3.289"
+  }
+}

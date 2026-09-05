@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PDF AI Inspector</title>
+    <link rel="stylesheet" href="./sidepanel.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="title-stack">
+          <div class="title-row">
+            <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
+          </div>
+          <div id="tabStatus" class="url-line muted">Loading...</div>
+          <div id="pdfStatus" class="status-line muted">Loading...</div>
+        </div>
+        <button id="reloadPdf" class="icon-button reload-button" type="button" title="Reload PDF" aria-label="Reload PDF">
+          <span aria-hidden="true">↻</span>
+        </button>
+      </header>
+
+      <section>
+        <h2>Inspect PDF</h2>
+        <form id="searchForm">
+          <textarea id="query" rows="3" placeholder="Ask a keyword-style question, e.g. main contribution"></textarea>
+          <button type="submit">Search</button>
+        </form>
+        <div id="results"></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>Selected Text</h2>
+          <div class="selection-actions">
+            <button id="copySelection" class="small-icon-button" type="button" title="Copy selection" aria-label="Copy selection" disabled>Copy</button>
+            <button id="clearSelection" class="small-icon-button" type="button" title="Clear selection" aria-label="Clear selection" disabled>Clear</button>
+          </div>
+        </div>
+        <div id="selectionStatus" class="muted">Select text in the PDF viewer.</div>
+        <blockquote id="selectionText"></blockquote>
+        <form id="selectionQuestionForm">
+          <textarea id="selectionQuestion" rows="2" placeholder="Ask about selected text"></textarea>
+          <button id="prepareSelectionContext" type="submit" disabled>Prepare context</button>
+        </form>
+        <div id="selectionContextStatus" class="muted"></div>
+      </section>
+    </main>
+    <script type="module" src="./sidepanel.js"></script>
+  </body>
+</html>
