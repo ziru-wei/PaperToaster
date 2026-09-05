@@ -68,6 +68,12 @@ export function createConversationPanelController({
       closeThreadWheel();
     }
   });
+  window.addEventListener("blur", closeThreadWheel);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      closeThreadWheel();
+    }
+  });
   threadElement.addEventListener("click", (event) => {
     const quote = event.target.closest(".conversation-selection");
     if (quote) {
@@ -326,7 +332,8 @@ export function createConversationPanelController({
       selectButton.className = "thread-chip thread-select";
       selectButton.type = "button";
       selectButton.dataset.selectThreadId = thread.threadId;
-      selectButton.title = formatThreadTitle(thread);
+      selectButton.removeAttribute("title");
+      selectButton.setAttribute("aria-label", formatThreadTitle(thread));
       renderThreadLabel(selectButton, thread);
 
       const deleteButton = item.querySelector(".thread-delete") || document.createElement("button");
@@ -490,16 +497,20 @@ function formatThreadTitle(thread) {
 
 function renderThreadLabel(element, thread) {
   element.textContent = "";
+  const count = Number(thread?.messageCount) || 0;
   if (!thread?.messageCount) {
-    renderThreadDateLabel(element, "New thread");
+    renderThreadDateLabel(element, "New thread", count);
     return;
   }
 
   const parts = formatThreadTimeParts(getThreadLabelTime(thread));
   if (!parts) {
-    renderThreadDateLabel(element, "Thread");
+    renderThreadDateLabel(element, "Thread", count);
     return;
   }
+
+  const main = document.createElement("span");
+  main.className = "thread-label-main";
 
   const date = document.createElement("span");
   date.className = "thread-label-date";
@@ -509,14 +520,27 @@ function renderThreadLabel(element, thread) {
   time.className = "thread-label-time";
   time.textContent = parts.time;
 
-  element.append(date, time);
+  main.append(date, time);
+  element.append(main, createThreadCountLabel(count));
 }
 
-function renderThreadDateLabel(element, text) {
+function renderThreadDateLabel(element, text, count) {
+  const main = document.createElement("span");
+  main.className = "thread-label-main";
+
   const date = document.createElement("span");
   date.className = "thread-label-date";
   date.textContent = text;
-  element.append(date);
+
+  main.append(date);
+  element.append(main, createThreadCountLabel(count));
+}
+
+function createThreadCountLabel(count) {
+  const countLabel = document.createElement("span");
+  countLabel.className = "thread-label-count";
+  countLabel.textContent = String(Math.max(0, Number(count) || 0));
+  return countLabel;
 }
 
 function formatThreadTimeParts(timestamp) {

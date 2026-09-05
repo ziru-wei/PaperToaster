@@ -263,14 +263,17 @@ header {
   display: inline-flex;
   overflow: hidden;
   min-width: 0;
-  flex: 1 1 auto;
+  width: 150px;
   max-width: 150px;
+  flex: 0 0 150px;
   align-items: center;
-  gap: 5px;
-  border: 1px solid #e4e7ec;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
   border-radius: 999px;
   padding: 3px 5px;
   background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 3px 9px rgba(15, 23, 42, 0.07);
   font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 10px;
   line-height: 1.2;
@@ -278,8 +281,18 @@ header {
   white-space: nowrap;
 }
 
+.thread-label-main {
+  display: inline-flex;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+}
+
 .thread-label-date,
-.thread-label-time {
+.thread-label-time,
+.thread-label-count {
   overflow: hidden;
   min-width: 0;
   text-overflow: ellipsis;
@@ -292,6 +305,13 @@ header {
 .thread-label-time {
   flex: 0 0 auto;
   color: #98a2b3;
+}
+
+.thread-label-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #667085;
+  font-size: 9.5px;
 }
 
 .thread-delete {
@@ -320,14 +340,13 @@ header {
 }
 
 .thread-wheel-item:not(.current) .thread-select:hover {
-  border-color: transparent;
   background: #eef1f4;
 }
 
 .thread-wheel-item.current .thread-select {
-  border-color: transparent;
   color: #ffffff;
   background: #111827;
+  box-shadow: none;
 }
 
 .thread-wheel-item.current .thread-delete {
@@ -338,6 +357,10 @@ header {
 
 .thread-wheel-item.current .thread-label-time {
   color: rgba(255, 255, 255, 0.72);
+}
+
+.thread-wheel-item.current .thread-label-count {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .thread-wheel-item.current .thread-delete:hover,
