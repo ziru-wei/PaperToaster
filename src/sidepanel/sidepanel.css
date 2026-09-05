@@ -475,8 +475,12 @@ section {
   opacity: 1;
 }
 
+.composer-input-stack:has(.selection-quote:not(:empty)) .scroll-to-latest {
+  bottom: calc(100% + 60px);
+}
+
 .composer-input-stack:has(.selection-quote.expanded) .scroll-to-latest {
-  bottom: calc(100% + 44px);
+  bottom: calc(100% + 78px);
 }
 
 .composer-input-stack:has(.selection-quote:not(:empty)) {
