@@ -4,7 +4,7 @@
   --chat-text-size: 12.75px;
   --selection-text-size: 12px;
   --thread-selection-text-size: 11.25px;
-  --control-radius: 10px;
+  --control-radius: 12px;
 }
 
 html,
@@ -489,12 +489,18 @@ button:disabled {
 textarea {
   width: 100%;
   resize: none;
-  border: 1px solid #b8c0cc;
+  border: 1px solid #d8dde6;
   border-radius: var(--control-radius);
   padding: 8px;
   color: #111827;
   background: #ffffff;
   font: inherit;
+}
+
+textarea:focus {
+  border-color: #6b7280;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(107, 114, 128, 0.14);
 }
 
 #selectionQuestion {
