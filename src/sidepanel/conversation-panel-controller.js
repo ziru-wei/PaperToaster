@@ -296,15 +296,15 @@ export function createConversationPanelController({
   }
 
   function renderThreadList() {
-    const archivedThreads = getArchivedThreads();
+    const wheelThreads = getWheelThreads();
     threadBarElement.hidden = !threadUrl;
     newThreadButton.disabled = !threadUrl;
-    threadArchiveButton.disabled = !threadUrl || !archivedThreads.length;
-    threadArchiveButton.classList.toggle("active", threadWheelOpen && archivedThreads.length > 0);
-    threadWheelElement.hidden = !threadWheelOpen || !archivedThreads.length;
-    document.body.classList.toggle("thread-wheel-open", threadWheelOpen && archivedThreads.length > 0);
+    threadArchiveButton.disabled = !threadUrl || !wheelThreads.length;
+    threadArchiveButton.classList.toggle("active", threadWheelOpen && wheelThreads.length > 0);
+    threadWheelElement.hidden = !threadWheelOpen || !wheelThreads.length;
+    document.body.classList.toggle("thread-wheel-open", threadWheelOpen && wheelThreads.length > 0);
 
-    if (!threadWheelOpen || !archivedThreads.length) {
+    if (!threadWheelOpen || !wheelThreads.length) {
       threadWheelElement.textContent = "";
       return;
     }
@@ -315,11 +315,12 @@ export function createConversationPanelController({
       item
     ]));
     const renderedThreadIds = new Set();
-    archivedThreads.forEach((thread) => {
+    wheelThreads.forEach((thread) => {
       renderedThreadIds.add(thread.threadId);
       const item = existingItems.get(thread.threadId) || document.createElement("div");
       item.className = "thread-chip thread-wheel-chip";
       item.dataset.threadId = thread.threadId;
+      item.classList.toggle("current", thread.threadId === activeThreadId);
 
       const selectButton = item.querySelector(".thread-select") || document.createElement("button");
       selectButton.className = "thread-select";
@@ -348,17 +349,16 @@ export function createConversationPanelController({
       }
     }
 
-    updateThreadWheelPositions(archivedThreads);
+    updateThreadWheelPositions(wheelThreads);
   }
 
-  function getArchivedThreads() {
-    return threadSummaries
-      .filter((thread) => thread.threadId !== activeThreadId)
+  function getWheelThreads() {
+    return [...threadSummaries]
       .sort((first, second) => getThreadLabelTime(second) - getThreadLabelTime(first));
   }
 
   function toggleThreadWheel() {
-    if (!threadUrl || !getArchivedThreads().length) {
+    if (!threadUrl || !getWheelThreads().length) {
       closeThreadWheel();
       return;
     }
@@ -379,13 +379,13 @@ export function createConversationPanelController({
   }
 
   function setThreadWheelTargetScroll(offset) {
-    const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    const maxOffset = Math.max(0, getWheelThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
     threadWheelTargetScroll = Math.min(Math.max(0, offset), maxOffset);
     startThreadWheelAnimation();
   }
 
   function clampThreadWheelScroll() {
-    const maxOffset = Math.max(0, getArchivedThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
+    const maxOffset = Math.max(0, getWheelThreads().length - THREAD_WHEEL_VISIBLE_COUNT);
     threadWheelScroll = Math.min(Math.max(0, threadWheelScroll), maxOffset);
     threadWheelTargetScroll = Math.min(Math.max(0, threadWheelTargetScroll), maxOffset);
   }
@@ -400,25 +400,25 @@ export function createConversationPanelController({
 
   function animateThreadWheel() {
     threadWheelAnimationFrame = 0;
-    const archivedThreads = getArchivedThreads();
+    const wheelThreads = getWheelThreads();
     const difference = threadWheelTargetScroll - threadWheelScroll;
     if (Math.abs(difference) < 0.002) {
       threadWheelScroll = threadWheelTargetScroll;
-      updateThreadWheelPositions(archivedThreads);
+      updateThreadWheelPositions(wheelThreads);
       return;
     }
 
     threadWheelScroll += difference * THREAD_WHEEL_EASING;
-    updateThreadWheelPositions(archivedThreads);
+    updateThreadWheelPositions(wheelThreads);
     startThreadWheelAnimation();
   }
 
-  function updateThreadWheelPositions(archivedThreads = getArchivedThreads()) {
+  function updateThreadWheelPositions(wheelThreads = getWheelThreads()) {
     const items = new Map(Array.from(threadWheelElement.querySelectorAll(".thread-wheel-chip"), (item) => [
       item.dataset.threadId,
       item
     ]));
-    for (const [index, thread] of archivedThreads.entries()) {
+    for (const [index, thread] of wheelThreads.entries()) {
       const item = items.get(thread.threadId);
       if (!item) {
         continue;
@@ -439,8 +439,8 @@ export function createConversationPanelController({
   }
 
   function handleThreadWheel(event) {
-    const archivedThreads = getArchivedThreads();
-    const maxOffset = Math.max(0, archivedThreads.length - THREAD_WHEEL_VISIBLE_COUNT);
+    const wheelThreads = getWheelThreads();
+    const maxOffset = Math.max(0, wheelThreads.length - THREAD_WHEEL_VISIBLE_COUNT);
     if (!threadWheelOpen || maxOffset <= 0) {
       return;
     }
