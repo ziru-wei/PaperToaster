@@ -12,7 +12,6 @@
 
 body {
   margin: 0;
-  min-width: 960px;
   background: #f8fafc;
 }
 
@@ -33,7 +32,7 @@ button:disabled {
 }
 
 .dashboard-shell {
-  width: min(1180px, calc(100% - 64px));
+  width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
   padding: 28px 0 42px;
 }
@@ -225,15 +224,18 @@ h1 {
 
 .paper-list {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  align-items: stretch;
+  gap: 14px;
 }
 
 .paper-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
+  min-height: 218px;
   border-radius: 18px;
-  padding: 17px 18px;
+  padding: 17px;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 2px 9px rgba(15, 23, 42, 0.05);
 }
@@ -243,14 +245,19 @@ h1 {
 }
 
 .paper-title {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 0;
   color: #111827;
   font-size: 15px;
   font-weight: 660;
   letter-spacing: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .paper-url {
+  max-width: 100%;
   overflow: hidden;
   margin-top: 5px;
   color: #9ca3af;
@@ -262,10 +269,10 @@ h1 {
 .paper-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 7px 10px;
   margin-top: 10px;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .paper-labels {
@@ -302,13 +309,15 @@ h1 {
 
 .paper-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
 .paper-actions button,
 .paper-actions select {
   height: 31px;
+  min-width: 0;
   border: 0;
   border-radius: 16px;
   padding: 0 12px;
@@ -338,4 +347,29 @@ h1 {
 .empty-state p {
   margin: 8px 0 0;
   color: #6b7280;
+}
+
+@media (max-width: 760px) {
+  .dashboard-shell {
+    width: min(100% - 28px, 560px);
+  }
+
+  .dashboard-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-controls input,
+  .dashboard-controls select {
+    width: 100%;
+  }
+
+  .paper-list {
+    grid-template-columns: 1fr;
+  }
 }

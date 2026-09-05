@@ -338,6 +338,51 @@ When the local library grows large, add paginated indexes:
 
 Avoid querying `conversationMessages` for every dashboard render. Thread-level `messageCount`, `firstMessageCreatedAt`, and `updatedAt` should be enough for summary cards.
 
+## Full-Text Search Plan
+
+Full-text search over cached Markdown is feasible, but it should not be implemented as "scan every full Markdown string on every keypress" once the library grows.
+
+MVP strategy:
+
+- Search title, URL, domain, and labels immediately.
+- Only search Markdown after a short debounce, such as 250-350 ms.
+- Search the latest cached document per `documentKey`.
+- Return paper-level matches first, with a small snippet and rough line/section location.
+- Do not read `conversationMessages` for dashboard search.
+
+More robust strategy:
+
+```text
+documents.markdown
+  -> split into searchable section/paragraph records
+  -> normalize text
+  -> store compact search records keyed by documentKey
+```
+
+Possible store:
+
+```text
+documentSearchBlocks
+  blockId
+  documentKey
+  documentStoreKey
+  heading
+  text
+  normalizedText
+  startLine
+  endLine
+  sortOrder
+  updatedAt
+```
+
+This makes navigation possible:
+
+- Dashboard search result can show the paper plus matched block snippet.
+- Clicking a match can open the PDF URL and, when available later, hydrate the side panel with the paper context.
+- If a future Markdown reader view exists, `startLine/endLine` can jump directly to the relevant Markdown block.
+
+Recommendation: do not add Markdown full-text search until the card/grid dashboard interaction is stable. When added, implement it as a debounced indexed block search, not as repeated full-document scans from the UI event handler.
+
 ## Relationship To Side Panel
 
 The dashboard should not own active chat state. It should only navigate or update durable storage.
@@ -404,6 +449,7 @@ Implemented first:
 - `src/storage/label-store.js` for label CRUD, paper-label assignment, and label ordering.
 - IndexedDB version `3` with `labels` and `paperLabels`.
 - Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
+- Responsive dashboard grid: one, two, or three columns depending on available browser width.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 
