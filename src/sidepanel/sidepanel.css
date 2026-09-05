@@ -4,19 +4,27 @@
   font-size: 14px;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  overflow: hidden;
   color: #1f2937;
   background: #f7f8fa;
 }
 
 main {
   display: flex;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
@@ -25,6 +33,7 @@ main {
 header,
 .row {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
@@ -112,6 +121,7 @@ h2 {
 
 section {
   display: flex;
+  min-height: 0;
   flex-direction: column;
   gap: 10px;
   padding: 12px 0;
@@ -120,11 +130,13 @@ section {
 
 .chat-panel {
   min-height: 0;
-  flex: 1;
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
 .composer {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 4px;
   margin-top: auto;
@@ -329,7 +341,7 @@ form {
   display: flex;
   overflow: auto;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
   padding: 4px 0 10px;
