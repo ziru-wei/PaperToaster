@@ -686,14 +686,13 @@ form {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 28px;
-  padding: 4px 10px 10px 0;
-  scrollbar-color: rgba(107, 114, 128, 0.22) transparent;
-  scrollbar-gutter: stable;
+  padding: 4px 12px 10px 0;
+  scrollbar-color: rgba(107, 114, 128, 0.16) transparent;
   scrollbar-width: thin;
 }
 
 .conversation-thread::-webkit-scrollbar {
-  width: 4px;
+  width: 2px;
 }
 
 .conversation-thread::-webkit-scrollbar-track {
@@ -702,11 +701,11 @@ form {
 
 .conversation-thread::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(107, 114, 128, 0.18);
+  background: rgba(107, 114, 128, 0.16);
 }
 
 .conversation-thread:hover::-webkit-scrollbar-thumb {
-  background: rgba(107, 114, 128, 0.32);
+  background: rgba(107, 114, 128, 0.28);
 }
 
 .conversation-thread[hidden] {
