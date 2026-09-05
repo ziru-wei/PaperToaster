@@ -539,7 +539,7 @@ function renderThreadDateLabel(element, text, count) {
 function createThreadCountLabel(count) {
   const countLabel = document.createElement("span");
   countLabel.className = "thread-label-count";
-  countLabel.textContent = String(Math.max(0, Number(count) || 0));
+  countLabel.textContent = `#${Math.max(0, Number(count) || 0)}`;
   return countLabel;
 }
 

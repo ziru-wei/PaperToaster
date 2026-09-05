@@ -267,8 +267,7 @@ header {
   max-width: 150px;
   flex: 0 0 150px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 5px;
   border: 0;
   border-radius: 999px;
   padding: 3px 5px;
@@ -285,7 +284,7 @@ header {
   display: inline-flex;
   overflow: hidden;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 5px;
 }
@@ -309,7 +308,6 @@ header {
 
 .thread-label-count {
   flex: 0 0 auto;
-  margin-left: auto;
   color: #667085;
   font-size: 9.5px;
 }
