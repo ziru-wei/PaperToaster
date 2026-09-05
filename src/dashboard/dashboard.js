@@ -78,6 +78,20 @@ function renderPapers() {
 function createPaperCard(paper, maxMessageCount) {
   const card = document.createElement("article");
   card.className = "paper-card";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Open side panel context for ${paper.title || "paper"}`);
+  card.addEventListener("click", () => {
+    openPaperContextInSidePanel(paper.documentKey);
+  });
+  card.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    openPaperContextInSidePanel(paper.documentKey);
+  });
 
   const main = document.createElement("div");
   main.className = "paper-main";
@@ -106,20 +120,14 @@ function createPaperCard(paper, maxMessageCount) {
 }
 
 function createMessageRing(paper, maxMessageCount) {
-  const ring = document.createElement("button");
+  const ring = document.createElement("span");
   const count = Number(paper.messageCount) || 0;
   const ratio = maxMessageCount > 0 ? count / maxMessageCount : 0;
-  ring.type = "button";
   ring.className = "message-ring";
   ring.classList.toggle("empty", count === 0);
   ring.style.setProperty("--message-ratio", ratio.toFixed(3));
   ring.title = `${count} messages`;
   ring.setAttribute("aria-label", `${count} messages`);
-  ring.addEventListener("click", async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    await openPaperContextInSidePanel(paper.documentKey);
-  });
   return ring;
 }
 
@@ -173,7 +181,9 @@ function createStarButton(paper) {
   button.classList.toggle("starred", paper.starred);
   button.title = paper.starred ? "Unstar paper" : "Star paper";
   button.setAttribute("aria-label", button.title);
-  button.addEventListener("click", async () => {
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     await setLibraryPaperStarred(paper.documentKey, !paper.starred, paper);
     await refreshPapers();
   });

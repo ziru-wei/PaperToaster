@@ -17,7 +17,7 @@ When the Reading Dashboard is open on the left/main browser area, the PDF AI sid
 Expected behavior:
 
 - The dashboard stays open in the main tab.
-- Clicking the dashboard paper message ring selects that paper for the side panel.
+- Clicking a dashboard paper card selects that paper for the side panel.
 - The side panel displays the same document title, URL, context ready state, conversation thread wheel, chat history, selected-text composer, and RAG-backed ask flow that it displays when the PDF itself is open.
 - The side panel should hydrate from local storage by `documentKey`; it should not fetch or parse the PDF again.
 - If the user switches from the dashboard to a real PDF tab, the side panel should return to active PDF tab mode.
@@ -95,13 +95,14 @@ Requirements:
 
 ## UI Trigger
 
-The dashboard message-density ring is the preferred trigger.
+The dashboard paper card is the side panel context trigger.
 
 Rationale:
 
 - The title already opens the paper URL.
 - The star is paper triage.
-- The ring visually represents conversation activity, so clicking it to inspect conversations is coherent.
+- The message-density ring is only an activity indicator.
+- The card-level target is easier to hit and makes context switching feel direct.
 
 ## Current Dashboard Visual Open Items
 
