@@ -306,6 +306,7 @@ export function createConversationPanelController({
     threadArchiveButton.disabled = !threadUrl || !archivedThreads.length;
     threadArchiveButton.classList.toggle("active", threadWheelOpen && archivedThreads.length > 0);
     threadWheelElement.hidden = !threadWheelOpen || !archivedThreads.length;
+    document.body.classList.toggle("thread-wheel-open", threadWheelOpen && archivedThreads.length > 0);
     threadWheelElement.textContent = "";
 
     if (!threadWheelOpen || !archivedThreads.length) {
@@ -339,7 +340,9 @@ export function createConversationPanelController({
   }
 
   function getArchivedThreads() {
-    return threadSummaries.filter((thread) => thread.threadId !== activeThreadId);
+    return threadSummaries
+      .filter((thread) => thread.threadId !== activeThreadId)
+      .sort((first, second) => getThreadLabelTime(second) - getThreadLabelTime(first));
   }
 
   function toggleThreadWheel() {
@@ -402,7 +405,7 @@ function formatThreadLabel(thread) {
     return "New thread";
   }
 
-  return formatThreadTime(thread.firstMessageCreatedAt || thread.createdAt || thread.updatedAt);
+  return formatThreadTime(getThreadLabelTime(thread));
 }
 
 function formatThreadTitle(thread) {
@@ -419,15 +422,6 @@ function formatThreadTime(timestamp) {
 
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
-  const sameDay = sameYear && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
-  if (sameDay) {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
-    }).format(date);
-  }
-
   return new Intl.DateTimeFormat(undefined, {
     month: "numeric",
     day: "numeric",
@@ -436,4 +430,8 @@ function formatThreadTime(timestamp) {
     minute: "2-digit",
     hour12: false
   }).format(date);
+}
+
+function getThreadLabelTime(thread) {
+  return Number(thread?.firstMessageCreatedAt || thread?.createdAt || thread?.updatedAt) || 0;
 }
