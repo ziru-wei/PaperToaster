@@ -10,7 +10,6 @@ export function getSidePanelElements(root = document) {
     selectionQuestionForm: root.querySelector("#selectionQuestionForm"),
     selectionQuestion: root.querySelector("#selectionQuestion"),
     promptPresetMenu: root.querySelector("#promptPresetMenu"),
-    askSelectionAi: root.querySelector("#askSelectionAi"),
     selectionContextStatus: root.querySelector("#selectionContextStatus"),
     conversationThread: root.querySelector("#conversationThread"),
     conversationThreadBar: root.querySelector("#conversationThreadBar"),

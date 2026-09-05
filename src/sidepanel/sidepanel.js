@@ -39,7 +39,6 @@ const selectionPanel = createSelectionPanelController({
   statusElement: elements.selectionStatus,
   quoteElement: elements.selectionText,
   toggleButton: elements.toggleSelectionText,
-  askButton: elements.askSelectionAi,
   contextStatusElement: elements.selectionContextStatus
 });
 
@@ -57,7 +56,7 @@ elements.documentTitle.addEventListener("input", () => {
 });
 elements.selectionQuestionForm.addEventListener("submit", askAiAboutSelection);
 elements.selectionQuestion.addEventListener("input", promptPresetMenu.update);
-elements.selectionQuestion.addEventListener("keydown", promptPresetMenu.handleKeydown);
+elements.selectionQuestion.addEventListener("keydown", handleSelectionQuestionKeydown);
 elements.selectionQuestion.addEventListener("focus", promptPresetMenu.update);
 elements.selectionQuestion.addEventListener("blur", () => {
   window.setTimeout(promptPresetMenu.hide, 120);
@@ -361,6 +360,30 @@ function updateAskReadiness() {
     hasDocument: Boolean(currentDocument),
     hasThreadSelection: Boolean(conversation.getCurrentSelectionText())
   });
+}
+
+function handleSelectionQuestionKeydown(event) {
+  if (promptPresetMenu.handleKeydown(event)) {
+    return;
+  }
+
+  if (
+    event.key !== "Enter" ||
+    event.shiftKey ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.isComposing
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  if (!elements.selectionQuestion.value.trim() || !selectionPanel.canAsk()) {
+    return;
+  }
+
+  elements.selectionQuestionForm.requestSubmit();
 }
 
 async function askAiAboutSelection(event) {

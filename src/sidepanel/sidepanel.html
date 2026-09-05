@@ -28,7 +28,7 @@
       <section class="chat-panel">
         <div id="conversationThread" class="conversation-thread" hidden></div>
         <div class="composer">
-          <div id="selectionStatus" class="muted">Select text in the PDF viewer.</div>
+          <div id="selectionStatus" class="muted"></div>
           <blockquote id="selectionText" class="selection-quote"></blockquote>
           <button id="toggleSelectionText" class="selection-toggle" type="button" aria-label="Expand selected text" hidden>
             <span aria-hidden="true">⌄</span>
@@ -38,7 +38,6 @@
               <textarea id="selectionQuestion" rows="4" placeholder="Ask about selected text. Type / for prompts."></textarea>
               <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
             </div>
-            <button id="askSelectionAi" type="submit" disabled>Ask AI</button>
           </form>
           <div id="selectionContextStatus" class="muted"></div>
         </div>

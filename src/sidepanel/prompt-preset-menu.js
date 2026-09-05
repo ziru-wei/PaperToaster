@@ -28,32 +28,39 @@ export function createPromptPresetMenuController({ textarea, menuElement, onErro
   function handleKeydown(event) {
     const request = getRequest();
     if (!request || menuElement.hidden) {
-      return;
+      return false;
     }
 
     const options = filterPresets(request.query);
     if (!options.length) {
       if (event.key === "Escape") {
         hide();
+        return true;
       }
-      return;
+      return false;
     }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
       activeIndex = (activeIndex + 1) % options.length;
       render(options, request);
+      return true;
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       activeIndex = (activeIndex - 1 + options.length) % options.length;
       render(options, request);
+      return true;
     } else if (event.key === "Enter") {
       event.preventDefault();
       insert(options[activeIndex], request);
+      return true;
     } else if (event.key === "Escape") {
       event.preventDefault();
       hide();
+      return true;
     }
+
+    return false;
   }
 
   function preventBlurDismissal(event) {

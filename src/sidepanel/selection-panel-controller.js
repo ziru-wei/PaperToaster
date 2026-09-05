@@ -2,20 +2,20 @@ export function createSelectionPanelController({
   statusElement,
   quoteElement,
   toggleButton,
-  askButton,
   contextStatusElement
 }) {
   let lastRenderedSelectionText = "";
   let hasDocument = false;
   let hasThreadSelection = false;
   let answerBusy = false;
+  let readyToAsk = false;
 
   toggleButton.addEventListener("click", toggle);
 
   function render(selection) {
     if (!selection?.text) {
       lastRenderedSelectionText = "";
-      statusElement.textContent = "Select text in the PDF viewer.";
+      statusElement.textContent = "";
       quoteElement.textContent = "";
       quoteElement.classList.remove("expanded");
       toggleButton.classList.remove("expanded");
@@ -68,7 +68,6 @@ export function createSelectionPanelController({
 
   function setAnswerBusy(busy) {
     answerBusy = Boolean(busy);
-    askButton.textContent = answerBusy ? "Asking..." : "Ask AI";
     updateReadiness();
   }
 
@@ -82,7 +81,11 @@ export function createSelectionPanelController({
     }
 
     const hasSelection = Boolean(getVisibleText() || hasThreadSelection);
-    askButton.disabled = !hasDocument || !hasSelection || answerBusy;
+    readyToAsk = hasDocument && hasSelection && !answerBusy;
+  }
+
+  function canAsk() {
+    return readyToAsk;
   }
 
   function toggle() {
@@ -113,6 +116,7 @@ export function createSelectionPanelController({
     setContextStatus,
     clearContextStatus,
     setAnswerBusy,
-    updateReadiness
+    updateReadiness,
+    canAsk
   };
 }

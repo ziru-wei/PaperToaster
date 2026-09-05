@@ -2,8 +2,9 @@
   color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  --chat-text-size: 14.5px;
-  --control-radius: 6px;
+  --chat-text-size: 15px;
+  --selection-text-size: 13px;
+  --control-radius: 10px;
 }
 
 html,
@@ -354,13 +355,13 @@ form {
 .selection-quote {
   position: relative;
   overflow: hidden;
-  max-height: 3.55em;
+  max-height: 3.5em;
   margin: 0 0 0 22px;
   border-left: 2px solid #9ca3af;
   padding: 0 4px 0 18px;
   color: #374151;
   background: transparent;
-  font-size: var(--chat-text-size);
+  font-size: var(--selection-text-size);
   font-style: italic;
   line-height: 1.42;
   opacity: 0.5;
@@ -385,7 +386,7 @@ form {
 
 .selection-quote.expanded {
   overflow: auto;
-  max-height: 5.7em;
+  max-height: 5.68em;
 }
 
 .selection-quote:empty {
