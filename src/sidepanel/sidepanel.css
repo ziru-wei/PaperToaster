@@ -496,6 +496,8 @@ form {
   max-width: 86%;
   max-height: 6em;
   margin: 0 0 4px;
+  border-left: 2px solid rgba(95, 128, 104, 0.48);
+  padding-left: 8px;
   color: #5f8068;
   cursor: pointer;
   font-size: var(--thread-selection-text-size);
@@ -510,7 +512,6 @@ form {
 .conversation-selection.scrollable {
   overflow: auto;
   color: #4f7f5d;
-  background: rgba(95, 128, 104, 0.08);
   scrollbar-color: rgba(107, 114, 128, 0.18) transparent;
   scrollbar-width: thin;
 }
@@ -626,12 +627,12 @@ form {
   }
 
   .conversation-selection {
+    border-left-color: rgba(138, 170, 145, 0.5);
     color: #8aaa91;
   }
 
   .conversation-selection.scrollable {
     color: #9bbc9e;
-    background: rgba(138, 170, 145, 0.08);
   }
 
   button:hover {
