@@ -2,11 +2,10 @@ import { listLibraryPapers, setLibraryPaperStarred } from "../storage/library-st
 import { MessageType } from "../shared/messages.js";
 
 const SORT_OPTIONS = [
-  { id: "latestThread", label: "Latest thread", sortBy: "latestThread", sortDirection: "desc" },
-  { id: "firstConversation", label: "First conversation", sortBy: "firstConversation", sortDirection: "asc" },
+  { id: "latestThread", label: "Latest ask", sortBy: "latestThread", sortDirection: "desc" },
+  { id: "firstConversation", label: "Early ask", sortBy: "firstConversation", sortDirection: "asc" },
   { id: "messageCount", label: "Message count", sortBy: "messageCount", sortDirection: "desc" },
-  { id: "starred", label: "Starred", sortBy: "starred", sortDirection: "desc" },
-  { id: "title", label: "Title", sortBy: "title", sortDirection: "asc" }
+  { id: "starred", label: "Starred", sortBy: "starred", sortDirection: "desc" }
 ];
 
 const SORT_CONFIG = {

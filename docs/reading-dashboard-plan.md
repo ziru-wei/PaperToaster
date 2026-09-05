@@ -199,25 +199,23 @@ Recommendation: empty threads should not make a paper look active. They can exis
 Initial sort options:
 
 ```text
-Latest thread
-First conversation
-Title
+Latest ask
+Early ask
 Message count
 Starred
 ```
 
 Definitions:
 
-- Latest thread: latest non-empty thread start time.
-- First conversation: earliest `firstConversationAt`; papers without conversation go last.
-- Title: locale-aware title sort.
+- Latest ask: latest non-empty thread start time.
+- Early ask: earliest `firstConversationAt`; papers without conversation go last.
 - Message count: total message count, descending.
 - Starred: starred papers first, then latest thread time.
 
 Default sort:
 
 ```text
-Latest thread desc
+Latest ask desc
 ```
 
 This matches the current dashboard semantics: resume what was recently discussed, without treating passive PDF loads as reading activity.
