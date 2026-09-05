@@ -164,7 +164,7 @@ h1 {
 
 .paper-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   align-items: stretch;
   gap: 14px;
 }
@@ -216,8 +216,8 @@ h1 {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
-  font-size: 15px;
-  font-weight: 660;
+  font-size: 13.25px;
+  font-weight: 500;
   letter-spacing: 0;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
