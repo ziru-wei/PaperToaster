@@ -12,8 +12,10 @@ import {
 import { getAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
 import {
+  applyMarkdownCircle,
   applyMarkdownHiddenText,
   applyMarkdownHighlight,
+  removeMarkdownCircle,
   removeMarkdownHiddenText,
   removeMarkdownHighlight
 } from "../markdown/highlight-markdown.js";
@@ -320,8 +322,10 @@ export function createComparativeReadingController({
       onToggleSaved: toggleMessageSaved,
       onDeleteUnit: deleteMessageUnit,
       onHighlightAssistantSelection: highlightAssistantSelection,
+      onCircleAssistantSelection: circleAssistantSelection,
       onHideAssistantSelection: hideAssistantSelection,
       onRemoveAssistantHighlight: removeAssistantHighlight,
+      onRemoveAssistantCircle: removeAssistantCircle,
       onRemoveAssistantHiddenText: removeAssistantHiddenText,
       scrollToLatest,
       scrollToBottom
@@ -380,13 +384,14 @@ export function createComparativeReadingController({
     const index = Number(messageIndex);
     const message = state.messages[index];
     if (!state.activeSessionId || !message || message.role !== "assistant" || message.pending) {
-      return false;
+      return createEditResult(false, "response message is unavailable.");
     }
 
     const result = applyMarkdownHighlight(message.text, selectedText);
     if (!result.changed) {
-      onDiagnostic?.(`Highlight skipped: ${formatHighlightSkipReason(result.reason)}`);
-      return false;
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Highlight skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     state.messages[index] = {
@@ -400,20 +405,21 @@ export function createComparativeReadingController({
     notifyComparisonActivityChanged();
     render({ scrollToBottom: false });
     onChange?.();
-    return true;
+    return createEditResult(true);
   }
 
   async function hideAssistantSelection(messageIndex, selectedText) {
     const index = Number(messageIndex);
     const message = state.messages[index];
     if (!state.activeSessionId || !message || message.role !== "assistant" || message.pending) {
-      return false;
+      return createEditResult(false, "response message is unavailable.");
     }
 
     const result = applyMarkdownHiddenText(message.text, selectedText);
     if (!result.changed) {
-      onDiagnostic?.(`Hide skipped: ${formatHighlightSkipReason(result.reason)}`);
-      return false;
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Hide skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     state.messages[index] = {
@@ -427,7 +433,35 @@ export function createComparativeReadingController({
     notifyComparisonActivityChanged();
     render({ scrollToBottom: false });
     onChange?.();
-    return true;
+    return createEditResult(true);
+  }
+
+  async function circleAssistantSelection(messageIndex, selectedText) {
+    const index = Number(messageIndex);
+    const message = state.messages[index];
+    if (!state.activeSessionId || !message || message.role !== "assistant" || message.pending) {
+      return createEditResult(false, "response message is unavailable.");
+    }
+
+    const result = applyMarkdownCircle(message.text, selectedText);
+    if (!result.changed) {
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Circle skipped: ${reason}`);
+      return createEditResult(false, reason);
+    }
+
+    state.messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    const session = await saveComparisonMessages(state.activeSessionId, state.messages);
+    state.messages = session?.messages || state.messages;
+    state.sessions = await listComparisonSessions();
+    notifyComparisonActivityChanged();
+    render({ scrollToBottom: false });
+    onChange?.();
+    return createEditResult(true);
   }
 
   async function removeAssistantHighlight(messageIndex, highlightIndex) {
@@ -457,14 +491,41 @@ export function createComparativeReadingController({
     return true;
   }
 
-  async function removeAssistantHiddenText(messageIndex, hiddenIndex) {
+  async function removeAssistantCircle(messageIndex, circleIndex) {
     const index = Number(messageIndex);
     const message = state.messages[index];
     if (!state.activeSessionId || !message || message.role !== "assistant" || message.pending) {
       return false;
     }
 
-    const result = removeMarkdownHiddenText(message.text, hiddenIndex);
+    const result = removeMarkdownCircle(message.text, circleIndex);
+    if (!result.changed) {
+      onDiagnostic?.("Circle removal skipped: circle was not found.");
+      return false;
+    }
+
+    state.messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    const session = await saveComparisonMessages(state.activeSessionId, state.messages);
+    state.messages = session?.messages || state.messages;
+    state.sessions = await listComparisonSessions();
+    notifyComparisonActivityChanged();
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
+  }
+
+  async function removeAssistantHiddenText(messageIndex, hiddenIndex, groupId = "") {
+    const index = Number(messageIndex);
+    const message = state.messages[index];
+    if (!state.activeSessionId || !message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = removeMarkdownHiddenText(message.text, hiddenIndex, groupId);
     if (!result.changed) {
       onDiagnostic?.("Hidden text removal skipped: hidden text was not found.");
       return false;
@@ -546,7 +607,23 @@ function formatHighlightSkipReason(reason) {
   if (reason === "selection-not-found") {
     return "selected text was not found in the response markdown.";
   }
+  if (reason === "unsupported-highlight-selection") {
+    return "selected text crosses unsupported markdown syntax or block boundaries.";
+  }
+  if (reason === "already-hidden") {
+    return "selected text is already hidden.";
+  }
+  if (reason === "already-circled") {
+    return "selected text is already circled.";
+  }
   return "select response text first.";
+}
+
+function createEditResult(changed, reason = "") {
+  return {
+    changed: Boolean(changed),
+    reason
+  };
 }
 
 function normalizeDocumentKeys(documentKeys) {

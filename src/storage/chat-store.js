@@ -196,6 +196,7 @@ export async function listSavedQuestionAnswerUnits(url) {
         question: latestUser?.message?.text || "",
         selectionText: latestUser?.message?.selectionText || "",
         answer: message.text || "",
+        isPinned: isMessageSaved(message) && isMessagePinned(message),
         createdAt: Number(message.createdAt || latestUser?.message?.createdAt || thread.updatedAt || thread.createdAt) || Date.now(),
         questionCreatedAt: Number(latestUser?.message?.createdAt) || null,
         answerCreatedAt: Number(message.createdAt) || null
@@ -203,7 +204,63 @@ export async function listSavedQuestionAnswerUnits(url) {
     }
   }
 
-  return units.sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
+  return units.sort((left, right) => (
+    Number(Boolean(right.isPinned)) - Number(Boolean(left.isPinned)) ||
+    (right.createdAt || 0) - (left.createdAt || 0)
+  ));
+}
+
+export async function setPinnedSavedQuestionAnswerUnit(url, unit) {
+  const documentKey = getDocumentMemoryKey(url);
+  const threadId = String(unit?.threadId || "").trim();
+  const assistantMessageIndex = Number(unit?.assistantMessageIndex);
+  if (!documentKey || !threadId || !Number.isInteger(assistantMessageIndex) || assistantMessageIndex < 0) {
+    return false;
+  }
+
+  const db = await openPaperDatabase();
+  const targetMessageId = createMessageId(threadId, assistantMessageIndex);
+  const targetMessage = await requestToPromise(
+    db.transaction(CONVERSATION_MESSAGE_STORE, "readonly")
+      .objectStore(CONVERSATION_MESSAGE_STORE)
+      .get(targetMessageId)
+  );
+  if (
+    !targetMessage ||
+    targetMessage.documentKey !== documentKey ||
+    targetMessage.role !== "assistant" ||
+    !isMessageSaved(targetMessage)
+  ) {
+    return false;
+  }
+
+  const shouldPinTarget = !isMessagePinned(targetMessage);
+  const transaction = db.transaction(CONVERSATION_MESSAGE_STORE, "readwrite");
+  const store = transaction.objectStore(CONVERSATION_MESSAGE_STORE);
+  const request = store.index("byDocumentKey").openCursor(IDBKeyRange.only(documentKey));
+  const now = Date.now();
+
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (!cursor) {
+      return;
+    }
+
+    const message = cursor.value;
+    const isTarget = message.messageId === targetMessageId;
+    const nextPinned = isTarget ? shouldPinTarget : false;
+    if (message.role === "assistant" && isMessagePinned(message) !== nextPinned) {
+      cursor.update({
+        ...message,
+        isPinned: nextPinned,
+        updatedAt: now
+      });
+    }
+    cursor.continue();
+  };
+
+  await transactionDone(transaction);
+  return true;
 }
 
 export async function createStoredChatThread(url, options = {}) {
@@ -386,7 +443,8 @@ function normalizeChatMessage(message, index = 0) {
     text,
     selectionText,
     createdAt: Number(message?.createdAt) || Date.now() + index,
-    isSaved: isMessageSaved(message)
+    isSaved: isMessageSaved(message),
+    isPinned: isMessageSaved(message) && isMessagePinned(message)
   };
 }
 
@@ -471,7 +529,8 @@ async function getThreadMessages(db, threadId) {
       text: message.text,
       selectionText: message.selectionText || "",
       createdAt: message.createdAt || null,
-      isSaved: isMessageSaved(message)
+      isSaved: isMessageSaved(message),
+      isPinned: isMessageSaved(message) && isMessagePinned(message)
     }));
 }
 
@@ -486,6 +545,7 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
       text: message.text,
       selectionText: message.selectionText || "",
       isSaved: isMessageSaved(message),
+      isPinned: isMessageSaved(message) && isMessagePinned(message),
       createdAt: message.createdAt || now + index,
       updatedAt: now
     });
@@ -498,6 +558,10 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
 
 function isMessageSaved(message) {
   return Boolean(message?.isSaved);
+}
+
+function isMessagePinned(message) {
+  return Boolean(message?.isPinned);
 }
 
 function deleteThreadMessages(store, threadId) {

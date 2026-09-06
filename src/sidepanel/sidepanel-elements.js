@@ -22,7 +22,9 @@ export function getSidePanelElements(root = document) {
     conversationThread: root.querySelector("#conversationThread"),
     conversationThreadArchive: root.querySelector("#conversationThreadArchive"),
     conversationThreadWheel: root.querySelector("#conversationThreadWheel"),
-    savedQaToggle: root.querySelector("#savedQaToggle")
+    savedQaControls: root.querySelector("#savedQaControls"),
+    savedQaToggle: root.querySelector("#savedQaToggle"),
+    savedQaCollapseToggle: root.querySelector("#savedQaCollapseToggle")
   };
 
   for (const [name, element] of Object.entries(elements)) {

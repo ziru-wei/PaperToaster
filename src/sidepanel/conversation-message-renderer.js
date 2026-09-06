@@ -1,5 +1,6 @@
 import { renderMarkdownInto } from "../markdown/render-markdown.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
+import { annotate } from "../../vendor/rough-notation/rough-notation.mjs";
 
 const highlightBarCleanups = new WeakMap();
 
@@ -31,6 +32,7 @@ export function renderConversationMessages(threadElement, messages, options = {}
         textElement: text,
         messageIndex,
         onRemoveAssistantHighlight: options.onRemoveAssistantHighlight,
+        onRemoveAssistantCircle: options.onRemoveAssistantCircle,
         onRemoveAssistantHiddenText: options.onRemoveAssistantHiddenText,
         cleanupCallbacks
       });
@@ -52,6 +54,9 @@ export function renderConversationMessages(threadElement, messages, options = {}
           anchorElement: item,
           targetElement: text,
           onHighlightSelection: (selectedText) => options.onHighlightAssistantSelection(messageIndex, selectedText),
+          onCircleSelection: typeof options.onCircleAssistantSelection === "function"
+            ? (selectedText) => options.onCircleAssistantSelection(messageIndex, selectedText)
+            : null,
           onHideSelection: typeof options.onHideAssistantSelection === "function"
             ? (selectedText) => options.onHideAssistantSelection(messageIndex, selectedText)
             : null
@@ -103,8 +108,13 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   const cleanupCallbacks = [];
 
   units.forEach((unit) => {
+    const unitKey = getSavedQuestionAnswerUnitKey(unit);
     const unitElement = document.createElement("article");
     unitElement.className = "saved-qa-unit";
+    unitElement.dataset.savedUnitKey = unitKey;
+    if (options.collapsedUnitKeys?.has(unitKey)) {
+      unitElement.classList.add("collapsed");
+    }
 
     const cardShadow = document.createElement("div");
     cardShadow.className = "saved-qa-card-shadow";
@@ -114,20 +124,36 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
 
     const question = document.createElement("div");
     question.className = "saved-qa-question";
+    question.tabIndex = 0;
+    question.setAttribute("role", "button");
+    question.setAttribute("aria-expanded", String(!unitElement.classList.contains("collapsed")));
     const questionText = document.createElement("span");
     questionText.className = "saved-qa-question-text";
     questionText.textContent = unit.question || "Question unavailable";
     const jumpButton = createSavedJumpButton(unit, options.onJumpToUnit);
     question.append(questionText, jumpButton);
+    question.addEventListener("click", () => toggleSavedQuestionAnswerUnit(unitElement, question));
+    question.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      toggleSavedQuestionAnswerUnit(unitElement, question);
+    });
 
     const answer = document.createElement("div");
     answer.className = "saved-qa-answer";
     renderMarkdownInto(answer, normalizeAiResponseMarkdown(unit.answer || ""), { omitHiddenText: true });
+    decorateSavedCodeBlocks(answer);
     if (typeof options.onRemoveSavedAnswerHighlight === "function" || typeof options.onRemoveSavedAnswerHiddenText === "function") {
       wireRenderedAnnotations({
         textElement: answer,
         onRemoveHighlight: typeof options.onRemoveSavedAnswerHighlight === "function"
           ? (highlightIndex) => options.onRemoveSavedAnswerHighlight(unit, highlightIndex)
+          : null,
+        onRemoveCircle: typeof options.onRemoveSavedAnswerCircle === "function"
+          ? (circleIndex) => options.onRemoveSavedAnswerCircle(unit, circleIndex)
           : null,
         onRemoveHiddenText: typeof options.onRemoveSavedAnswerHiddenText === "function"
           ? (hiddenIndex) => options.onRemoveSavedAnswerHiddenText(unit, hiddenIndex)
@@ -136,7 +162,7 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
       });
     }
 
-    card.append(question, answer);
+    card.append(question, answer, createSavedPinButton(unit, options.onTogglePinned));
     cardShadow.append(card);
     unitElement.append(cardShadow);
 
@@ -145,6 +171,9 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
         anchorElement: unitElement,
         targetElement: answer,
         onHighlightSelection: (selectedText) => options.onHighlightSavedAnswerSelection(unit, selectedText),
+        onCircleSelection: typeof options.onCircleSavedAnswerSelection === "function"
+          ? (selectedText) => options.onCircleSavedAnswerSelection(unit, selectedText)
+          : null,
         onHideSelection: typeof options.onHideSavedAnswerSelection === "function"
           ? (selectedText) => options.onHideSavedAnswerSelection(unit, selectedText)
           : null
@@ -182,6 +211,19 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
 }
 
+function decorateSavedCodeBlocks(answerElement) {
+  answerElement.querySelectorAll("pre").forEach((pre) => {
+    if (pre.parentElement?.classList.contains("saved-code-block-frame")) {
+      return;
+    }
+
+    const frame = document.createElement("div");
+    frame.className = "saved-code-block-frame";
+    pre.replaceWith(frame);
+    frame.append(pre);
+  });
+}
+
 function createSavedJumpButton(unit, onJumpToUnit) {
   const button = document.createElement("button");
   button.className = "saved-qa-jump";
@@ -201,6 +243,27 @@ function createSavedJumpButton(unit, onJumpToUnit) {
   return button;
 }
 
+function createSavedPinButton(unit, onTogglePinned) {
+  const button = document.createElement("button");
+  button.className = "saved-qa-pin";
+  button.classList.toggle("pinned", Boolean(unit.isPinned));
+  button.type = "button";
+  button.setAttribute("aria-label", unit.isPinned ? "Unpin saved Q&A" : "Pin saved Q&A");
+  button.setAttribute("aria-pressed", String(Boolean(unit.isPinned)));
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    Promise.resolve(onTogglePinned?.(unit)).catch((error) => {
+      console.debug("[Paper Toaster] Could not update saved Q&A pin", error);
+    });
+  });
+
+  const icon = document.createElement("span");
+  icon.className = "icon-mask saved-qa-pin-icon";
+  icon.setAttribute("aria-hidden", "true");
+  button.append(icon);
+  return button;
+}
+
 function toggleSavedSelection(selection) {
   const shouldExpand = !selection.classList.contains("expanded");
   selection.classList.toggle("expanded", shouldExpand);
@@ -208,6 +271,43 @@ function toggleSavedSelection(selection) {
   if (!shouldExpand) {
     selection.scrollTop = 0;
   }
+}
+
+function toggleSavedQuestionAnswerUnit(unitElement, questionElement) {
+  const shouldCollapse = !unitElement.classList.contains("collapsed");
+  setSavedQuestionAnswerUnitCollapsed(unitElement, shouldCollapse, questionElement);
+  unitElement.dispatchEvent(new CustomEvent("saved-qa-unit-collapse-change", { bubbles: true }));
+}
+
+export function setSavedQuestionAnswerUnitsCollapsed(threadElement, collapsed) {
+  const units = Array.from(threadElement.querySelectorAll(".saved-qa-unit"));
+  units.forEach((unitElement) => setSavedQuestionAnswerUnitCollapsed(unitElement, collapsed));
+  return units.length > 0;
+}
+
+export function areSavedQuestionAnswerUnitsCollapsed(threadElement) {
+  const units = Array.from(threadElement.querySelectorAll(".saved-qa-unit"));
+  return units.length > 0 && units.every((unitElement) => unitElement.classList.contains("collapsed"));
+}
+
+export function getSavedQuestionAnswerCollapsedUnitKeys(threadElement) {
+  return new Set(
+    Array.from(threadElement.querySelectorAll(".saved-qa-unit.collapsed"))
+      .map((unitElement) => unitElement.dataset.savedUnitKey || "")
+      .filter(Boolean)
+  );
+}
+
+function setSavedQuestionAnswerUnitCollapsed(unitElement, collapsed, questionElement = null) {
+  unitElement.classList.toggle("collapsed", Boolean(collapsed));
+  const question = questionElement || unitElement.querySelector(".saved-qa-question");
+  question?.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function getSavedQuestionAnswerUnitKey(unit) {
+  const threadId = String(unit?.threadId || "").trim();
+  const assistantMessageIndex = Number(unit?.assistantMessageIndex);
+  return `${threadId}:${Number.isInteger(assistantMessageIndex) ? assistantMessageIndex : ""}`;
 }
 
 function renderMessageText(element, message) {
@@ -257,8 +357,10 @@ function wireRenderedAnnotations({
   textElement,
   messageIndex,
   onRemoveAssistantHighlight,
+  onRemoveAssistantCircle,
   onRemoveAssistantHiddenText,
   onRemoveHighlight,
+  onRemoveCircle,
   onRemoveHiddenText,
   cleanupCallbacks
 }) {
@@ -267,10 +369,15 @@ function wireRenderedAnnotations({
     : typeof onRemoveAssistantHighlight === "function"
       ? (highlightIndex) => onRemoveAssistantHighlight(messageIndex, highlightIndex)
       : null;
+  const removeCircle = typeof onRemoveCircle === "function"
+    ? onRemoveCircle
+    : typeof onRemoveAssistantCircle === "function"
+      ? (circleIndex) => onRemoveAssistantCircle(messageIndex, circleIndex)
+    : null;
   const removeHiddenText = typeof onRemoveHiddenText === "function"
     ? onRemoveHiddenText
     : typeof onRemoveAssistantHiddenText === "function"
-      ? (hiddenIndex) => onRemoveAssistantHiddenText(messageIndex, hiddenIndex)
+      ? (hiddenIndex, groupId) => onRemoveAssistantHiddenText(messageIndex, hiddenIndex, groupId)
       : null;
 
   if (typeof removeHighlight === "function") {
@@ -288,18 +395,61 @@ function wireRenderedAnnotations({
     });
   }
 
+  if (typeof removeCircle === "function") {
+    textElement.querySelectorAll(".paper-circle-text").forEach((circle, circleIndex) => {
+      wireRenderedAnnotation({
+        textElement,
+        element: circle,
+        className: "conversation-circle-mark",
+        label: "Circled response text",
+        title: "Remove circle",
+        topOffset: -4,
+        onRemove: () => removeCircle(circleIndex),
+        cleanupCallbacks
+      });
+    });
+  }
+  initializeRenderedCircleAnnotations(textElement, cleanupCallbacks);
+
   if (typeof removeHiddenText === "function") {
     textElement.querySelectorAll(".paper-hidden-text").forEach((hiddenText, hiddenIndex) => {
+      const groupId = hiddenText.dataset.annotationGroup || "";
       wireRenderedHiddenText({
         textElement,
         element: hiddenText,
         className: "conversation-hidden-text",
         label: "Hidden response text",
-        onRemove: () => removeHiddenText(hiddenIndex),
+        onRemove: () => removeHiddenText(hiddenIndex, groupId),
         cleanupCallbacks
       });
     });
   }
+}
+
+function initializeRenderedCircleAnnotations(textElement, cleanupCallbacks = []) {
+  textElement.querySelectorAll(".paper-circle-text").forEach((element) => {
+    let annotation = null;
+    const frame = window.requestAnimationFrame(() => {
+      if (!element.isConnected) {
+        return;
+      }
+
+      annotation = annotate(element, {
+        type: "circle",
+        color: "#d95f59",
+        strokeWidth: 2,
+        padding: 4,
+        iterations: 2,
+        animate: false,
+        multiline: true
+      });
+      annotation.show();
+    });
+    cleanupCallbacks.push(() => {
+      window.cancelAnimationFrame(frame);
+      annotation?.remove?.();
+    });
+  });
 }
 
 function wireRenderedAnnotation({ textElement, element, className, label, title, topOffset = 0, onRemove, cleanupCallbacks }) {
@@ -350,6 +500,7 @@ function wireRenderedHiddenText({ textElement, element, className, label, onRemo
   element.classList.add(className, "conversation-annotated-text");
   element.tabIndex = 0;
   element.setAttribute("aria-label", label);
+  const groupedElements = getHiddenTextGroupElements(textElement, element);
 
   const restoreButton = document.createElement("button");
   restoreButton.className = "conversation-annotation-remove conversation-hidden-restore";
@@ -377,6 +528,7 @@ function wireRenderedHiddenText({ textElement, element, className, label, onRemo
     event.stopPropagation();
     ignoreNextFocus = false;
     hideVisibleAnnotationButtons(textElement, restoreButton);
+    activateHiddenTextGroup(textElement, groupedElements);
     positionAnnotationButtonAtPoint({
       textElement,
       button: restoreButton,
@@ -387,18 +539,32 @@ function wireRenderedHiddenText({ textElement, element, className, label, onRemo
   const showAtLastCharacter = (event) => {
     event?.stopPropagation();
     hideVisibleAnnotationButtons(textElement, restoreButton);
+    activateHiddenTextGroup(textElement, groupedElements);
     positionAnnotationRemoveButton({ textElement, element, removeButton: restoreButton });
   };
   const hideOnOutsidePointer = (event) => {
-    if (event.target === element || element.contains(event.target) || event.target === restoreButton || restoreButton.contains(event.target)) {
+    if (
+      groupedElements.some((candidate) => event.target === candidate || candidate.contains(event.target)) ||
+      event.target === restoreButton ||
+      restoreButton.contains(event.target)
+    ) {
       return;
     }
     restoreButton.classList.remove("visible");
+    deactivateHiddenTextGroup(textElement);
+  };
+  const showGroupHover = () => {
+    groupedElements.forEach((candidate) => candidate.classList.add("hover-hidden-group"));
+  };
+  const hideGroupHover = () => {
+    groupedElements.forEach((candidate) => candidate.classList.remove("hover-hidden-group"));
   };
 
   element.addEventListener("pointerdown", () => {
     ignoreNextFocus = true;
   });
+  element.addEventListener("pointerenter", showGroupHover);
+  element.addEventListener("pointerleave", hideGroupHover);
   element.addEventListener("click", showAtPointer);
   element.addEventListener("focus", (event) => {
     if (ignoreNextFocus) {
@@ -413,16 +579,39 @@ function wireRenderedHiddenText({ textElement, element, className, label, onRemo
   document.body.append(restoreButton);
   cleanupCallbacks?.push(() => {
     document.removeEventListener("pointerdown", hideOnOutsidePointer);
+    hideGroupHover();
     restoreButton.remove();
   });
 }
 
-function createAssistantEditBar({ anchorElement, targetElement, onHighlightSelection, onHideSelection }) {
+function getHiddenTextGroupElements(textElement, element) {
+  const groupId = element.dataset.annotationGroup || "";
+  if (!groupId) {
+    return [element];
+  }
+
+  return Array.from(textElement.querySelectorAll(".paper-hidden-text"))
+    .filter((candidate) => candidate.dataset.annotationGroup === groupId);
+}
+
+function activateHiddenTextGroup(textElement, groupedElements) {
+  deactivateHiddenTextGroup(textElement);
+  groupedElements.forEach((candidate) => candidate.classList.add("active-hidden-group"));
+}
+
+function deactivateHiddenTextGroup(textElement) {
+  textElement.querySelectorAll(".paper-hidden-text.active-hidden-group").forEach((candidate) => {
+    candidate.classList.remove("active-hidden-group");
+  });
+}
+
+function createAssistantEditBar({ anchorElement, targetElement, onHighlightSelection, onCircleSelection, onHideSelection }) {
   const bar = document.createElement("div");
   bar.className = "conversation-edit-bar";
   const selectionState = {
     text: ""
   };
+  let hintTimer = null;
 
   const highlightButton = createConversationActionButton({
     className: "conversation-highlight-button",
@@ -436,26 +625,66 @@ function createAssistantEditBar({ anchorElement, targetElement, onHighlightSelec
     const selectedText = selectionState.text || getSelectedResponseText(targetElement);
     if (!selectedText) {
       flashConversationActionButton(highlightButton);
+      hintTimer = showConversationEditHint(bar, "No selected response text.", hintTimer);
       return;
     }
 
     Promise.resolve(onHighlightSelection?.(selectedText))
-      .then((changed) => {
-        if (!changed) {
+      .then((result) => {
+        const editResult = normalizeEditResult(result);
+        if (!editResult.changed) {
           flashConversationActionButton(highlightButton);
+          hintTimer = showConversationEditHint(bar, editResult.reason || "Highlight failed.", hintTimer);
           return;
         }
         window.getSelection()?.removeAllRanges();
       })
       .catch((error) => {
         flashConversationActionButton(highlightButton);
+        hintTimer = showConversationEditHint(bar, error.message || "Highlight failed.", hintTimer);
         console.debug("[Paper Toaster] Could not highlight response text", error);
       });
   });
 
-  const buttons = [highlightButton];
+  let circleButton = null;
+  if (typeof onCircleSelection === "function") {
+    circleButton = createConversationActionButton({
+      className: "conversation-circle-button",
+      iconClassName: "conversation-circle-icon",
+      title: "Circle selected response text"
+    });
+    circleButton.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+    });
+    circleButton.addEventListener("click", () => {
+      const selectedText = selectionState.text || getSelectedResponseText(targetElement);
+      if (!selectedText) {
+        flashConversationActionButton(circleButton);
+        hintTimer = showConversationEditHint(bar, "No selected response text.", hintTimer);
+        return;
+      }
+
+      Promise.resolve(onCircleSelection(selectedText))
+        .then((result) => {
+          const editResult = normalizeEditResult(result);
+          if (!editResult.changed) {
+            flashConversationActionButton(circleButton);
+            hintTimer = showConversationEditHint(bar, editResult.reason || "Circle failed.", hintTimer);
+            return;
+          }
+          window.getSelection()?.removeAllRanges();
+        })
+        .catch((error) => {
+          flashConversationActionButton(circleButton);
+          hintTimer = showConversationEditHint(bar, error.message || "Circle failed.", hintTimer);
+          console.debug("[Paper Toaster] Could not circle response text", error);
+        });
+    });
+  }
+
+  let hideButton = null;
   if (typeof onHideSelection === "function") {
-    const hideButton = createConversationActionButton({
+    hideButton = createConversationActionButton({
       className: "conversation-hide-button",
       iconClassName: "conversation-hide-icon",
       title: "Hide selected response text"
@@ -467,27 +696,57 @@ function createAssistantEditBar({ anchorElement, targetElement, onHighlightSelec
       const selectedText = selectionState.text || getSelectedResponseText(targetElement);
       if (!selectedText) {
         flashConversationActionButton(hideButton);
+        hintTimer = showConversationEditHint(bar, "No selected response text.", hintTimer);
         return;
       }
 
       Promise.resolve(onHideSelection(selectedText))
-        .then((changed) => {
-          if (!changed) {
+        .then((result) => {
+          const editResult = normalizeEditResult(result);
+          if (!editResult.changed) {
             flashConversationActionButton(hideButton);
+            hintTimer = showConversationEditHint(bar, editResult.reason || "Hide failed.", hintTimer);
             return;
           }
           window.getSelection()?.removeAllRanges();
         })
         .catch((error) => {
           flashConversationActionButton(hideButton);
+          hintTimer = showConversationEditHint(bar, error.message || "Hide failed.", hintTimer);
           console.debug("[Paper Toaster] Could not hide response text", error);
         });
     });
-    buttons.push(hideButton);
   }
 
-  bar.append(...buttons);
+  const hint = document.createElement("div");
+  hint.className = "conversation-edit-hint";
+  const buttons = [hideButton, highlightButton, circleButton].filter(Boolean);
+  bar.append(...buttons, hint);
   return { anchorElement, targetElement, bar, selectionState };
+}
+
+function normalizeEditResult(result) {
+  if (typeof result === "boolean") {
+    return { changed: result, reason: "" };
+  }
+  return {
+    changed: Boolean(result?.changed),
+    reason: String(result?.reason || "").trim()
+  };
+}
+
+function showConversationEditHint(bar, message, previousTimer = null) {
+  const hint = bar.querySelector(".conversation-edit-hint");
+  if (!hint) {
+    return previousTimer;
+  }
+
+  window.clearTimeout(previousTimer);
+  hint.textContent = message;
+  hint.classList.add("visible");
+  return window.setTimeout(() => {
+    hint.classList.remove("visible");
+  }, 2600);
 }
 
 function updateAssistantEditBars(editBars) {

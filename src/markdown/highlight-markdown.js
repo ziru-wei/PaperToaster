@@ -6,12 +6,35 @@ export function removeMarkdownHighlight(markdown, highlightIndex) {
   return removeMarkdownAnnotation(markdown, highlightIndex, collectMarkdownHighlightRanges, "highlight-not-found");
 }
 
+export function applyMarkdownCircle(markdown, selectedText) {
+  return applyMarkdownAnnotationWithUnion(markdown, selectedText, {
+    syntax: {
+      open: "{{circle64:",
+      close: "}}",
+      encoded: true
+    },
+    collectUnionRanges: collectMarkdownCircleRanges,
+    collectBlockingRanges: (source) => mergeRanges([
+      ...collectCodeRanges(source),
+      ...collectMarkdownHighlightRanges(source),
+      ...collectMarkdownHiddenTextRanges(source)
+    ]),
+    alreadyReason: "already-circled"
+  });
+}
+
+export function removeMarkdownCircle(markdown, circleIndex) {
+  return removeMarkdownAnnotation(markdown, circleIndex, collectMarkdownCircleRanges, "circle-not-found");
+}
+
 export function applyMarkdownHiddenText(markdown, selectedText) {
+  const groupId = createAnnotationGroupId();
   return applyMarkdownAnnotationWithUnion(markdown, selectedText, {
     syntax: {
       open: "{{hide64:",
       close: "}}",
-      encoded: true
+      encoded: true,
+      groupId
     },
     collectUnionRanges: collectMarkdownHiddenTextRanges,
     collectBlockingRanges: (source) => mergeRanges([
@@ -22,8 +45,8 @@ export function applyMarkdownHiddenText(markdown, selectedText) {
   });
 }
 
-export function removeMarkdownHiddenText(markdown, hiddenIndex) {
-  return removeMarkdownAnnotation(markdown, hiddenIndex, collectMarkdownHiddenTextRanges, "hidden-text-not-found");
+export function removeMarkdownHiddenText(markdown, hiddenIndex, groupId = "") {
+  return removeMarkdownAnnotation(markdown, hiddenIndex, collectMarkdownHiddenTextRanges, "hidden-text-not-found", groupId);
 }
 
 function applyPlainMarkdownHighlight(markdown, selectedText) {
@@ -125,7 +148,7 @@ function applyMarkdownAnnotationWithUnion(markdown, selectedText, {
   return wrapAnnotationUnionRange(source, overlapMatches[0], unionRanges, syntax, alreadyReason);
 }
 
-function removeMarkdownAnnotation(markdown, annotationIndex, collectRanges, missingReason) {
+function removeMarkdownAnnotation(markdown, annotationIndex, collectRanges, missingReason, groupId = "") {
   const source = String(markdown || "");
   const index = Number(annotationIndex);
   if (!source || !Number.isInteger(index) || index < 0) {
@@ -136,7 +159,8 @@ function removeMarkdownAnnotation(markdown, annotationIndex, collectRanges, miss
     };
   }
 
-  const annotation = collectRanges(source)[index];
+  const ranges = collectRanges(source);
+  const annotation = ranges[index];
   if (!annotation) {
     return {
       changed: false,
@@ -145,9 +169,40 @@ function removeMarkdownAnnotation(markdown, annotationIndex, collectRanges, miss
     };
   }
 
+  if (groupId && annotation.groupId === groupId) {
+    return removeMarkdownAnnotationGroup(source, ranges, groupId);
+  }
+
   return {
     changed: true,
     markdown: `${source.slice(0, annotation.start)}${getAnnotationReplacement(source, annotation)}${source.slice(annotation.end)}`,
+    reason: ""
+  };
+}
+
+function removeMarkdownAnnotationGroup(source, ranges, groupId) {
+  const groupedRanges = ranges
+    .filter((range) => range.groupId === groupId)
+    .sort((left, right) => left.start - right.start);
+  if (!groupedRanges.length) {
+    return {
+      changed: false,
+      markdown: source,
+      reason: "hidden-text-not-found"
+    };
+  }
+
+  let cursor = 0;
+  let markdown = "";
+  for (const range of groupedRanges) {
+    markdown += source.slice(cursor, range.start);
+    markdown += getAnnotationReplacement(source, range);
+    cursor = range.end;
+  }
+  markdown += source.slice(cursor);
+  return {
+    changed: markdown !== source,
+    markdown,
     reason: ""
   };
 }
@@ -210,6 +265,9 @@ function formatAnnotationContent(text, syntax) {
   const content = syntax.encoded
     ? encodeAnnotationContent(text)
     : text;
+  if (syntax.encoded && syntax.groupId) {
+    return `${syntax.open}${syntax.groupId}:${content}${syntax.close}`;
+  }
   return `${syntax.open}${content}${syntax.close}`;
 }
 
@@ -300,7 +358,7 @@ function touchesMarkdownSyntaxBoundary(source, range) {
     start: lineStart,
     end: lineEnd
   });
-  return prefixEnd > lineStart && range.start <= prefixEnd;
+  return prefixEnd > lineStart && range.start < prefixEnd;
 }
 
 function collectMarkdownLinkRanges(source) {
@@ -329,6 +387,7 @@ function collectProtectedRanges(markdown) {
   return mergeRanges([
     ...collectCodeRanges(markdown),
     ...collectMarkdownHighlightRanges(markdown),
+    ...collectMarkdownCircleRanges(markdown),
     ...collectMarkdownHiddenTextRanges(markdown)
   ]);
 }
@@ -368,6 +427,16 @@ function collectMarkdownHiddenTextRanges(markdown) {
   ]);
 }
 
+function collectMarkdownCircleRanges(markdown) {
+  return collectAnnotationRanges(markdown, [
+    {
+      open: "{{circle64:",
+      close: "}}",
+      encoded: true
+    }
+  ]);
+}
+
 function collectAnnotationRanges(markdown, syntaxes) {
   return syntaxes
     .flatMap((syntax) => collectDelimitedAnnotationRanges(markdown, syntax))
@@ -391,19 +460,42 @@ function collectDelimitedAnnotationRanges(markdown, syntax) {
       continue;
     }
 
+    const encodedMetadata = syntax.encoded
+      ? parseEncodedAnnotationMetadata(markdown.slice(contentStart, contentEnd))
+      : { groupId: "", encodedText: markdown.slice(contentStart, contentEnd) };
+
     ranges.push({
       start,
       end,
       contentStart,
       contentEnd,
       encoded: Boolean(syntax.encoded),
+      groupId: encodedMetadata.groupId,
       replacementText: syntax.encoded
-        ? decodeAnnotationContent(markdown.slice(contentStart, contentEnd))
+        ? decodeAnnotationContent(encodedMetadata.encodedText)
         : ""
     });
     start = markdown.indexOf(syntax.open, end);
   }
   return ranges;
+}
+
+function parseEncodedAnnotationMetadata(content) {
+  const value = String(content || "");
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex > 0) {
+    const groupId = value.slice(0, separatorIndex);
+    if (/^[a-z0-9-]+$/i.test(groupId)) {
+      return {
+        groupId,
+        encodedText: value.slice(separatorIndex + 1)
+      };
+    }
+  }
+  return {
+    groupId: "",
+    encodedText: value
+  };
 }
 
 function collectRegexRanges(source, pattern) {
@@ -755,4 +847,9 @@ function decodeAnnotationContent(encodedText) {
   } catch {
     return "";
   }
+}
+
+function createAnnotationGroupId() {
+  const randomPart = Math.random().toString(36).slice(2, 8);
+  return `g-${Date.now().toString(36)}-${randomPart}`;
 }

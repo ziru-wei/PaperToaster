@@ -1,5 +1,9 @@
 import { MessageType } from "../shared/messages.js";
 import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
+import {
+  areSavedQuestionAnswerUnitsCollapsed,
+  setSavedQuestionAnswerUnitsCollapsed
+} from "./conversation-message-renderer.js";
 import { createAskFlowController } from "./ask-flow-controller.js";
 import { createComposerController } from "./composer-controller.js";
 import { createComparativeReadingController } from "./comparative-reading-controller.js";
@@ -130,7 +134,7 @@ composer = createComposerController({
 
 elements.openDashboard.addEventListener("click", openDashboard);
 const savedQaToggleDrag = createFloatingButtonPositionController({
-  button: elements.savedQaToggle,
+  button: elements.savedQaControls,
   storageKey: SAVED_QA_TOGGLE_TOP_KEY
 });
 elements.savedQaToggle.addEventListener("click", async () => {
@@ -141,6 +145,16 @@ elements.savedQaToggle.addEventListener("click", async () => {
   await conversation.toggleSavedQuestionAnswerView();
   syncSavedQuestionAnswerMode();
 });
+elements.savedQaCollapseToggle.addEventListener("click", () => {
+  if (savedQaToggleDrag.consumeSuppressedClick()) {
+    return;
+  }
+
+  const shouldCollapse = !areSavedQuestionAnswerUnitsCollapsed(elements.conversationThread);
+  setSavedQuestionAnswerUnitsCollapsed(elements.conversationThread, shouldCollapse);
+  syncSavedQuestionAnswerMode();
+});
+elements.conversationThread.addEventListener("saved-qa-unit-collapse-change", syncSavedQuestionAnswerMode);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === MessageType.PDF_SELECTION_CHANGED) {
@@ -191,12 +205,19 @@ function syncSavedQuestionAnswerMode() {
   const isActive = conversation.isSavedQuestionAnswerViewActive();
   const hasDocument = Boolean(documentContext.getCurrentDocument());
   const isComparative = Boolean(comparativeReading?.isActive());
+  const savedModeActive = isActive && !isComparative;
 
-  document.body.classList.toggle("saved-qa-mode", isActive && !isComparative);
-  elements.savedQaToggle.hidden = isComparative || !hasDocument;
-  elements.savedQaToggle.classList.toggle("active", isActive && !isComparative);
+  document.body.classList.toggle("saved-qa-mode", savedModeActive);
+  elements.savedQaControls.hidden = isComparative || !hasDocument;
+  elements.savedQaToggle.classList.toggle("active", savedModeActive);
   elements.savedQaToggle.title = isActive ? "Back to chat" : "Saved Q&A";
   elements.savedQaToggle.setAttribute("aria-label", elements.savedQaToggle.title);
+  const savedQaAllCollapsed = savedModeActive && areSavedQuestionAnswerUnitsCollapsed(elements.conversationThread);
+  elements.savedQaCollapseToggle.hidden = !savedModeActive;
+  elements.savedQaCollapseToggle.classList.toggle("collapsed", savedQaAllCollapsed);
+  elements.savedQaCollapseToggle.title = savedQaAllCollapsed ? "Expand notes" : "Collapse notes";
+  elements.savedQaCollapseToggle.setAttribute("aria-label", elements.savedQaCollapseToggle.title);
+  elements.savedQaCollapseToggle.setAttribute("aria-pressed", String(savedQaAllCollapsed));
 }
 
 function shouldAutoOpenSavedQuestionAnswerView(document) {
@@ -232,8 +253,10 @@ function addDiagnostic(message) {
 function createFloatingButtonPositionController({ button, storageKey }) {
   const minTopPercent = 18;
   const maxTopPercent = 82;
+  const dragThreshold = 4;
+  const suppressedClickMs = 220;
   let drag = null;
-  let suppressClick = false;
+  let suppressClickUntil = 0;
 
   button.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) {
@@ -245,43 +268,46 @@ function createFloatingButtonPositionController({ button, storageKey }) {
       startY: event.clientY,
       moved: false
     };
-    button.setPointerCapture?.(event.pointerId);
+    window.addEventListener("pointermove", handlePointerMove, { capture: true });
+    window.addEventListener("pointerup", handlePointerEnd, { capture: true });
+    window.addEventListener("pointercancel", handlePointerEnd, { capture: true });
   });
 
-  button.addEventListener("pointermove", (event) => {
+  function handlePointerMove(event) {
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
 
     const delta = Math.abs(event.clientY - drag.startY);
-    if (delta > 3) {
+    if (delta > dragThreshold) {
       drag.moved = true;
-      suppressClick = true;
+      button.classList.add("dragging");
     }
 
     if (!drag.moved) {
       return;
     }
 
+    event.preventDefault();
     const nextTop = clamp((event.clientY / Math.max(window.innerHeight, 1)) * 100, minTopPercent, maxTopPercent);
     button.style.top = `${nextTop}%`;
-  });
+  }
 
-  button.addEventListener("pointerup", (event) => {
+  function handlePointerEnd(event) {
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
 
-    button.releasePointerCapture?.(event.pointerId);
     if (drag.moved) {
+      suppressClickUntil = Date.now() + suppressedClickMs;
       persist();
     }
     drag = null;
-  });
-
-  button.addEventListener("pointercancel", () => {
-    drag = null;
-  });
+    button.classList.remove("dragging");
+    window.removeEventListener("pointermove", handlePointerMove, { capture: true });
+    window.removeEventListener("pointerup", handlePointerEnd, { capture: true });
+    window.removeEventListener("pointercancel", handlePointerEnd, { capture: true });
+  }
 
   async function load() {
     try {
@@ -309,11 +335,11 @@ function createFloatingButtonPositionController({ button, storageKey }) {
   }
 
   function consumeSuppressedClick() {
-    if (!suppressClick) {
+    if (Date.now() > suppressClickUntil) {
       return false;
     }
 
-    suppressClick = false;
+    suppressClickUntil = 0;
     return true;
   }
 

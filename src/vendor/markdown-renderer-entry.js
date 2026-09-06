@@ -28,6 +28,9 @@ markdown.inline.ruler.before("emphasis", "paper_hidden_text", (state, silent) =>
 
     const openToken = state.push("span_open", "span", 1);
     openToken.attrSet("class", "paper-hidden-text");
+    if (encodedHidden.groupId) {
+      openToken.attrSet("data-annotation-group", encodedHidden.groupId);
+    }
     const textToken = state.push("text", "", 0);
     textToken.content = encodedHidden.content;
     state.push("span_close", "span", -1);
@@ -87,6 +90,30 @@ markdown.inline.ruler.before("emphasis", "paper_highlight_text", (state, silent)
   return true;
 });
 
+markdown.inline.ruler.before("emphasis", "paper_circle_text", (state, silent) => {
+  const encodedCircle = parseEncodedAnnotation(state, {
+    open: "{{circle64:",
+    close: "}}"
+  });
+  if (!encodedCircle) {
+    return false;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  const openToken = state.push("span_open", "span", 1);
+  openToken.markup = "circle64";
+  openToken.attrSet("class", "paper-circle-text");
+  const textToken = state.push("text", "", 0);
+  textToken.content = encodedCircle.content;
+  const closeToken = state.push("span_close", "span", -1);
+  closeToken.markup = "circle64";
+  state.pos = encodedCircle.end;
+  return true;
+});
+
 markdown.inline.ruler.before("emphasis", "mark", (state, silent) => {
   const start = state.pos;
   if (state.src.charCodeAt(start) !== 0x3D || state.src.charCodeAt(start + 1) !== 0x3D) {
@@ -126,14 +153,34 @@ function parseEncodedAnnotation(state, syntax) {
     return null;
   }
 
-  const content = decodeAnnotationContent(state.src.slice(contentStart, contentEnd));
+  const metadata = parseEncodedAnnotationMetadata(state.src.slice(contentStart, contentEnd));
+  const content = decodeAnnotationContent(metadata.encodedText);
   if (!content) {
     return null;
   }
 
   return {
     content,
+    groupId: metadata.groupId,
     end: contentEnd + syntax.close.length
+  };
+}
+
+function parseEncodedAnnotationMetadata(content) {
+  const value = String(content || "");
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex > 0) {
+    const groupId = value.slice(0, separatorIndex);
+    if (/^[a-z0-9-]+$/i.test(groupId)) {
+      return {
+        groupId,
+        encodedText: value.slice(separatorIndex + 1)
+      };
+    }
+  }
+  return {
+    groupId: "",
+    encodedText: value
   };
 }
 
@@ -191,7 +238,7 @@ const SANITIZE_OPTIONS = Object.freeze({
     "tr",
     "ul"
   ],
-  ALLOWED_ATTR: ["class", "href", "rel", "target", "title"]
+  ALLOWED_ATTR: ["class", "data-annotation-group", "href", "rel", "target", "title"]
 });
 
 export function renderMarkdown(markdownText, options = {}) {

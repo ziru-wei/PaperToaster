@@ -14,8 +14,10 @@ export function renderComparativeReadingPanel({
   onToggleSaved,
   onDeleteUnit,
   onHighlightAssistantSelection,
+  onCircleAssistantSelection,
   onHideAssistantSelection,
   onRemoveAssistantHighlight,
+  onRemoveAssistantCircle,
   onRemoveAssistantHiddenText,
   scrollToLatest,
   scrollToBottom = true
@@ -57,8 +59,10 @@ export function renderComparativeReadingPanel({
     onToggleSaved,
     onDeleteUnit,
     onHighlightAssistantSelection,
+    onCircleAssistantSelection,
     onHideAssistantSelection,
     onRemoveAssistantHighlight,
+    onRemoveAssistantCircle,
     onRemoveAssistantHiddenText
   });
   if (scrollToBottom) {

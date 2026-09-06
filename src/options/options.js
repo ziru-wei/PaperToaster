@@ -16,6 +16,7 @@ import {
   hasConfiguredAiProvider,
   saveAiSettings
 } from "../storage/ai-settings-store.js";
+import { stripStoredAssistantBoldMarkers } from "../storage/maintenance-store.js";
 
 const elements = {
   aiProvider: document.querySelector("#aiProvider"),
@@ -32,6 +33,7 @@ const elements = {
   addPreset: document.querySelector("#addPreset"),
   resetPresets: document.querySelector("#resetPresets"),
   savePresets: document.querySelector("#savePresets"),
+  stripStoredBoldMarkers: document.querySelector("#stripStoredBoldMarkers"),
   presetList: document.querySelector("#presetList"),
   presetTemplate: document.querySelector("#presetTemplate"),
   status: document.querySelector("#status")
@@ -68,6 +70,7 @@ elements.clearAiKey.addEventListener("click", clearAiProviderKey);
 elements.aiDebugMode.addEventListener("change", saveAiProviderSettings);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
+elements.stripStoredBoldMarkers.addEventListener("click", stripStoredBoldMarkers);
 
 loadAiSettings();
 loadPresets();
@@ -214,6 +217,29 @@ async function resetPresets() {
     setStatus("Reset to defaults.");
   } catch (error) {
     setStatus(error.message || String(error), true);
+  }
+}
+
+async function stripStoredBoldMarkers() {
+  const shouldContinue = window.confirm(
+    "Strip Markdown bold markers from all stored assistant responses? This rewrites local conversation storage."
+  );
+  if (!shouldContinue) {
+    return;
+  }
+
+  try {
+    elements.stripStoredBoldMarkers.disabled = true;
+    setStatus("Stripping stored bold markers...");
+    const result = await stripStoredAssistantBoldMarkers();
+    setStatus([
+      `Updated ${result.conversation.updated}/${result.conversation.checked} paper chat responses.`,
+      `Updated ${result.comparison.updated}/${result.comparison.checked} comparison responses.`
+    ].join(" "));
+  } catch (error) {
+    setStatus(error.message || String(error), true);
+  } finally {
+    elements.stripStoredBoldMarkers.disabled = false;
   }
 }
 

@@ -6,17 +6,21 @@ import {
   listSavedQuestionAnswerUnits,
   listStoredChatThreads,
   saveStoredChatThread,
-  setActiveStoredChatThread
+  setActiveStoredChatThread,
+  setPinnedSavedQuestionAnswerUnit
 } from "../storage/chat-store.js";
 import {
   collapseOpenConversationSelections,
+  getSavedQuestionAnswerCollapsedUnitKeys,
   renderSavedQuestionAnswerUnits,
   renderConversationMessages,
   toggleConversationSelection
 } from "./conversation-message-renderer.js";
 import {
+  applyMarkdownCircle,
   applyMarkdownHiddenText,
   applyMarkdownHighlight,
+  removeMarkdownCircle,
   removeMarkdownHiddenText,
   removeMarkdownHighlight
 } from "../markdown/highlight-markdown.js";
@@ -40,6 +44,7 @@ export function createConversationPanelController({
   let transientMessageId = 0;
   let savedViewActive = false;
   let savedQuestionAnswerUnits = [];
+  let savedCollapsedUnitKeys = new Set();
 
   const threadWheel = createThreadWheelController({
     archiveButton: threadArchiveButton,
@@ -86,12 +91,14 @@ export function createConversationPanelController({
     }
 
     threadUrl = nextUrl;
+    savedCollapsedUnitKeys = new Set();
 
     if (!threadUrl) {
       messages = [];
       activeThreadId = "";
       threadSummaries = [];
       savedQuestionAnswerUnits = [];
+      savedCollapsedUnitKeys = new Set();
       threadWheel.close();
       render();
       scrollToLatest.update();
@@ -224,7 +231,8 @@ export function createConversationPanelController({
 
     messages[index] = {
       ...message,
-      isSaved: !isMessageSaved(message)
+      isSaved: !isMessageSaved(message),
+      isPinned: isMessageSaved(message) ? false : Boolean(message.isPinned)
     };
     render({ scrollToBottom: false });
     await persist();
@@ -240,13 +248,14 @@ export function createConversationPanelController({
     const index = Number(messageIndex);
     const message = messages[index];
     if (!message || message.role !== "assistant" || message.pending) {
-      return false;
+      return createEditResult(false, "response message is unavailable.");
     }
 
     const result = applyMarkdownHighlight(message.text, selectedText);
     if (!result.changed) {
-      onDiagnostic?.(`Highlight skipped: ${formatHighlightSkipReason(result.reason)}`);
-      return false;
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Highlight skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     messages[index] = {
@@ -261,20 +270,21 @@ export function createConversationPanelController({
       render({ scrollToBottom: false });
     }
     onChange?.();
-    return true;
+    return createEditResult(true);
   }
 
   async function hideAssistantSelection(messageIndex, selectedText) {
     const index = Number(messageIndex);
     const message = messages[index];
     if (!message || message.role !== "assistant" || message.pending) {
-      return false;
+      return createEditResult(false, "response message is unavailable.");
     }
 
     const result = applyMarkdownHiddenText(message.text, selectedText);
     if (!result.changed) {
-      onDiagnostic?.(`Hide skipped: ${formatHighlightSkipReason(result.reason)}`);
-      return false;
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Hide skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     messages[index] = {
@@ -289,7 +299,36 @@ export function createConversationPanelController({
       render({ scrollToBottom: false });
     }
     onChange?.();
-    return true;
+    return createEditResult(true);
+  }
+
+  async function circleAssistantSelection(messageIndex, selectedText) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return createEditResult(false, "response message is unavailable.");
+    }
+
+    const result = applyMarkdownCircle(message.text, selectedText);
+    if (!result.changed) {
+      const reason = formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(`Circle skipped: ${reason}`);
+      return createEditResult(false, reason);
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return createEditResult(true);
   }
 
   async function removeAssistantHighlight(messageIndex, highlightIndex) {
@@ -320,14 +359,42 @@ export function createConversationPanelController({
     return true;
   }
 
-  async function removeAssistantHiddenText(messageIndex, hiddenIndex) {
+  async function removeAssistantCircle(messageIndex, circleIndex) {
     const index = Number(messageIndex);
     const message = messages[index];
     if (!message || message.role !== "assistant" || message.pending) {
       return false;
     }
 
-    const result = removeMarkdownHiddenText(message.text, hiddenIndex);
+    const result = removeMarkdownCircle(message.text, circleIndex);
+    if (!result.changed) {
+      onDiagnostic?.("Circle removal skipped: circle was not found.");
+      return false;
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return true;
+  }
+
+  async function removeAssistantHiddenText(messageIndex, hiddenIndex, groupId = "") {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = removeMarkdownHiddenText(message.text, hiddenIndex, groupId);
     if (!result.changed) {
       onDiagnostic?.("Hidden text removal skipped: hidden text was not found.");
       return false;
@@ -352,6 +419,10 @@ export function createConversationPanelController({
     return editSavedAnswerMessage(unit, (message) => applyMarkdownHighlight(message.text, selectedText));
   }
 
+  async function circleSavedAnswerSelection(unit, selectedText) {
+    return editSavedAnswerMessage(unit, (message) => applyMarkdownCircle(message.text, selectedText));
+  }
+
   async function hideSavedAnswerSelection(unit, selectedText) {
     return editSavedAnswerMessage(unit, (message) => applyMarkdownHiddenText(message.text, selectedText), {
       unchanged: "Hide skipped: selected text was not found uniquely."
@@ -365,18 +436,44 @@ export function createConversationPanelController({
     });
   }
 
-  async function removeSavedAnswerHiddenText(unit, hiddenIndex) {
-    return editSavedAnswerMessage(unit, (message) => removeMarkdownHiddenText(message.text, hiddenIndex), {
+  async function removeSavedAnswerCircle(unit, circleIndex) {
+    return editSavedAnswerMessage(unit, (message) => removeMarkdownCircle(message.text, circleIndex), {
+      missingMessage: "Circle removal skipped: saved answer was not found.",
+      unchanged: "Circle removal skipped: circle was not found."
+    });
+  }
+
+  async function removeSavedAnswerHiddenText(unit, hiddenIndex, groupId = "") {
+    return editSavedAnswerMessage(unit, (message) => removeMarkdownHiddenText(message.text, hiddenIndex, groupId), {
       missingMessage: "Hidden text removal skipped: saved answer was not found.",
       unchanged: "Hidden text removal skipped: hidden text was not found."
     });
+  }
+
+  async function toggleSavedQuestionAnswerPinned(unit) {
+    captureSavedCollapseState();
+    const didUpdate = await setPinnedSavedQuestionAnswerUnit(threadUrl, unit);
+    if (!didUpdate) {
+      onDiagnostic?.("Pin skipped: saved answer was not found.");
+      return false;
+    }
+
+    if (activeThreadId) {
+      const thread = await getStoredChatThreadById(threadUrl, activeThreadId);
+      applyThread(thread);
+    }
+    await loadSavedQuestionAnswerUnits();
+    await refreshThreadList();
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
   }
 
   async function editSavedAnswerMessage(unit, editMessage, diagnostics = {}) {
     const threadId = String(unit?.threadId || "").trim();
     const messageIndex = Number(unit?.assistantMessageIndex);
     if (!threadUrl || !threadId || !Number.isInteger(messageIndex) || messageIndex < 0) {
-      return false;
+      return createEditResult(false, "saved answer reference is unavailable.");
     }
 
     const targetThread = threadId === activeThreadId
@@ -387,14 +484,16 @@ export function createConversationPanelController({
       : [];
     const message = targetMessages[messageIndex];
     if (!message || message.role !== "assistant" || message.pending) {
-      onDiagnostic?.(diagnostics.missingMessage || "Highlight skipped: saved answer was not found.");
-      return false;
+      const reason = diagnostics.missingMessage || "saved answer was not found.";
+      onDiagnostic?.(reason.startsWith("Highlight") || reason.startsWith("Hide") ? reason : `Highlight skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     const result = editMessage(message);
     if (!result.changed) {
-      onDiagnostic?.(diagnostics.unchanged || `Highlight skipped: ${formatHighlightSkipReason(result.reason)}`);
-      return false;
+      const reason = diagnostics.unchanged || formatHighlightSkipReason(result.reason);
+      onDiagnostic?.(diagnostics.unchanged || `Highlight skipped: ${reason}`);
+      return createEditResult(false, reason);
     }
 
     targetMessages[messageIndex] = {
@@ -416,7 +515,7 @@ export function createConversationPanelController({
     await refreshThreadList();
     render({ scrollToBottom: false });
     onChange?.();
-    return true;
+    return createEditResult(true);
   }
 
   async function deleteMessageUnit(messageIndex) {
@@ -700,6 +799,7 @@ export function createConversationPanelController({
 
     savedViewActive = false;
     savedQuestionAnswerUnits = [];
+    savedCollapsedUnitKeys = new Set();
     render();
     onChange?.();
     scrollToConversationMessagePair({
@@ -726,11 +826,16 @@ export function createConversationPanelController({
 
   function render({ scrollToBottom = true } = {}) {
     if (savedViewActive) {
+      captureSavedCollapseState();
       renderSavedQuestionAnswerUnits(threadElement, savedQuestionAnswerUnits, {
+        collapsedUnitKeys: savedCollapsedUnitKeys,
         onJumpToUnit: jumpToSavedQuestionAnswerUnit,
+        onTogglePinned: toggleSavedQuestionAnswerPinned,
         onHighlightSavedAnswerSelection: highlightSavedAnswerSelection,
+        onCircleSavedAnswerSelection: circleSavedAnswerSelection,
         onHideSavedAnswerSelection: hideSavedAnswerSelection,
         onRemoveSavedAnswerHighlight: removeSavedAnswerHighlight,
+        onRemoveSavedAnswerCircle: removeSavedAnswerCircle,
         onRemoveSavedAnswerHiddenText: removeSavedAnswerHiddenText
       });
       scrollToLatest.hide();
@@ -741,8 +846,10 @@ export function createConversationPanelController({
       onToggleSaved: toggleMessageSaved,
       onDeleteUnit: deleteMessageUnit,
       onHighlightAssistantSelection: highlightAssistantSelection,
+      onCircleAssistantSelection: circleAssistantSelection,
       onHideAssistantSelection: hideAssistantSelection,
       onRemoveAssistantHighlight: removeAssistantHighlight,
+      onRemoveAssistantCircle: removeAssistantCircle,
       onRemoveAssistantHiddenText: removeAssistantHiddenText
     });
     if (scrollToBottom) {
@@ -759,6 +866,14 @@ export function createConversationPanelController({
     return !savedViewActive && messages.length > 0;
   }
 
+  function captureSavedCollapseState() {
+    if (!savedViewActive || !threadElement.classList.contains("saved-qa-thread")) {
+      return;
+    }
+
+    savedCollapsedUnitKeys = getSavedQuestionAnswerCollapsedUnitKeys(threadElement);
+  }
+
   return {
     setDocumentUrl,
     appendMessage,
@@ -768,8 +883,10 @@ export function createConversationPanelController({
     removeTransientMessage,
     toggleMessageSaved,
     highlightAssistantSelection,
+    circleAssistantSelection,
     hideAssistantSelection,
     removeAssistantHighlight,
+    removeAssistantCircle,
     removeAssistantHiddenText,
     deleteMessageUnit,
     getMessages,
@@ -833,7 +950,8 @@ function normalizeVisibleMessages(messages) {
       text: String(message.text || "").trim(),
       selectionText: String(message.selectionText || "").trim(),
       createdAt: Number(message.createdAt) || Date.now(),
-      isSaved: isMessageSaved(message)
+      isSaved: isMessageSaved(message),
+      isPinned: isMessageSaved(message) && Boolean(message.isPinned)
     }));
 }
 
@@ -848,7 +966,23 @@ function formatHighlightSkipReason(reason) {
   if (reason === "selection-not-found") {
     return "selected text was not found in the response markdown.";
   }
+  if (reason === "unsupported-highlight-selection") {
+    return "selected text crosses unsupported markdown syntax or block boundaries.";
+  }
+  if (reason === "already-hidden") {
+    return "selected text is already hidden.";
+  }
+  if (reason === "already-circled") {
+    return "selected text is already circled.";
+  }
   return "select response text first.";
+}
+
+function createEditResult(changed, reason = "") {
+  return {
+    changed: Boolean(changed),
+    reason
+  };
 }
 
 function hasVisibleMessages(messages) {

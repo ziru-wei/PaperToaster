@@ -75,9 +75,14 @@
         </div>
       </section>
     </main>
-    <button id="savedQaToggle" class="saved-qa-toggle" type="button" title="Saved Q&A" aria-label="Saved Q&A" hidden>
-      <span class="icon-mask saved-qa-toggle-icon" aria-hidden="true"></span>
-    </button>
+    <div id="savedQaControls" class="saved-qa-controls" hidden>
+      <button id="savedQaToggle" class="saved-qa-toggle" type="button" title="Saved Q&A" aria-label="Saved Q&A">
+        <span class="icon-mask saved-qa-toggle-icon" aria-hidden="true"></span>
+      </button>
+      <button id="savedQaCollapseToggle" class="saved-qa-collapse-toggle" type="button" title="Collapse notes" aria-label="Collapse notes" hidden>
+        <span class="icon-mask saved-qa-collapse-icon" aria-hidden="true"></span>
+      </button>
+    </div>
     <script type="module" src="./sidepanel.js"></script>
   </body>
 </html>
