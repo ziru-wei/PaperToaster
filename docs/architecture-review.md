@@ -13,11 +13,13 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`
 8. Side panel orchestration: `src/sidepanel/sidepanel.js`, `src/sidepanel/sidepanel-document-context.js`, `src/sidepanel/paper-actions-controller.js`, `src/sidepanel/ask-flow-controller.js`
 9. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`
-10. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
+10. Dashboard orchestration: `src/dashboard/dashboard.js`, `src/dashboard/dashboard-renderer.js`, `src/dashboard/dashboard-bulk-actions.js`
+11. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
 
 ## Architectural Risks
 
 - `src/sidepanel/sidepanel.js` is now a thin coordinator. The largest remaining side panel module is `sidepanel-document-context.js`, because active PDF tab mode and dashboard-selected library mode both belong to document context.
+- `src/dashboard/dashboard.js` is now a page coordinator. Card/sort DOM creation lives in `dashboard-renderer.js`; archive/import/delete selection workflow lives in `dashboard-bulk-actions.js`.
 - Document cache and chat memory share the same canonical paper key. The remaining key risk is alias/key promotion for URLs that later reveal a better identifier.
 - Chat memory has been moved toward the same IndexedDB database as document memory. Settings and prompt presets still use `chrome.storage.local`.
 - `formatSelectionContextForPrompt()` belongs in the AI prompt layer, not the PDF/RAG layer.
@@ -37,8 +39,9 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 8. Extract composer input behavior into `src/sidepanel/composer-controller.js`. Done.
 9. Extract conversation rendering, thread wheel, and scroll-to-latest behavior into focused side panel modules. Done.
 10. Group side panel document context, paper actions, and ask flow into coarse modules. Done.
-11. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
-12. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
+11. Split Reading Dashboard rendering and bulk management into coarse modules. Done.
+12. Decide whether to delete `docmarrow` or register it as an explicit experimental parser.
+13. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
 
 ## Memory Key Rule
 
