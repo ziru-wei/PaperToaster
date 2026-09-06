@@ -44,6 +44,7 @@ conversation = createConversationPanelController({
 
 const selectionPanel = createSelectionPanelController({
   quoteElement: elements.selectionText,
+  clearButton: elements.clearSelectionText,
   contextStatusElement: elements.selectionContextStatus
 });
 
@@ -158,8 +159,7 @@ elements.conversationThread.addEventListener("saved-qa-unit-collapse-change", sy
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === MessageType.PDF_SELECTION_CHANGED) {
-    routeSuggestion.reset();
-    documentContext.refreshSelection();
+    void handlePdfSelectionChanged();
   }
 
   if (message?.type === MessageType.LIBRARY_PAPER_CONTEXT_CHANGED) {
@@ -175,6 +175,15 @@ chrome.runtime.onMessage.addListener((message) => {
     paperActions.refresh();
   }
 });
+
+async function handlePdfSelectionChanged() {
+  routeSuggestion.reset();
+  if (conversation.isSavedQuestionAnswerViewActive()) {
+    await conversation.setSavedQuestionAnswerViewActive(false);
+    syncSavedQuestionAnswerMode();
+  }
+  await documentContext.refreshSelection();
+}
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local" && changes[PROMPT_PRESETS_KEY]) {
@@ -210,13 +219,15 @@ function syncSavedQuestionAnswerMode() {
   document.body.classList.toggle("saved-qa-mode", savedModeActive);
   elements.savedQaControls.hidden = isComparative || !hasDocument;
   elements.savedQaToggle.classList.toggle("active", savedModeActive);
-  elements.savedQaToggle.title = isActive ? "Back to chat" : "Saved Q&A";
-  elements.savedQaToggle.setAttribute("aria-label", elements.savedQaToggle.title);
+  const savedToggleLabel = isActive ? "Back to chat" : "Saved Q&A";
+  elements.savedQaToggle.removeAttribute("title");
+  elements.savedQaToggle.setAttribute("aria-label", savedToggleLabel);
   const savedQaAllCollapsed = savedModeActive && areSavedQuestionAnswerUnitsCollapsed(elements.conversationThread);
   elements.savedQaCollapseToggle.hidden = !savedModeActive;
   elements.savedQaCollapseToggle.classList.toggle("collapsed", savedQaAllCollapsed);
-  elements.savedQaCollapseToggle.title = savedQaAllCollapsed ? "Expand notes" : "Collapse notes";
-  elements.savedQaCollapseToggle.setAttribute("aria-label", elements.savedQaCollapseToggle.title);
+  const collapseToggleLabel = savedQaAllCollapsed ? "Expand notes" : "Collapse notes";
+  elements.savedQaCollapseToggle.removeAttribute("title");
+  elements.savedQaCollapseToggle.setAttribute("aria-label", collapseToggleLabel);
   elements.savedQaCollapseToggle.setAttribute("aria-pressed", String(savedQaAllCollapsed));
 }
 

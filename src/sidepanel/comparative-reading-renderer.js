@@ -10,6 +10,7 @@ export function renderComparativeReadingPanel({
   contextReadiness,
   allowRemovePapers,
   onRemovePaper,
+  onClearPapers,
   onOpenPaperUrl,
   onToggleSaved,
   onDeleteUnit,
@@ -53,6 +54,7 @@ export function renderComparativeReadingPanel({
     selectedPapers,
     allowRemovePapers,
     onRemovePaper,
+    onClearPapers,
     onOpenPaperUrl
   });
   renderConversationMessages(elements.conversationThread, messages, {
@@ -98,7 +100,7 @@ function renderContextReadiness(element, contextReadiness = {}) {
   element.setAttribute("aria-label", label);
 }
 
-function renderPaperChips({ container, selectedPapers, allowRemovePapers, onRemovePaper, onOpenPaperUrl }) {
+function renderPaperChips({ container, selectedPapers, allowRemovePapers, onRemovePaper, onClearPapers, onOpenPaperUrl }) {
   if (!selectedPapers.length) {
     container.replaceChildren();
     container.hidden = true;
@@ -106,7 +108,27 @@ function renderPaperChips({ container, selectedPapers, allowRemovePapers, onRemo
   }
 
   container.hidden = false;
-  container.replaceChildren(...selectedPapers.map((paper, index) => {
+  const children = [];
+  if (allowRemovePapers) {
+    const clearRow = document.createElement("div");
+    clearRow.className = "comparison-paper-clear-row";
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "comparison-paper-clear";
+    clearButton.setAttribute("aria-label", "Clear all comparison papers");
+    clearButton.textContent = "×";
+    clearButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onClearPapers?.();
+    });
+
+    clearRow.append(clearButton);
+    children.push(clearRow);
+  }
+
+  children.push(...selectedPapers.map((paper, index) => {
     const chip = document.createElement("span");
     chip.className = "comparison-paper-chip";
     chip.classList.toggle("locked", !allowRemovePapers);
@@ -154,4 +176,5 @@ function renderPaperChips({ container, selectedPapers, allowRemovePapers, onRemo
     chip.append(label, title, actions);
     return chip;
   }));
+  container.replaceChildren(...children);
 }

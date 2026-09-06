@@ -63,13 +63,16 @@
         <div class="composer">
           <div id="comparisonPaperChips" class="comparison-paper-chips" aria-label="Selected comparison papers" hidden></div>
           <div class="composer-input-stack">
-            <button id="scrollToLatest" class="scroll-to-latest" type="button" title="Scroll to latest" aria-label="Scroll to latest" hidden>
+            <button id="scrollToLatest" class="scroll-to-latest" type="button" aria-label="Scroll to latest" hidden>
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 5v14"></path>
                 <path d="m19 12-7 7-7-7"></path>
               </svg>
             </button>
-            <blockquote id="selectionText" class="selection-quote" tabindex="0" aria-expanded="false"></blockquote>
+            <div class="selection-quote-layer">
+              <blockquote id="selectionText" class="selection-quote empty" tabindex="0" aria-expanded="false"></blockquote>
+              <button id="clearSelectionText" class="selection-quote-clear" type="button" aria-label="Remove selected text" hidden>×</button>
+            </div>
             <form id="selectionQuestionForm">
               <div class="prompt-field">
                 <div id="routeSuggestion" class="route-suggestion" aria-live="polite" hidden></div>
@@ -84,10 +87,10 @@
       </section>
     </main>
     <div id="savedQaControls" class="saved-qa-controls" hidden>
-      <button id="savedQaToggle" class="saved-qa-toggle" type="button" title="Saved Q&A" aria-label="Saved Q&A">
+      <button id="savedQaToggle" class="saved-qa-toggle" type="button" aria-label="Saved Q&A">
         <span class="icon-mask saved-qa-toggle-icon" aria-hidden="true"></span>
       </button>
-      <button id="savedQaCollapseToggle" class="saved-qa-collapse-toggle" type="button" title="Collapse notes" aria-label="Collapse notes" hidden>
+      <button id="savedQaCollapseToggle" class="saved-qa-collapse-toggle" type="button" aria-label="Collapse notes" hidden>
         <span class="icon-mask saved-qa-collapse-icon" aria-hidden="true"></span>
       </button>
     </div>

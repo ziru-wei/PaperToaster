@@ -185,7 +185,9 @@ function createPaperCard({
   const footer = document.createElement("div");
   footer.className = "paper-footer";
 
-  footer.append(createStarButton(paper, onTogglePaperStarred));
+  if (!manageMode) {
+    footer.append(createStarButton(paper, onTogglePaperStarred));
+  }
   const time = createPaperTimeLine(paper);
   if (time) {
     footer.append(time);
@@ -203,7 +205,6 @@ function createAddToComparisonButton(paper, onAddPaperToComparison) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "paper-compare-add";
-  button.title = "Add to Comparative Reading";
   button.setAttribute("aria-label", `Add ${paper.title || "paper"} to Comparative Reading`);
   button.textContent = "+";
   button.addEventListener("click", (event) => {
@@ -288,11 +289,14 @@ function createComparisonRecordCard({
   time.className = "comparison-record-time";
   time.textContent = formatTime(comparison.updatedAt || comparison.firstMessageCreatedAt);
 
-  meta.append(time, createStarButton(comparison, onToggleComparisonStarred, {
-    className: "comparison-record-star",
-    starredLabel: "Unstar comparison",
-    unstarredLabel: "Star comparison"
-  }));
+  meta.append(time);
+  if (!manageMode) {
+    meta.append(createStarButton(comparison, onToggleComparisonStarred, {
+      className: "comparison-record-star",
+      starredLabel: "Unstar comparison",
+      unstarredLabel: "Star comparison"
+    }));
+  }
 
   main.append(title, meta);
   if (manageMode) {
@@ -305,7 +309,6 @@ function createComparisonRecordCard({
 function createPaperCheckbox(paper, selectedDocumentKeys, onSetPaperSelected) {
   const label = document.createElement("label");
   label.className = "paper-select";
-  label.title = `Select ${paper.title || "paper"}`;
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -328,7 +331,6 @@ function createPaperCheckbox(paper, selectedDocumentKeys, onSetPaperSelected) {
 function createComparisonCheckbox(comparison, selectedComparisonIds, onSetComparisonSelected) {
   const label = document.createElement("label");
   label.className = "comparison-select";
-  label.title = `Select ${comparison.title || "comparison"}`;
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -355,7 +357,6 @@ function createMessageRing(messageCount, maxMessageCount) {
   ring.className = "message-ring";
   ring.classList.toggle("empty", count === 0);
   ring.style.setProperty("--message-ratio", ratio.toFixed(3));
-  ring.title = `${count} messages`;
   ring.setAttribute("aria-label", `${count} messages`);
   return ring;
 }
@@ -364,7 +365,6 @@ function createTitleText(paper) {
   const text = document.createElement("span");
   text.className = "paper-title-text";
   text.textContent = paper.title;
-  text.title = paper.canonicalUrl || paper.documentKey || paper.title;
   return text;
 }
 
@@ -388,10 +388,10 @@ function createStarButton(paper, onTogglePaperStarred, options = {}) {
   button.type = "button";
   button.className = ["paper-star", options.className].filter(Boolean).join(" ");
   button.classList.toggle("starred", paper.isStarred);
-  button.title = paper.isStarred
+  const label = paper.isStarred
     ? options.starredLabel || "Unstar paper"
     : options.unstarredLabel || "Star paper";
-  button.setAttribute("aria-label", button.title);
+  button.setAttribute("aria-label", label);
   button.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();

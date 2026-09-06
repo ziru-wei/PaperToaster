@@ -42,6 +42,7 @@ const elements = {
   bulkActions: document.querySelector("#bulkActions"),
   selectionSummary: document.querySelector("#selectionSummary"),
   selectAllButton: document.querySelector("#selectAllButton"),
+  clearUnaskedButton: document.querySelector("#clearUnaskedButton"),
   backupSelectedButton: document.querySelector("#backupSelectedButton"),
   archiveSelectedButton: document.querySelector("#archiveSelectedButton"),
   deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
@@ -54,6 +55,7 @@ const elements = {
 const bulkActions = createDashboardBulkActions({
   state,
   elements,
+  onGetClearUnaskedSelection: getClearUnaskedSelection,
   onDeleteComplete: handlePapersDeleted,
   onRenderRequested: renderDashboard,
   onRefreshAllRequested: refreshAll
@@ -313,6 +315,29 @@ async function handlePapersDeleted(selection) {
     notifyPaperActivityChanged(documentKey);
   }
   await refreshRecords();
+}
+
+async function getClearUnaskedSelection() {
+  const [papers, comparisonSessions] = await Promise.all([
+    listLibraryPapers({
+      sortBy: "latestThread",
+      sortDirection: "desc"
+    }),
+    listComparisonSessions()
+  ]);
+  const comparisonDocumentKeys = new Set(
+    comparisonSessions.flatMap((session) => Array.isArray(session.documentKeys) ? session.documentKeys : [])
+  );
+
+  return {
+    documentKeys: papers
+      .filter(isDisplayablePaper)
+      .filter((paper) => Number(paper.messageCount || 0) === 0)
+      .filter((paper) => !comparisonDocumentKeys.has(paper.documentKey))
+      .map((paper) => paper.documentKey)
+      .filter(Boolean),
+    comparisonIds: []
+  };
 }
 
 async function listDashboardComparisons(query) {

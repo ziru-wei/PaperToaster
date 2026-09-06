@@ -97,7 +97,24 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   if (!units.length) {
     const empty = document.createElement("div");
     empty.className = "saved-qa-empty";
-    empty.textContent = "No saved Q&A yet.";
+    empty.setAttribute("aria-label", "Toaster is plugged in...");
+
+    const bubble = document.createElement("div");
+    bubble.className = "saved-qa-empty-bubble";
+    const speech = document.createElement("pre");
+    speech.textContent = [
+      ".--------------------------.",
+      "| Toaster is plugged in... |",
+      "'-------------v------------'"
+    ].join("\n");
+    bubble.append(speech);
+
+    const icon = document.createElement("img");
+    icon.className = "saved-qa-empty-icon";
+    icon.src = "../assets/extension/icon-128.png";
+    icon.alt = "";
+
+    empty.append(bubble, icon);
     threadElement.append(empty);
     return;
   }

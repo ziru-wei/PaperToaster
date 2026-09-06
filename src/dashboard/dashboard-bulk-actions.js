@@ -7,6 +7,7 @@ import {
 export function createDashboardBulkActions({
   state,
   elements,
+  onGetClearUnaskedSelection,
   onDeleteComplete,
   onRenderRequested,
   onRefreshAllRequested
@@ -44,6 +45,12 @@ export function createDashboardBulkActions({
       selectAllVisiblePapers();
     });
 
+    elements.clearUnaskedButton.addEventListener("click", () => {
+      clearUnaskedPapers().catch((error) => {
+        elements.summary.textContent = `Could not clear unasked papers: ${error.message || String(error)}`;
+      });
+    });
+
     elements.backupSelectedButton.addEventListener("click", () => {
       backupSelectedPapers().catch((error) => {
         elements.summary.textContent = `Could not back up papers: ${error.message || String(error)}`;
@@ -72,13 +79,19 @@ export function createDashboardBulkActions({
     elements.selectionSummary.textContent = `${selectedCount} selected`;
     elements.importButton.hidden = hasSelection;
     elements.selectAllButton.hidden = hasSelection;
+    elements.clearUnaskedButton.hidden = hasSelection;
+    elements.backupSelectedButton.hidden = !hasSelection;
+    elements.archiveSelectedButton.hidden = !hasSelection;
+    elements.deleteSelectedButton.hidden = !hasSelection;
     elements.selectAllButton.textContent = "Select all";
     elements.selectAllButton.disabled = state.papers.length === 0 && state.comparisons.length === 0;
+    elements.clearUnaskedButton.disabled = false;
     elements.backupSelectedButton.disabled = selectedCount === 0;
     elements.archiveSelectedButton.disabled = selectedCount === 0;
     elements.deleteSelectedButton.disabled = selectedCount === 0;
-    elements.manageButton.textContent = state.manageMode ? "Done" : "Manage";
     elements.manageButton.classList.toggle("active", state.manageMode);
+    elements.manageButton.setAttribute("aria-label", state.manageMode ? "Done managing papers" : "Manage papers");
+    elements.manageButton.setAttribute("aria-pressed", String(state.manageMode));
   }
 
   function setManageMode(manageMode) {
@@ -165,6 +178,28 @@ export function createDashboardBulkActions({
 
     await deleteLibraryRecords(selection);
     await afterDelete(selection);
+  }
+
+  async function clearUnaskedPapers() {
+    const selection = await Promise.resolve(onGetClearUnaskedSelection?.());
+    const documentKeys = Array.isArray(selection?.documentKeys) ? selection.documentKeys : [];
+    if (!documentKeys.length) {
+      window.alert("No unasked standalone papers to clear.");
+      return;
+    }
+
+    if (!window.confirm(`Clear ${documentKeys.length} unasked standalone paper(s)? This removes local paper records with no Q&A history and leaves comparative readings untouched.`)) {
+      return;
+    }
+
+    await deleteLibraryRecords({
+      documentKeys,
+      comparisonIds: []
+    });
+    await afterDelete({
+      documentKeys,
+      comparisonIds: []
+    });
   }
 
   async function backupSelectedPapers() {

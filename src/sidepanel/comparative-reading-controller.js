@@ -133,6 +133,18 @@ export function createComparativeReadingController({
     onChange?.();
   }
 
+  function clearPapers() {
+    if (state.activeSessionId || !state.selectedPapers.length) {
+      return;
+    }
+
+    state.selectedPapers = [];
+    state.status = "";
+    notifyComparisonDraftChanged([]);
+    render();
+    onChange?.();
+  }
+
   async function startNewSession() {
     state.activeSessionId = "";
     state.selectedPapers = [];
@@ -185,27 +197,29 @@ export function createComparativeReadingController({
     state.busy = true;
     state.status = "";
     const previousMessages = state.messages.filter((message) => !message.pending);
-    let loadingRotator = null;
-
-    try {
-      const session = await ensureSession(question);
-      let updatedSession = await appendComparisonMessage(session.comparisonId, {
+    const userCreatedAt = Date.now();
+    const pendingAssistantMessage = {
+      role: "assistant",
+      text: getInitialLoadingMessage(),
+      pending: true,
+      createdAt: userCreatedAt + 1
+    };
+    state.messages = [
+      ...previousMessages,
+      {
         role: "user",
         text: question,
-        createdAt: Date.now()
-      });
-      state.activeSessionId = session.comparisonId;
-      state.messages = [
-        ...(updatedSession?.messages || []),
-        {
-          role: "assistant",
-          text: getInitialLoadingMessage(),
-          pending: true,
-          createdAt: Date.now()
-        }
-      ];
-      getComposer().clear();
-      render();
+        createdAt: userCreatedAt
+      },
+      pendingAssistantMessage
+    ];
+    getComposer().clear();
+    render();
+
+    let loadingRotator = null;
+    let userMessagePersisted = false;
+
+    try {
       loadingRotator = createLoadingMessageRotator((text) => {
         const pendingIndex = state.messages.findIndex((message) => message.pending);
         if (pendingIndex < 0) {
@@ -219,6 +233,23 @@ export function createComparativeReadingController({
         render({ scrollToBottom: false });
       });
       loadingRotator.start();
+
+      const session = await ensureSession(question);
+      let updatedSession = await appendComparisonMessage(session.comparisonId, {
+        role: "user",
+        text: question,
+        createdAt: userCreatedAt
+      });
+      userMessagePersisted = true;
+      state.activeSessionId = session.comparisonId;
+      state.messages = [
+        ...(updatedSession?.messages || []),
+        {
+          ...pendingAssistantMessage,
+          text: getCurrentPendingLoadingText(state.messages)
+        }
+      ];
+      render();
 
       const contextPack = await buildComparisonContextPack({
         documentKeys: state.selectedPapers.map((paper) => paper.documentKey),
@@ -248,7 +279,9 @@ export function createComparativeReadingController({
       state.status = "";
       notifyComparisonActivityChanged();
     } catch (error) {
-      state.messages = state.messages.filter((message) => !message.pending);
+      state.messages = userMessagePersisted
+        ? state.messages.filter((message) => !message.pending)
+        : previousMessages;
       showError?.(error.message || String(error));
       onDiagnostic?.(`Comparative reading failed: ${error.message || String(error)}`);
     } finally {
@@ -318,6 +351,7 @@ export function createComparativeReadingController({
       contextReadiness: getContextReadiness(),
       allowRemovePapers: !state.activeSessionId,
       onRemovePaper: removePaper,
+      onClearPapers: clearPapers,
       onOpenPaperUrl: openPaperUrl,
       onToggleSaved: toggleMessageSaved,
       onDeleteUnit: deleteMessageUnit,
@@ -617,6 +651,10 @@ function formatHighlightSkipReason(reason) {
     return "selected text is already circled.";
   }
   return "select response text first.";
+}
+
+function getCurrentPendingLoadingText(messages) {
+  return messages.find((message) => message?.pending)?.text || getInitialLoadingMessage();
 }
 
 function createEditResult(changed, reason = "") {

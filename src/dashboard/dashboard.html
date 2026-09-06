@@ -17,7 +17,9 @@
         </div>
         <div class="dashboard-controls">
           <input id="paperSearch" type="search" placeholder="Search papers and URLs" aria-label="Search papers">
-          <button id="paperManageButton" class="dashboard-text-button" type="button">Manage</button>
+          <button id="paperManageButton" class="dashboard-icon-button" type="button" aria-label="Manage papers" aria-pressed="false">
+            <span class="icon-mask manage-icon" aria-hidden="true"></span>
+          </button>
           <div class="sort-control">
             <button id="paperSortButton" class="sort-button" type="button" title="Sort papers" aria-label="Sort papers" aria-expanded="false">
               <span class="sort-icon" aria-hidden="true"></span>
@@ -32,6 +34,7 @@
         <span id="selectionSummary" class="selection-summary">0 selected</span>
         <button id="paperImportButton" class="bulk-button" type="button">Import</button>
         <button id="selectAllButton" class="bulk-button" type="button">Select all</button>
+        <button id="clearUnaskedButton" class="bulk-button danger" type="button">Clear unasked</button>
         <button id="backupSelectedButton" class="bulk-button" type="button" disabled>Backup</button>
         <button id="archiveSelectedButton" class="bulk-button" type="button" disabled>Archive</button>
         <button id="deleteSelectedButton" class="bulk-button danger" type="button" disabled>Delete</button>

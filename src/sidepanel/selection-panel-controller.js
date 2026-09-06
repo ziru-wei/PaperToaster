@@ -1,26 +1,44 @@
 export function createSelectionPanelController({
   quoteElement,
+  clearButton,
   contextStatusElement
 }) {
+  const selectionTextNode = document.createTextNode("");
   let lastRenderedSelectionText = "";
+  let dismissedSelectionText = "";
   let hasDocument = false;
   let answerBusy = false;
   let readyToAsk = false;
 
+  quoteElement.append(selectionTextNode);
+
   quoteElement.addEventListener("click", () => {
-    if (quoteElement.textContent.trim()) {
+    if (getSelectionText()) {
       toggle();
     }
   });
+  clearButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissComposerSelection();
+  });
   document.addEventListener("pointerdown", (event) => {
-    if (!quoteElement.classList.contains("expanded") || quoteElement.contains(event.target)) {
+    if (
+      !quoteElement.classList.contains("expanded") ||
+      quoteElement.contains(event.target) ||
+      clearButton?.contains(event.target)
+    ) {
       return;
     }
 
     collapse();
   }, true);
   document.addEventListener("focusin", (event) => {
-    if (!quoteElement.classList.contains("expanded") || quoteElement.contains(event.target)) {
+    if (
+      !quoteElement.classList.contains("expanded") ||
+      quoteElement.contains(event.target) ||
+      clearButton?.contains(event.target)
+    ) {
       return;
     }
 
@@ -28,7 +46,7 @@ export function createSelectionPanelController({
   });
   window.addEventListener("blur", collapse);
   quoteElement.addEventListener("keydown", (event) => {
-    if (!quoteElement.textContent.trim() || (event.key !== "Enter" && event.key !== " ")) {
+    if (!getSelectionText() || (event.key !== "Enter" && event.key !== " ")) {
       return;
     }
 
@@ -38,13 +56,20 @@ export function createSelectionPanelController({
 
   function render(selection) {
     if (!selection?.text) {
+      dismissedSelectionText = "";
       lastRenderedSelectionText = "";
-      quoteElement.textContent = "";
+      setSelectionText("");
       quoteElement.classList.remove("expanded");
       quoteElement.classList.remove("has-overflow");
       quoteElement.setAttribute("aria-expanded", "false");
+      setClearButtonVisible(false);
       contextStatusElement.textContent = "";
       updateReadiness();
+      return;
+    }
+
+    if (selection.text === dismissedSelectionText) {
+      clearComposerSelection();
       return;
     }
 
@@ -54,27 +79,35 @@ export function createSelectionPanelController({
       return;
     }
 
+    dismissedSelectionText = "";
     lastRenderedSelectionText = selection.text;
-    quoteElement.textContent = selection.text;
+    setSelectionText(selection.text);
     quoteElement.classList.remove("expanded");
     quoteElement.classList.remove("has-overflow");
     quoteElement.setAttribute("aria-expanded", "false");
+    setClearButtonVisible(true);
     contextStatusElement.textContent = "";
     updateReadiness();
     window.requestAnimationFrame(updateOverflow);
   }
 
   function getVisibleText() {
-    return quoteElement.textContent.trim();
+    return getSelectionText();
   }
 
   function clearComposerSelection() {
     lastRenderedSelectionText = "";
-    quoteElement.textContent = "";
+    setSelectionText("");
     quoteElement.classList.remove("expanded");
     quoteElement.classList.remove("has-overflow");
     quoteElement.setAttribute("aria-expanded", "false");
+    setClearButtonVisible(false);
     updateReadiness();
+  }
+
+  function dismissComposerSelection() {
+    dismissedSelectionText = getSelectionText();
+    clearComposerSelection();
   }
 
   function setContextStatus(message) {
@@ -119,7 +152,7 @@ export function createSelectionPanelController({
   }
 
   function updateOverflow() {
-    if (!quoteElement.textContent.trim()) {
+    if (!getSelectionText()) {
       return;
     }
 
@@ -127,10 +160,36 @@ export function createSelectionPanelController({
     quoteElement.classList.toggle("has-overflow", hasOverflow || quoteElement.classList.contains("expanded"));
   }
 
+  function setClearButtonVisible(visible) {
+    if (!clearButton) {
+      return;
+    }
+
+    clearButton.hidden = !visible;
+  }
+
+  function getSelectionText() {
+    ensureSelectionTextNode();
+    return selectionTextNode.textContent.trim();
+  }
+
+  function setSelectionText(text) {
+    ensureSelectionTextNode();
+    selectionTextNode.textContent = text || "";
+    quoteElement.classList.toggle("empty", !selectionTextNode.textContent.trim());
+  }
+
+  function ensureSelectionTextNode() {
+    if (selectionTextNode.parentNode !== quoteElement) {
+      quoteElement.append(selectionTextNode);
+    }
+  }
+
   return {
     render,
     getVisibleText,
     clearComposerSelection,
+    dismissComposerSelection,
     setContextStatus,
     clearContextStatus,
     setAnswerBusy,
