@@ -89,7 +89,7 @@ header {
   min-height: 28px;
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 3px 5px;
+  padding: 3px 5px 3px 2px;
   color: #111827;
   background: transparent;
   font-size: 15px;
@@ -103,7 +103,7 @@ header {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
 }
 
 .document-star {

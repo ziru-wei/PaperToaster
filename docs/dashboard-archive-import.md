@@ -8,12 +8,13 @@ Add a lightweight management mode to the Reading Dashboard so papers can be sele
 
 ## Current Implementation
 
-The dashboard now has an `Edit` mode:
+The dashboard now has a `Manage` mode:
 
-- `Edit` toggles card-level checkboxes.
+- `Manage` toggles card-level checkboxes and bulk management controls.
 - Cards can be multi-selected.
-- `Select all` selects all currently visible dashboard papers; when all visible papers are already selected, it clears the selection.
-- `Backup all` exports every displayable dashboard paper and does not delete anything.
+- `Import` lives inside `Manage` because it changes the local library, and it is only shown before any papers are selected.
+- `Select all` selects all currently visible dashboard papers.
+- `Backup` exports selected dashboard papers and does not delete anything.
 - `Delete` removes selected papers from local IndexedDB.
 - `Archive` exports selected records as a JSON file, then deletes them locally.
 - `Import` reads a previously exported JSON archive and restores records into IndexedDB.

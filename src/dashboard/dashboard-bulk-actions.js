@@ -7,7 +7,6 @@ import {
 export function createDashboardBulkActions({
   state,
   elements,
-  getAllDisplayablePapers,
   onDeleteComplete,
   onRenderRequested,
   onRefreshAllRequested
@@ -15,7 +14,7 @@ export function createDashboardBulkActions({
   return {
     attachEventListeners,
     renderBulkActions,
-    setEditMode,
+    setManageMode,
     togglePaperSelection,
     setPaperSelected,
     getSelectedDocumentKeys
@@ -34,16 +33,16 @@ export function createDashboardBulkActions({
       });
     });
 
-    elements.editButton.addEventListener("click", () => {
-      setEditMode(!state.editMode);
+    elements.manageButton.addEventListener("click", () => {
+      setManageMode(!state.manageMode);
     });
 
     elements.selectAllButton.addEventListener("click", () => {
       selectAllVisiblePapers();
     });
 
-    elements.backupAllButton.addEventListener("click", () => {
-      backupAllPapers().catch((error) => {
+    elements.backupSelectedButton.addEventListener("click", () => {
+      backupSelectedPapers().catch((error) => {
         elements.summary.textContent = `Could not back up papers: ${error.message || String(error)}`;
       });
     });
@@ -63,21 +62,23 @@ export function createDashboardBulkActions({
 
   function renderBulkActions() {
     const selectedCount = getSelectedDocumentKeys().length;
-    const allVisibleSelected = state.papers.length > 0 && selectedCount === state.papers.length;
-    elements.bulkActions.hidden = !state.editMode;
+    const hasSelection = selectedCount > 0;
+    elements.bulkActions.hidden = !state.manageMode;
     elements.selectionSummary.textContent = `${selectedCount} selected`;
-    elements.selectAllButton.textContent = allVisibleSelected ? "Clear" : "Select all";
+    elements.importButton.hidden = hasSelection;
+    elements.selectAllButton.hidden = hasSelection;
+    elements.selectAllButton.textContent = "Select all";
     elements.selectAllButton.disabled = state.papers.length === 0;
-    elements.backupAllButton.disabled = state.papers.length === 0;
+    elements.backupSelectedButton.disabled = selectedCount === 0;
     elements.archiveSelectedButton.disabled = selectedCount === 0;
     elements.deleteSelectedButton.disabled = selectedCount === 0;
-    elements.editButton.textContent = state.editMode ? "Done" : "Edit";
-    elements.editButton.classList.toggle("active", state.editMode);
+    elements.manageButton.textContent = state.manageMode ? "Done" : "Manage";
+    elements.manageButton.classList.toggle("active", state.manageMode);
   }
 
-  function setEditMode(editMode) {
-    state.editMode = Boolean(editMode);
-    if (!state.editMode) {
+  function setManageMode(manageMode) {
+    state.manageMode = Boolean(manageMode);
+    if (!state.manageMode) {
       state.selectedDocumentKeys.clear();
     }
 
@@ -104,14 +105,10 @@ export function createDashboardBulkActions({
 
   function selectAllVisiblePapers() {
     const visibleKeys = state.papers.map((paper) => paper.documentKey).filter(Boolean);
-    const selectedVisibleCount = getSelectedDocumentKeys().length;
-    const shouldSelectAll = selectedVisibleCount !== visibleKeys.length;
     state.selectedDocumentKeys.clear();
 
-    if (shouldSelectAll) {
-      for (const documentKey of visibleKeys) {
-        state.selectedDocumentKeys.add(documentKey);
-      }
+    for (const documentKey of visibleKeys) {
+      state.selectedDocumentKeys.add(documentKey);
     }
 
     onRenderRequested();
@@ -139,14 +136,13 @@ export function createDashboardBulkActions({
     await afterDelete(selectedKeys);
   }
 
-  async function backupAllPapers() {
-    const papers = await getAllDisplayablePapers();
-    const documentKeys = papers.map((paper) => paper.documentKey).filter(Boolean);
-    if (!documentKeys.length) {
+  async function backupSelectedPapers() {
+    const selectedKeys = getSelectedDocumentKeys();
+    if (!selectedKeys.length) {
       return;
     }
 
-    const archive = await exportLibraryPapers(documentKeys);
+    const archive = await exportLibraryPapers(selectedKeys);
     downloadArchiveFile(archive, "backup");
   }
 
@@ -165,7 +161,7 @@ export function createDashboardBulkActions({
   }
 
   async function afterDelete(documentKeys) {
-    setEditMode(false);
+    setManageMode(false);
     await onDeleteComplete(documentKeys);
   }
 

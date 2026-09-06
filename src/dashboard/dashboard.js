@@ -23,7 +23,7 @@ const state = {
   papers: [],
   sort: "latestThread",
   query: "",
-  editMode: false,
+  manageMode: false,
   selectedDocumentKeys: new Set()
 };
 
@@ -32,11 +32,11 @@ const elements = {
   search: document.querySelector("#paperSearch"),
   importButton: document.querySelector("#paperImportButton"),
   importFile: document.querySelector("#paperImportFile"),
-  editButton: document.querySelector("#paperEditButton"),
+  manageButton: document.querySelector("#paperManageButton"),
   bulkActions: document.querySelector("#bulkActions"),
   selectionSummary: document.querySelector("#selectionSummary"),
   selectAllButton: document.querySelector("#selectAllButton"),
-  backupAllButton: document.querySelector("#backupAllButton"),
+  backupSelectedButton: document.querySelector("#backupSelectedButton"),
   archiveSelectedButton: document.querySelector("#archiveSelectedButton"),
   deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
   sortButton: document.querySelector("#paperSortButton"),
@@ -48,7 +48,6 @@ const elements = {
 const bulkActions = createDashboardBulkActions({
   state,
   elements,
-  getAllDisplayablePapers,
   onDeleteComplete: handlePapersDeleted,
   onRenderRequested: renderDashboard,
   onRefreshAllRequested: refreshAll
@@ -120,7 +119,7 @@ function renderDashboard() {
 function renderSummary() {
   const totalMessages = state.papers.reduce((sum, paper) => sum + paper.messageCount, 0);
   const selectedCount = bulkActions.getSelectedDocumentKeys().length;
-  elements.summary.textContent = state.editMode
+  elements.summary.textContent = state.manageMode
     ? `${state.papers.length} papers · ${selectedCount} selected`
     : `${state.papers.length} papers · ${totalMessages} messages`;
   bulkActions.renderBulkActions();
@@ -132,7 +131,7 @@ function renderPapers() {
     emptyState: elements.emptyState,
     papers: state.papers,
     activeDocumentKey: state.activeDocumentKey,
-    editMode: state.editMode,
+    manageMode: state.manageMode,
     selectedDocumentKeys: state.selectedDocumentKeys,
     onOpenPaperContext: openPaperContextInSidePanel,
     onTogglePaperSelection: bulkActions.togglePaperSelection,
@@ -213,11 +212,6 @@ async function handlePapersDeleted(documentKeys) {
     notifyPaperActivityChanged(documentKey);
   }
   await refreshPapers();
-}
-
-async function getAllDisplayablePapers() {
-  const papers = await listLibraryPapers(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread);
-  return papers.filter(isDisplayablePaper);
 }
 
 function setSortMenuOpen(open) {

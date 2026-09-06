@@ -3,7 +3,7 @@ export function renderPaperList({
   emptyState,
   papers,
   activeDocumentKey,
-  editMode,
+  manageMode,
   selectedDocumentKeys,
   onOpenPaperContext,
   onTogglePaperSelection,
@@ -15,7 +15,7 @@ export function renderPaperList({
     paper,
     maxMessageCount,
     activeDocumentKey,
-    editMode,
+    manageMode,
     selectedDocumentKeys,
     onOpenPaperContext,
     onTogglePaperSelection,
@@ -50,7 +50,7 @@ function createPaperCard({
   paper,
   maxMessageCount,
   activeDocumentKey,
-  editMode,
+  manageMode,
   selectedDocumentKeys,
   onOpenPaperContext,
   onTogglePaperSelection,
@@ -62,12 +62,12 @@ function createPaperCard({
   const isSelected = selectedDocumentKeys.has(paper.documentKey);
   card.className = "paper-card";
   card.classList.toggle("active", isActive);
-  card.classList.toggle("editing", editMode);
+  card.classList.toggle("editing", manageMode);
   card.classList.toggle("selected", isSelected);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-pressed", String(editMode ? isSelected : isActive));
-  card.setAttribute("aria-label", editMode
+  card.setAttribute("aria-pressed", String(manageMode ? isSelected : isActive));
+  card.setAttribute("aria-label", manageMode
     ? `Select ${paper.title || "paper"}`
     : `Open side panel context for ${paper.title || "paper"}`);
   card.addEventListener("click", (event) => {
@@ -75,7 +75,7 @@ function createPaperCard({
       return;
     }
 
-    if (editMode) {
+    if (manageMode) {
       onTogglePaperSelection(paper.documentKey);
       return;
     }
@@ -92,7 +92,7 @@ function createPaperCard({
     }
 
     event.preventDefault();
-    if (editMode) {
+    if (manageMode) {
       onTogglePaperSelection(paper.documentKey);
       return;
     }
@@ -108,7 +108,7 @@ function createPaperCard({
 
   const title = document.createElement("h2");
   title.className = "paper-title";
-  title.append(createTitleLink(paper, editMode));
+  title.append(createTitleLink(paper, manageMode));
 
   topRow.append(title, createMessageRing(paper, maxMessageCount));
 
@@ -122,7 +122,7 @@ function createPaperCard({
   footer.append(createStarButton(paper, onTogglePaperStarred));
 
   main.append(topRow, footer);
-  if (editMode) {
+  if (manageMode) {
     card.append(createPaperCheckbox(paper, selectedDocumentKeys, onSetPaperSelected));
   }
   card.append(main);
@@ -164,7 +164,7 @@ function createMessageRing(paper, maxMessageCount) {
   return ring;
 }
 
-function createTitleLink(paper, editMode) {
+function createTitleLink(paper, manageMode) {
   const link = document.createElement("a");
   link.className = "paper-title-link";
   link.textContent = paper.title;
@@ -175,7 +175,7 @@ function createTitleLink(paper, editMode) {
     link.rel = "noreferrer";
   }
   link.addEventListener("click", (event) => {
-    if (editMode) {
+    if (manageMode) {
       event.preventDefault();
     }
   });
