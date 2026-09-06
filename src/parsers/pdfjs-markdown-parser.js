@@ -39,13 +39,11 @@ export const pdfjsMarkdownParser = Object.freeze({
       chunks: null,
       metadata: {
         cleanupProfile: cleanupProfile.id,
-        largeFileFallback: options.largeFileFallback === true
+        largeFileFallback: options.largeFileFallback === true,
+        pdf2mdFallback: options.pdf2mdFallback === true,
+        pdf2mdFallbackReason: options.pdf2mdFallbackReason || ""
       },
-      warnings: [{
-        code: "large_pdf_plain_markdown",
-        severity: "warning",
-        message: "Large PDF used PDF.js Markdown fallback. Layout quality may be lower than pdf2md."
-      }],
+      warnings: [buildFallbackWarning(options)],
       stats: {
         pageCount: parsed.pageCount,
         wordCount: markdown.split(/\s+/).filter(Boolean).length,
@@ -54,6 +52,30 @@ export const pdfjsMarkdownParser = Object.freeze({
     };
   }
 });
+
+function buildFallbackWarning(options = {}) {
+  if (options.largeFileFallback) {
+    return {
+      code: "large_pdf_plain_markdown",
+      severity: "warning",
+      message: "Large PDF used PDF.js Markdown fallback. Layout quality may be lower than pdf2md."
+    };
+  }
+
+  if (options.pdf2mdFallback) {
+    return {
+      code: "pdf2md_runtime_plain_markdown",
+      severity: "warning",
+      message: `pdf2md failed at runtime; PDF.js Markdown fallback was used. Reason: ${options.pdf2mdFallbackReason || "unknown"}`
+    };
+  }
+
+  return {
+    code: "pdfjs_plain_markdown",
+    severity: "warning",
+    message: "PDF.js Markdown extraction was used. Layout quality may be lower than pdf2md."
+  };
+}
 
 function pagesToPlainMarkdown(pages) {
   return pages

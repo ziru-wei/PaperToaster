@@ -2,7 +2,7 @@ import { acquirePdfBytesFromTab } from "../pdf/acquire-pdf.js";
 import { extractRawMarkdownHeadingTitle } from "../pdf/extract-markdown-title.js";
 import { extractPdfMetadataTitleFromBytes } from "../pdf/extract-metadata-title.js";
 import { extractRenderedTextContentFromTab } from "../pdf/extract-rendered-text.js";
-import { isHttpUrl } from "../pdf/fetch-pdf.js";
+import { isHttpUrl, looksLikePdfUrl } from "../pdf/fetch-pdf.js";
 import { createEmptyTitleInfo, selectTitleInfoByPriority } from "../pdf/select-title.js";
 import { parsePdfToContent } from "../parsers/parser-registry.js";
 import { getDocumentStoreKey, getStoredDocument, saveStoredDocument } from "../storage/document-store.js";
@@ -12,7 +12,7 @@ const documentMemoryCache = new Map();
 const activeLoadKeys = new Set();
 
 export function canLoadDocumentFromTab(tab) {
-  return isHttpUrl(tab?.url);
+  return isPotentialPaperViewerUrl(tab?.url);
 }
 
 export function getDocumentCacheKey(url, parserId, cacheVersion) {
@@ -254,4 +254,28 @@ function isCompatibleCachedParser(cachedParserId, requestedParserId) {
   }
 
   return requestedParserId === "pdf2md-markdown" && cachedParserId === "pdfjs-markdown";
+}
+
+function isPotentialPaperViewerUrl(url) {
+  if (!isHttpUrl(url)) {
+    return false;
+  }
+
+  if (looksLikePdfUrl(url)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+
+    return (
+      hostname === "ieeexplore.ieee.org" &&
+      pathname === "/stamp/stamp.jsp" &&
+      parsed.searchParams.has("arnumber")
+    );
+  } catch {
+    return false;
+  }
 }

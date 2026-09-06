@@ -19,6 +19,7 @@ export function getSidePanelElements(root = document) {
     newThreadPromptHint: root.querySelector("#newThreadPromptHint"),
     promptPresetMenu: root.querySelector("#promptPresetMenu"),
     selectionContextStatus: root.querySelector("#selectionContextStatus"),
+    idleState: root.querySelector("#idleState"),
     conversationThread: root.querySelector("#conversationThread"),
     conversationThreadArchive: root.querySelector("#conversationThreadArchive"),
     conversationThreadWheel: root.querySelector("#conversationThreadWheel"),

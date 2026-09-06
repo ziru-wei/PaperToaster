@@ -49,6 +49,7 @@ export function createSidePanelDocumentContext({
       activeTab = await getActiveTab();
       renderTab(activeTab);
       request = beginDocumentRequest(activeTab);
+      renderIdleState(false);
 
       if (isReadingDashboardTab(activeTab)) {
         await renderLibraryPaperContextIfCurrent(request);
@@ -57,8 +58,7 @@ export function createSidePanelDocumentContext({
 
       if (!canLoadDocumentFromTab(activeTab)) {
         await renderDocumentIfCurrent(null, request);
-        setStatus("Open a web PDF or publisher PDF viewer tab to inspect.");
-        await refreshSelection();
+        renderIdleState(true);
         return;
       }
 
@@ -129,7 +129,8 @@ export function createSidePanelDocumentContext({
   async function refreshSelection() {
     try {
       activeTab = await getActiveTab();
-      if (isReadingDashboardTab(activeTab)) {
+      if (isReadingDashboardTab(activeTab) || !canLoadDocumentFromTab(activeTab)) {
+        selectionPanel.clearComposerSelection();
         return;
       }
 
@@ -157,6 +158,7 @@ export function createSidePanelDocumentContext({
       activeTab = await getActiveTab();
       renderTab(activeTab);
       request = beginDocumentRequest(activeTab);
+      renderIdleState(false);
       onDiagnostic?.(`Active tab URL: ${activeTab.url}`);
 
       if (isReadingDashboardTab(activeTab)) {
@@ -167,8 +169,8 @@ export function createSidePanelDocumentContext({
 
       if (!canLoadDocumentFromTab(activeTab)) {
         await renderDocumentIfCurrent(null, request);
-        setStatus("Open a web PDF or publisher PDF viewer tab to inspect.");
-        onDiagnostic?.("Load skipped: active tab URL is not an http/https page.");
+        renderIdleState(true);
+        onDiagnostic?.("Load skipped: active tab is not a recognized PDF viewer.");
         return;
       }
 
@@ -267,9 +269,10 @@ export function createSidePanelDocumentContext({
     }
 
     currentDocument = document;
+    renderIdleState(false);
     renderDocumentTitle(document);
     renderUrlLine(document.url || "");
-    renderContextReady(true);
+    renderContextReady(true, document);
     elements.pdfStatus.textContent = "";
     await conversation.setDocumentUrl(document.url);
     await onDocumentChange?.(document);
@@ -292,6 +295,7 @@ export function createSidePanelDocumentContext({
       return;
     }
 
+    renderIdleState(false);
     renderDocumentTitle({
       title: paper.title || "Untitled paper"
     });
@@ -357,11 +361,11 @@ export function createSidePanelDocumentContext({
     }, 400);
   }
 
-  function renderContextReady(isReady) {
+  function renderContextReady(isReady, document = null) {
     elements.contextReadyIndicator.classList.toggle("ready", Boolean(isReady));
     elements.contextReadyIndicator.classList.toggle("loading", !isReady);
     elements.contextReadyIndicator.classList.toggle("warning", false);
-    elements.contextReadyIndicator.title = isReady ? "Context ready" : "Preparing context";
+    elements.contextReadyIndicator.title = isReady ? formatContextReadyLabel(document) : "Preparing context";
     elements.contextReadyIndicator.setAttribute("aria-label", elements.contextReadyIndicator.title);
   }
 
@@ -385,11 +389,13 @@ export function createSidePanelDocumentContext({
 
   function showError(message) {
     elements.pdfStatus.textContent = message;
+    elements.pdfStatus.title = message;
     elements.pdfStatus.classList.add("error");
   }
 
   function setStatus(message) {
     elements.pdfStatus.textContent = message;
+    elements.pdfStatus.title = message;
     elements.pdfStatus.classList.remove("error");
   }
 
@@ -399,6 +405,26 @@ export function createSidePanelDocumentContext({
 
   function setBusy(button, busy) {
     button.disabled = busy;
+  }
+
+  function renderIdleState(isIdle) {
+    document.body.classList.toggle("idle-mode", Boolean(isIdle));
+    elements.idleState.hidden = !isIdle;
+
+    if (!isIdle) {
+      return;
+    }
+
+    elements.pdfStatus.textContent = "";
+    elements.pdfStatus.classList.remove("error");
+    elements.tabStatus.textContent = "";
+    elements.tabStatus.removeAttribute("title");
+    elements.copyTabUrl.disabled = true;
+    elements.reloadPdf.disabled = true;
+    elements.documentStar.disabled = true;
+    elements.conversationThreadArchive.disabled = true;
+    elements.conversationThread.hidden = true;
+    selectionPanel.clearComposerSelection();
   }
 
   function getCurrentDocument() {
@@ -465,4 +491,63 @@ function mergeLibraryDocument(document, paper, context = {}) {
 
 function clearDiagnostics() {
   // Diagnostics stay in the console now; the side panel UI stays minimal.
+}
+
+function summarizeFallbackReason(reason) {
+  const normalized = String(reason || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const directCause = normalized
+    .replace(/^Failed to parse PDF:\s*/i, "")
+    .replace(/^pdf2md parser failed:\s*/i, "")
+    .trim();
+
+  if (directCause.length <= 150) {
+    return `pdf2md: ${directCause}`;
+  }
+
+  return `pdf2md: ${directCause.slice(0, 147)}...`;
+}
+
+function formatContextReadyLabel(document) {
+  if (!document) {
+    return "Context ready";
+  }
+
+  const parserLabel = document.parser?.label || document.parser?.id || "unknown parser";
+  const outputKind = document.parser?.outputKind ? `/${document.parser.outputKind}` : "";
+  const metadata = document.metadata || {};
+
+  if (metadata.pdf2mdFallback || metadata.largeFileFallback) {
+    const requested = formatParserId(metadata.requestedParserId) || "pdf2md";
+    const fallback = document.parser?.label || formatParserId(metadata.fallbackParserId) || "PDF.js Markdown";
+    const reason = metadata.largeFileFallback
+      ? "large file"
+      : summarizeFallbackReason(metadata.pdf2mdFallbackReason || metadata.largeFileFallbackReason || "").replace(/^pdf2md:\s*/i, "");
+
+    return `Context ready · ${fallback}${outputKind} fallback from ${requested}${reason ? ` · ${reason}` : ""}`;
+  }
+
+  return `Context ready · ${parserLabel}${outputKind}`;
+}
+
+function formatParserId(parserId) {
+  const normalized = String(parserId || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "pdf2md-markdown") {
+    return "pdf2md Markdown";
+  }
+
+  if (normalized === "pdfjs-markdown") {
+    return "PDF.js Markdown";
+  }
+
+  if (normalized === "pdfjs-text") {
+    return "PDF.js Text";
+  }
+
+  return normalized;
 }
