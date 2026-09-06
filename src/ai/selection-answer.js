@@ -1,9 +1,14 @@
 import { generateGeminiText } from "./gemini-client.js";
-import { formatSelectionContextForPrompt } from "./selection-prompt.js";
-import { DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
+import { generateLocalAgentText } from "./local-agent-client.js";
+import { formatSelectionContextForPrompt, getPaperReadingPolicyPrompt } from "./selection-prompt.js";
+import {
+  AI_PROVIDER_GEMINI,
+  AI_PROVIDER_LOCAL,
+  DEFAULT_AI_SETTINGS
+} from "../storage/ai-settings-store.js";
 
 export async function answerSelectionQuestion({ aiSettings, contextPack, conversationMessages = [], signal }) {
-  const provider = aiSettings?.provider || "gemini";
+  const provider = aiSettings?.provider || AI_PROVIDER_GEMINI;
   const prompt = buildSelectionQuestionPrompt({
     contextPack,
     systemPrompt: aiSettings?.systemPrompt,
@@ -19,11 +24,24 @@ export async function answerSelectionQuestion({ aiSettings, contextPack, convers
     };
   }
 
-  if (provider === "gemini") {
+  if (provider === AI_PROVIDER_GEMINI) {
     return generateGeminiText({
       apiKey: aiSettings.apiKey,
       model: aiSettings.model,
       prompt,
+      signal
+    });
+  }
+
+  if (provider === AI_PROVIDER_LOCAL) {
+    return generateLocalAgentText({
+      endpoint: aiSettings.localEndpoint,
+      authToken: aiSettings.localAuthToken,
+      model: aiSettings.model,
+      prompt,
+      systemPrompt: aiSettings?.systemPrompt,
+      contextPack,
+      conversationMessages,
       signal
     });
   }
@@ -36,7 +54,9 @@ export function buildSelectionQuestionPrompt({ contextPack, systemPrompt, conver
   return [
     normalizedSystemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
     "",
-    "Previous conversation in this selected-text thread:",
+    getPaperReadingPolicyPrompt(),
+    "",
+    "Previous conversation in this thread:",
     formatConversationMessages(conversationMessages),
     "",
     formatSelectionContextForPrompt(contextPack)

@@ -1,9 +1,10 @@
-import { chunkDocument } from "../pdf/chunk-document.js";
+import { annotateChunksWithSections, chunkDocument, createSectionOutline } from "../pdf/chunk-document.js";
+import { createPaperOverview } from "../rag/paper-overview.js";
 
 export function createDocument({ url, fetched, content, titleInfo }) {
-  const chunks = normalizeChunks(content);
+  const chunks = annotateChunksWithSections(normalizeChunks(content));
 
-  return {
+  const document = {
     url,
     title: titleInfo?.title || "",
     titleSource: titleInfo?.source || "",
@@ -19,6 +20,7 @@ export function createDocument({ url, fetched, content, titleInfo }) {
     markdown: content.markdown || "",
     rawMarkdown: content.rawMarkdown || "",
     chunks,
+    sectionOutline: createSectionOutline(chunks),
     metadata: content.metadata || null,
     warnings: content.warnings || [],
     stats: content.stats || null,
@@ -26,17 +28,22 @@ export function createDocument({ url, fetched, content, titleInfo }) {
     contentType: fetched.contentType,
     parsedAt: Date.now()
   };
+
+  return {
+    ...document,
+    overview: createPaperOverview(document)
+  };
 }
 
 function normalizeChunks(content) {
   if (content.chunks?.length) {
-    return content.chunks.map((chunk, index) => ({
-      id: chunk.id || `chunk-${index + 1}`,
-      pageStart: chunk.pageStart || 1,
-      pageEnd: chunk.pageEnd || chunk.pageStart || 1,
-      text: chunk.markdown || chunk.text || "",
-      score: 0
-    })).filter((chunk) => chunk.text.trim());
+    return chunkDocument({
+      pageCount: content.pageCount,
+      pages: content.chunks.map((chunk, index) => ({
+        pageNumber: chunk.pageStart || index + 1,
+        text: chunk.markdown || chunk.text || ""
+      }))
+    });
   }
 
   return chunkDocument({

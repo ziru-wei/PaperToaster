@@ -1,7 +1,7 @@
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
 import { formatSelectionContextForPrompt } from "../ai/selection-prompt.js";
 import { buildSelectionContextPack } from "../pdf/selection-context.js";
-import { getAiSettings, hasConfiguredAiApiKey, usesDebugAiMode } from "../storage/ai-settings-store.js";
+import { getAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { notifyLibraryPaperActivityChanged } from "./paper-actions-controller.js";
 
 export function createAskFlowController({
@@ -51,8 +51,8 @@ export function createAskFlowController({
       console.debug("[PDF AI] Selection prompt context\n%s", formatSelectionContextForPrompt(contextPack));
 
       const aiSettings = await getAiSettings();
-      if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiApiKey(aiSettings)) {
-        throw new Error("Gemini API key is not configured. Open extension Options to add it.");
+      if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
+        throw new Error("AI provider is not configured. Open extension Options to finish setup.");
       }
 
       const previousMessages = conversation.getMessages();

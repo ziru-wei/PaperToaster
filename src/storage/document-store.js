@@ -1,4 +1,5 @@
-import { chunkDocument } from "../pdf/chunk-document.js";
+import { annotateChunksWithSections, chunkDocument, createSectionOutline } from "../pdf/chunk-document.js";
+import { ensurePaperOverview } from "../rag/paper-overview.js";
 import {
   getDocumentMemoryKey,
   normalizeDocumentUrl,
@@ -64,6 +65,8 @@ export async function saveStoredDocument({ url, parserId, cacheVersion, document
     parser: document.parser || null,
     pageCount: document.pageCount || 0,
     markdown: document.markdown || "",
+    overview: document.overview || null,
+    sectionOutline: document.sectionOutline || createSectionOutline(document.chunks || []),
     byteLength: document.byteLength || null,
     contentType: document.contentType || "",
     metadata: document.metadata || null,
@@ -101,7 +104,12 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     text: record.markdown || ""
   };
 
-  return {
+  const chunks = record.markdown ? annotateChunksWithSections(chunkDocument({
+    pageCount: record.pageCount || 1,
+    pages: [page]
+  })) : [];
+
+  const document = {
     url: requestedUrl || record.url,
     documentKey: record.documentKey || "",
     normalizedUrl: record.normalizedUrl || "",
@@ -114,10 +122,9 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     pages: record.markdown ? [page] : [],
     markdown: record.markdown || "",
     rawMarkdown: "",
-    chunks: record.markdown ? chunkDocument({
-      pageCount: record.pageCount || 1,
-      pages: [page]
-    }) : [],
+    chunks,
+    sectionOutline: record.sectionOutline?.length ? record.sectionOutline : createSectionOutline(chunks),
+    overview: record.overview || null,
     metadata: record.metadata || null,
     warnings: record.warnings || [],
     stats: record.stats || null,
@@ -125,6 +132,11 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     contentType: record.contentType || "",
     parsedAt: record.parsedAt || null,
     storedAt: record.updatedAt || null
+  };
+
+  return {
+    ...document,
+    overview: record.overview || ensurePaperOverview(document)
   };
 }
 

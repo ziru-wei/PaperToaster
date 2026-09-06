@@ -1,4 +1,6 @@
-import { retrieveRelevantChunks } from "./retrieve.js";
+import { buildEvidenceContext, compressChunkForEvidence } from "../rag/evidence-context.js";
+import { ensurePaperOverview } from "../rag/paper-overview.js";
+import { QUERY_INTENTS, routePaperQuestion } from "../rag/query-intent-router.js";
 
 const DEFAULT_RELEVANT_LIMIT = 6;
 const DEFAULT_LOCAL_CONTEXT_CHARS = 9000;
@@ -23,15 +25,23 @@ export function buildSelectionContextPack({ document, selectionText, question = 
 
   const chunks = Array.isArray(document.chunks) ? document.chunks : [];
   const hasSelection = Boolean(normalizedSelectionText);
+  const intent = routePaperQuestion({
+    question: normalizedQuestion,
+    selectionText: normalizedSelectionText
+  });
+  const overview = ensurePaperOverview(document);
   const anchor = hasSelection ? findSelectionAnchor(chunks, normalizedSelectionText) : null;
   const localContext = anchor
     ? selectLocalContextChunks(chunks, anchor.chunkIndex, options.localContextChars)
     : hasSelection
       ? []
-      : selectOpeningContextChunks(chunks, options.localContextChars);
+      : intent.id === QUERY_INTENTS.PAPER_OVERVIEW
+        ? selectOpeningContextChunks(chunks, options.localContextChars)
+        : [];
   const retrievedContext = selectRetrievedContextChunks({
     chunks,
     query: [normalizedSelectionText, normalizedQuestion].filter(Boolean).join("\n"),
+    intent,
     excludeIds: new Set(localContext.map((chunk) => chunk.id)),
     limit: options.relevantLimit,
     maxChars: options.retrievedContextChars
@@ -46,6 +56,8 @@ export function buildSelectionContextPack({ document, selectionText, question = 
       url: document.url || "",
       pageCount: document.pageCount || null
     },
+    intent,
+    overview: intent.id === QUERY_INTENTS.PAPER_OVERVIEW ? overview : null,
     question: normalizedQuestion,
     selection: {
       text: normalizedSelectionText,
@@ -129,27 +141,16 @@ function selectLocalContextChunks(chunks, anchorIndex, maxChars = DEFAULT_LOCAL_
     .map((index) => packChunk(chunks[index]));
 }
 
-function selectRetrievedContextChunks({ chunks, query, excludeIds, limit, maxChars }) {
+function selectRetrievedContextChunks({ chunks, query, intent, excludeIds, limit, maxChars }) {
   const budget = Math.max(1600, maxChars || DEFAULT_RETRIEVED_CONTEXT_CHARS);
-  const retrieved = retrieveRelevantChunks(chunks, query, limit || DEFAULT_RELEVANT_LIMIT);
-  const selected = [];
-  let usedChars = 0;
-
-  for (const chunk of retrieved) {
-    if (excludeIds.has(chunk.id)) {
-      continue;
-    }
-
-    const text = chunk.text || "";
-    if (usedChars + text.length > budget && selected.length) {
-      continue;
-    }
-
-    selected.push(packChunk(chunk));
-    usedChars += text.length;
-  }
-
-  return selected;
+  return buildEvidenceContext({
+    chunks,
+    query,
+    intent,
+    excludeIds,
+    limit: limit || DEFAULT_RELEVANT_LIMIT,
+    maxChars: budget
+  }).map(packChunk);
 }
 
 function selectOpeningContextChunks(chunks, maxChars = DEFAULT_LOCAL_CONTEXT_CHARS) {
@@ -163,7 +164,7 @@ function selectOpeningContextChunks(chunks, maxChars = DEFAULT_LOCAL_CONTEXT_CHA
       break;
     }
 
-    selected.push(packChunk(chunk));
+    selected.push(packChunk(compressChunkForEvidence(chunk, "", { maxChars: 1800 })));
     usedChars += text.length;
   }
 
@@ -189,6 +190,7 @@ function packChunk(chunk) {
     pageStart: chunk.pageStart || null,
     pageEnd: chunk.pageEnd || chunk.pageStart || null,
     score: typeof chunk.score === "number" ? chunk.score : null,
+    section: chunk.section || null,
     text: chunk.text || ""
   };
 }

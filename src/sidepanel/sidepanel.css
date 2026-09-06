@@ -851,6 +851,104 @@ form {
   word-break: break-word;
 }
 
+.conversation-text.markdown-body {
+  overflow: visible;
+  white-space: normal;
+}
+
+.markdown-body :where(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 0.68em;
+}
+
+.markdown-body :where(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table):last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body :where(h1, h2, h3, h4, h5, h6) {
+  color: #111827;
+  font-size: 1em;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.markdown-body :where(h1, h2) {
+  font-size: 1.04em;
+}
+
+.markdown-body :where(strong) {
+  font-weight: 650;
+}
+
+.markdown-body :where(ul, ol) {
+  padding-left: 1.35em;
+}
+
+.markdown-body :where(li) {
+  margin: 0.18em 0;
+}
+
+.markdown-body :where(code) {
+  border-radius: 5px;
+  padding: 0.08em 0.32em;
+  background: rgba(148, 163, 184, 0.17);
+  font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92em;
+}
+
+.markdown-body :where(pre) {
+  overflow: auto;
+  max-width: 100%;
+  border-radius: 9px;
+  padding: 10px 11px;
+  background: #eef0f3;
+  line-height: 1.45;
+}
+
+.markdown-body :where(pre code) {
+  display: block;
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.markdown-body :where(blockquote) {
+  border-left: 2px solid rgba(107, 114, 128, 0.32);
+  padding-left: 10px;
+  color: #4b5563;
+}
+
+.markdown-body :where(a) {
+  color: #374151;
+  text-decoration: underline;
+  text-decoration-color: rgba(55, 65, 81, 0.28);
+  text-underline-offset: 2px;
+}
+
+.markdown-body :where(a:hover) {
+  color: #111827;
+  text-decoration-color: rgba(17, 24, 39, 0.45);
+}
+
+.markdown-body :where(table) {
+  display: block;
+  overflow: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markdown-body :where(th, td) {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body :where(th) {
+  color: #111827;
+  font-weight: 650;
+}
+
 .conversation-message.user {
   position: relative;
   align-items: flex-end;

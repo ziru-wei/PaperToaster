@@ -1,3 +1,5 @@
+import { renderMarkdownInto } from "../markdown/render-markdown.js";
+
 export function renderConversationMessages(threadElement, messages) {
   threadElement.textContent = "";
   threadElement.hidden = !messages.length;
@@ -8,7 +10,7 @@ export function renderConversationMessages(threadElement, messages) {
 
     const text = document.createElement("div");
     text.className = "conversation-text";
-    text.textContent = message.text;
+    renderMessageText(text, message);
 
     if (message.role === "user" && message.selectionText) {
       const quote = document.createElement("blockquote");
@@ -22,6 +24,15 @@ export function renderConversationMessages(threadElement, messages) {
     item.append(text);
     threadElement.append(item);
   }
+}
+
+function renderMessageText(element, message) {
+  if (message.role === "assistant") {
+    renderMarkdownInto(element, message.text);
+    return;
+  }
+
+  element.textContent = message.text;
 }
 
 export function toggleConversationSelection(threadElement, quote) {

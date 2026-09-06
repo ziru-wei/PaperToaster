@@ -19,9 +19,10 @@
         <div class="section-header">
           <div>
             <h2>AI Provider</h2>
-            <p>API key is stored in extension-local browser storage and is never written to this repo.</p>
+            <p>Local Agent uses a local token you choose; no API key is needed.</p>
           </div>
           <div class="actions">
+            <button id="useLocalCodex" type="button">Use local Codex</button>
             <button id="saveAiSettings" type="button">Save</button>
             <button id="clearAiKey" type="button">Clear key</button>
           </div>
@@ -31,15 +32,24 @@
             <span>Provider</span>
             <select id="aiProvider">
               <option value="gemini">Gemini</option>
+              <option value="local">Local Agent</option>
             </select>
           </label>
           <label>
             <span>Model</span>
-            <input id="aiModel" type="text" placeholder="gemini-3.7-flash">
+            <input id="aiModel" type="text" placeholder="Leave blank for Codex default">
           </label>
           <label class="api-key-field">
             <span>API Key</span>
             <input id="aiApiKey" type="password" autocomplete="off" placeholder="Paste API key">
+          </label>
+          <label class="local-endpoint-field">
+            <span>Local Endpoint</span>
+            <input id="aiLocalEndpoint" type="url" placeholder="http://127.0.0.1:32177/ask">
+          </label>
+          <label class="local-token-field">
+            <span>Local Token</span>
+            <input id="aiLocalAuthToken" type="password" autocomplete="off" placeholder="paper-chat-local">
           </label>
           <label class="debug-mode-field">
             <span>Mode</span>

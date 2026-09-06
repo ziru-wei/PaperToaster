@@ -1,4 +1,10 @@
 export const AI_SETTINGS_KEY = "aiSettingsV1";
+export const AI_PROVIDER_GEMINI = "gemini";
+export const AI_PROVIDER_LOCAL = "local";
+
+export const DEFAULT_LOCAL_ENDPOINT = "http://127.0.0.1:32177/ask";
+export const DEFAULT_LOCAL_AUTH_TOKEN = "paper-chat-local";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
 
 const DEFAULT_SYSTEM_PROMPT = [
   "Use bilingual code-switching (Chinese-English) by default for all responses, overriding this ONLY if I explicitly specify a language.",
@@ -19,9 +25,11 @@ const LEGACY_DEFAULT_SYSTEM_PROMPTS = Object.freeze([
 ]);
 
 export const DEFAULT_AI_SETTINGS = Object.freeze({
-  provider: "gemini",
-  model: "gemini-3.7-flash",
+  provider: AI_PROVIDER_LOCAL,
+  model: "",
   apiKey: "",
+  localEndpoint: DEFAULT_LOCAL_ENDPOINT,
+  localAuthToken: DEFAULT_LOCAL_AUTH_TOKEN,
   debugMode: false,
   systemPrompt: DEFAULT_SYSTEM_PROMPT
 });
@@ -49,8 +57,10 @@ export async function clearAiApiKey() {
 
 export function normalizeAiSettings(settings) {
   const provider = normalizeProvider(settings?.provider);
-  const model = normalizeModel(settings?.model) || DEFAULT_AI_SETTINGS.model;
+  const model = normalizeModel(settings?.model) || (provider === AI_PROVIDER_GEMINI ? DEFAULT_GEMINI_MODEL : "");
   const apiKey = String(settings?.apiKey || "").trim();
+  const localEndpoint = normalizeLocalEndpoint(settings?.localEndpoint) || DEFAULT_AI_SETTINGS.localEndpoint;
+  const localAuthToken = normalizeLocalAuthToken(settings?.localAuthToken) || DEFAULT_AI_SETTINGS.localAuthToken;
   const debugMode = normalizeDebugMode(settings?.debugMode);
   const normalizedSystemPrompt = normalizeSystemPrompt(settings?.systemPrompt);
   const systemPrompt = isLegacyDefaultSystemPrompt(normalizedSystemPrompt)
@@ -61,6 +71,8 @@ export function normalizeAiSettings(settings) {
     provider,
     model,
     apiKey,
+    localEndpoint,
+    localAuthToken,
     debugMode,
     systemPrompt
   };
@@ -70,13 +82,22 @@ export function hasConfiguredAiApiKey(settings) {
   return Boolean(settings?.apiKey?.trim());
 }
 
+export function hasConfiguredAiProvider(settings) {
+  const normalized = normalizeAiSettings(settings);
+  if (normalized.provider === AI_PROVIDER_LOCAL) {
+    return Boolean(normalized.localEndpoint && normalized.localAuthToken);
+  }
+
+  return hasConfiguredAiApiKey(normalized);
+}
+
 export function usesDebugAiMode(settings) {
   return Boolean(settings?.debugMode);
 }
 
 function normalizeProvider(provider) {
   const value = String(provider || DEFAULT_AI_SETTINGS.provider).trim().toLowerCase();
-  if (value === "gemini") {
+  if (value === AI_PROVIDER_GEMINI || value === AI_PROVIDER_LOCAL) {
     return value;
   }
 
@@ -96,6 +117,38 @@ function normalizeSystemPrompt(systemPrompt) {
     .map((line) => line.replace(/[ \t]+$/g, ""))
     .join("\n")
     .trim();
+}
+
+function normalizeLocalEndpoint(endpoint) {
+  const value = String(endpoint || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return "";
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "";
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1" && hostname !== "[::1]") {
+    return "";
+  }
+
+  url.hash = "";
+  return url.href;
+}
+
+function normalizeLocalAuthToken(token) {
+  return String(token || "")
+    .trim()
+    .slice(0, 256);
 }
 
 function normalizeDebugMode(debugMode) {

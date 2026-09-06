@@ -112,6 +112,8 @@ section {
 }
 
 .api-key-field,
+.local-endpoint-field,
+.local-token-field,
 .debug-mode-field,
 .system-prompt-field {
   grid-column: 1 / -1;

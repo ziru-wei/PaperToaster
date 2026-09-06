@@ -10,9 +10,10 @@ function tokenize(text) {
     ?.filter((token) => !STOP_WORDS.has(token)) || [];
 }
 
-export function retrieveRelevantChunks(chunks, query, limit = 6) {
+export function retrieveRelevantChunks(chunks, query, limit = 6, options = {}) {
   const queryTerms = tokenize(query);
-  if (!queryTerms.length) {
+  const intent = options.intent || null;
+  if (!queryTerms.length && !intent?.sectionKinds?.length) {
     return [];
   }
 
@@ -34,9 +35,43 @@ export function retrieveRelevantChunks(chunks, query, limit = 6) {
         }
       }
 
+      score += scoreSectionMatch(chunk, intent);
+      score += scoreHeadingMatch(chunk, uniqueQueryTerms);
+
       return { ...chunk, score: Number(score.toFixed(3)) };
     })
     .filter((chunk) => chunk.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
+}
+
+function scoreSectionMatch(chunk, intent) {
+  const preferredKinds = new Set(intent?.sectionKinds || []);
+  if (!preferredKinds.size) {
+    return 0;
+  }
+
+  const kind = chunk?.section?.kind || "";
+  if (!kind) {
+    return 0;
+  }
+
+  return preferredKinds.has(kind) ? 1.6 : 0;
+}
+
+function scoreHeadingMatch(chunk, queryTerms) {
+  const sectionTitle = chunk?.section?.normalizedTitle || chunk?.section?.title || "";
+  if (!sectionTitle || !queryTerms.length) {
+    return 0;
+  }
+
+  const sectionTerms = new Set(tokenize(sectionTitle));
+  let score = 0;
+  for (const term of queryTerms) {
+    if (sectionTerms.has(term)) {
+      score += 1.4;
+    }
+  }
+
+  return score;
 }
