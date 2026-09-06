@@ -25,7 +25,7 @@ export function createScrollToLatestController({
 
   function update() {
     if (!hasMessages() || threadElement.hidden) {
-      buttonElement.hidden = true;
+      hide();
       return;
     }
 
@@ -34,8 +34,13 @@ export function createScrollToLatestController({
     buttonElement.hidden = !hasScrollableThread || distanceFromBottom < SCROLL_TO_LATEST_THRESHOLD;
   }
 
+  function hide() {
+    buttonElement.hidden = true;
+  }
+
   return {
     scrollToBottom,
+    hide,
     update
   };
 }

@@ -16,6 +16,7 @@ export function createSidePanelDocumentContext({
   conversation,
   selectionPanel,
   onDocumentChange,
+  onComparativeReadingContext,
   onAskReadinessChange,
   onDiagnostic
 }) {
@@ -220,9 +221,10 @@ export function createSidePanelDocumentContext({
     }
 
     const documentKey = String(response.context?.documentKey || "").trim();
-    if (!documentKey) {
+    const mode = String(response.context?.mode || "").trim();
+    if (mode !== "library-paper" || !documentKey) {
       await renderDocumentIfCurrent(null, request);
-      setStatus("Select a paper card in Reading Dashboard.");
+      await onComparativeReadingContext?.(response.context || {});
       return;
     }
 
@@ -241,7 +243,7 @@ export function createSidePanelDocumentContext({
       return;
     }
 
-    await renderDocumentIfCurrent(mergeLibraryDocument(document, paper), request);
+    await renderDocumentIfCurrent(mergeLibraryDocument(document, paper, response.context), request);
   }
 
   async function renderDocumentIfCurrent(document, request) {
@@ -267,10 +269,10 @@ export function createSidePanelDocumentContext({
     currentDocument = document;
     renderDocumentTitle(document);
     renderUrlLine(document.url || "");
-    await onDocumentChange?.(document);
     renderContextReady(true);
     elements.pdfStatus.textContent = "";
     await conversation.setDocumentUrl(document.url);
+    await onDocumentChange?.(document);
     onAskReadinessChange?.();
   }
 
@@ -358,11 +360,13 @@ export function createSidePanelDocumentContext({
   function renderContextReady(isReady) {
     elements.contextReadyIndicator.classList.toggle("ready", Boolean(isReady));
     elements.contextReadyIndicator.classList.toggle("loading", !isReady);
+    elements.contextReadyIndicator.classList.toggle("warning", false);
     elements.contextReadyIndicator.title = isReady ? "Context ready" : "Preparing context";
     elements.contextReadyIndicator.setAttribute("aria-label", elements.contextReadyIndicator.title);
   }
 
   function renderDocumentTitle(document) {
+    elements.documentTitle.readOnly = false;
     const title = document?.title?.trim();
 
     if (title) {
@@ -446,13 +450,16 @@ function isReadingDashboardTab(tab) {
   return Boolean(tab?.url?.startsWith(dashboardUrl));
 }
 
-function mergeLibraryDocument(document, paper) {
+function mergeLibraryDocument(document, paper, context = {}) {
   return {
     ...document,
     url: document.url || paper?.canonicalUrl || "",
     title: document.title || paper?.title || "",
     titleSource: document.titleSource || paper?.titleSource || "",
-    starred: Boolean(paper?.starred)
+    isStarred: Boolean(paper?.isStarred),
+    sidePanelContextMode: String(context?.mode || ""),
+    sidePanelContextSource: String(context?.source || ""),
+    sidePanelContextSelectedAt: Number(context?.selectedAt) || 0
   };
 }
 

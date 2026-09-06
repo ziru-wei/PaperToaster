@@ -1,6 +1,6 @@
 import { buildEvidenceContext, compressChunkForEvidence } from "../rag/evidence-context.js";
 import { ensurePaperOverview } from "../rag/paper-overview.js";
-import { QUERY_INTENTS, routePaperQuestion } from "../rag/query-intent-router.js";
+import { QUERY_INTENTS, resolvePaperQuestionIntent, routePaperQuestion } from "../rag/query-intent-router.js";
 
 const DEFAULT_RELEVANT_LIMIT = 6;
 const DEFAULT_LOCAL_CONTEXT_CHARS = 9000;
@@ -25,10 +25,21 @@ export function buildSelectionContextPack({ document, selectionText, question = 
 
   const chunks = Array.isArray(document.chunks) ? document.chunks : [];
   const hasSelection = Boolean(normalizedSelectionText);
-  const intent = routePaperQuestion({
+  const suggestedIntent = routePaperQuestion({
     question: normalizedQuestion,
     selectionText: normalizedSelectionText
   });
+  const manualIntent = resolvePaperQuestionIntent(options.intentOverride);
+  const intent = manualIntent
+    ? {
+      ...manualIntent,
+      source: options.intentOverrideSource || "manual",
+      suggestedId: suggestedIntent.id
+    }
+    : {
+      ...suggestedIntent,
+      source: "rule"
+    };
   const overview = ensurePaperOverview(document);
   const anchor = hasSelection ? findSelectionAnchor(chunks, normalizedSelectionText) : null;
   const localContext = anchor
@@ -57,6 +68,7 @@ export function buildSelectionContextPack({ document, selectionText, question = 
       pageCount: document.pageCount || null
     },
     intent,
+    suggestedIntent,
     overview: intent.id === QUERY_INTENTS.PAPER_OVERVIEW ? overview : null,
     question: normalizedQuestion,
     selection: {

@@ -7,7 +7,7 @@ export function createPaperActionsController({
   onDiagnostic,
   onError
 }) {
-  let currentPaperStarred = false;
+  let currentPaperIsStarred = false;
   let starSavePending = false;
 
   starElement.addEventListener("click", toggleCurrentDocumentStar);
@@ -19,23 +19,23 @@ export function createPaperActionsController({
       return;
     }
 
-    let starred = Boolean(document.starred);
+    let isStarred = Boolean(document.isStarred);
     try {
       const paper = await getLibraryPaperSummary(documentKey);
       if (getCurrentDocument()?.documentKey !== documentKey) {
         return;
       }
-      starred = Boolean(paper?.starred);
+      isStarred = Boolean(paper?.isStarred);
     } catch (error) {
       onDiagnostic?.(`Paper star read skipped: ${error.message || String(error)}`);
     }
 
     const currentDocument = getCurrentDocument();
     if (currentDocument?.documentKey === documentKey) {
-      currentDocument.starred = starred;
+      currentDocument.isStarred = isStarred;
     }
 
-    setDocumentStarState(starred, false);
+    setDocumentStarState(isStarred, false);
   }
 
   async function refresh() {
@@ -53,32 +53,32 @@ export function createPaperActionsController({
       return;
     }
 
-    const nextStarred = !currentPaperStarred;
+    const nextIsStarred = !currentPaperIsStarred;
     starSavePending = true;
-    setDocumentStarState(nextStarred, false);
+    setDocumentStarState(nextIsStarred, false);
     try {
-      await setLibraryPaperStarred(document.documentKey, nextStarred, {
+      await setLibraryPaperStarred(document.documentKey, nextIsStarred, {
         canonicalUrl: document.url,
         title: document.title,
         titleSource: document.titleSource
       });
-      document.starred = nextStarred;
+      document.isStarred = nextIsStarred;
       notifyLibraryPaperActivityChanged(document.documentKey);
     } catch (error) {
-      setDocumentStarState(!nextStarred, false);
+      setDocumentStarState(!nextIsStarred, false);
       onError?.(`Could not update star.\n${error.message || String(error)}`);
     } finally {
       starSavePending = false;
     }
   }
 
-  function setDocumentStarState(starred, disabled) {
-    currentPaperStarred = Boolean(starred);
+  function setDocumentStarState(isStarred, disabled) {
+    currentPaperIsStarred = Boolean(isStarred);
     starElement.disabled = Boolean(disabled);
-    starElement.classList.toggle("starred", currentPaperStarred);
-    starElement.title = currentPaperStarred ? "Unstar paper" : "Star paper";
+    starElement.classList.toggle("starred", currentPaperIsStarred);
+    starElement.title = currentPaperIsStarred ? "Unstar paper" : "Star paper";
     starElement.setAttribute("aria-label", starElement.title);
-    starElement.setAttribute("aria-pressed", String(currentPaperStarred));
+    starElement.setAttribute("aria-pressed", String(currentPaperIsStarred));
   }
 
   return {

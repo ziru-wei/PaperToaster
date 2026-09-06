@@ -1,24 +1,33 @@
 import {
   createStoredChatThread,
   deleteStoredChatThread,
+  getStoredChatThreadById,
   getStoredChatThread,
+  listSavedQuestionAnswerUnits,
   listStoredChatThreads,
   saveStoredChatThread,
   setActiveStoredChatThread
 } from "../storage/chat-store.js";
 import {
   collapseOpenConversationSelections,
+  renderSavedQuestionAnswerUnits,
   renderConversationMessages,
   toggleConversationSelection
 } from "./conversation-message-renderer.js";
-import { createScrollToLatestController } from "./scroll-to-latest-controller.js";
+import {
+  applyMarkdownHiddenText,
+  applyMarkdownHighlight,
+  removeMarkdownHiddenText,
+  removeMarkdownHighlight
+} from "../markdown/highlight-markdown.js";
+import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 import { createThreadWheelController } from "./thread-wheel-controller.js";
 
 export function createConversationPanelController({
   threadElement,
   threadArchiveButton,
   threadWheelElement,
-  scrollToBottomButton,
+  scrollToLatest,
   onDiagnostic,
   onChange
 }) {
@@ -28,12 +37,10 @@ export function createConversationPanelController({
   let threadSummaries = [];
   let saveTimer = null;
   let documentRequestId = 0;
+  let transientMessageId = 0;
+  let savedViewActive = false;
+  let savedQuestionAnswerUnits = [];
 
-  const scrollToLatest = createScrollToLatestController({
-    threadElement,
-    buttonElement: scrollToBottomButton,
-    hasMessages: () => messages.length > 0
-  });
   const threadWheel = createThreadWheelController({
     archiveButton: threadArchiveButton,
     wheelElement: threadWheelElement,
@@ -84,6 +91,7 @@ export function createConversationPanelController({
       messages = [];
       activeThreadId = "";
       threadSummaries = [];
+      savedQuestionAnswerUnits = [];
       threadWheel.close();
       render();
       scrollToLatest.update();
@@ -99,6 +107,9 @@ export function createConversationPanelController({
 
     applyThread(thread);
     await refreshThreadList(requestId);
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits(requestId);
+    }
     if (requestId !== documentRequestId) {
       return;
     }
@@ -109,16 +120,19 @@ export function createConversationPanelController({
   }
 
   function appendMessage(message) {
-    const text = String(message?.text || "").trim();
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const rawText = String(message?.text || "").trim();
+    const text = role === "assistant" ? normalizeAiResponseMarkdown(rawText) : rawText;
     if (!text) {
       return;
     }
 
     messages.push({
-      role: message.role === "assistant" ? "assistant" : "user",
+      role,
       text,
       selectionText: String(message.selectionText || "").trim(),
-      createdAt: Number(message.createdAt) || Date.now()
+      createdAt: Number(message.createdAt) || Date.now(),
+      isSaved: isMessageSaved(message)
     });
     render();
     queueSave();
@@ -126,7 +140,338 @@ export function createConversationPanelController({
   }
 
   function getMessages() {
-    return messages.map((message) => ({ ...message }));
+    return messages
+      .filter((message) => !message.pending)
+      .map((message) => ({ ...message }));
+  }
+
+  function appendTransientMessage(message) {
+    const id = `transient-${Date.now()}-${++transientMessageId}`;
+    messages.push({
+      role: message?.role === "user" ? "user" : "assistant",
+      text: String(message?.text || "").trim(),
+      selectionText: "",
+      createdAt: Number(message?.createdAt) || Date.now(),
+      pending: true,
+      transientId: id
+    });
+    render();
+    onChange?.();
+    return id;
+  }
+
+  function updateTransientMessage(transientId, updates = {}) {
+    const index = messages.findIndex((candidate) => candidate.pending && candidate.transientId === transientId);
+    if (index < 0) {
+      return false;
+    }
+
+    messages[index] = {
+      ...messages[index],
+      text: String(updates.text || messages[index].text || "").trim()
+    };
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
+  }
+
+  function replaceTransientMessage(transientId, message) {
+    const index = messages.findIndex((candidate) => candidate.pending && candidate.transientId === transientId);
+    if (index < 0) {
+      return false;
+    }
+
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const rawText = String(message?.text || "").trim();
+    const text = role === "assistant" ? normalizeAiResponseMarkdown(rawText) : rawText;
+    if (!text) {
+      messages.splice(index, 1);
+      render();
+      onChange?.();
+      return true;
+    }
+
+    messages.splice(index, 1, {
+      role,
+      text,
+      selectionText: String(message.selectionText || "").trim(),
+      createdAt: Number(message.createdAt) || Date.now(),
+      isSaved: isMessageSaved(message)
+    });
+    render();
+    queueSave();
+    onChange?.();
+    return true;
+  }
+
+  function removeTransientMessage(transientId) {
+    const index = messages.findIndex((candidate) => candidate.pending && candidate.transientId === transientId);
+    if (index < 0) {
+      return;
+    }
+
+    messages.splice(index, 1);
+    render();
+    onChange?.();
+  }
+
+  async function toggleMessageSaved(messageIndex) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return;
+    }
+
+    messages[index] = {
+      ...message,
+      isSaved: !isMessageSaved(message)
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+  }
+
+  async function highlightAssistantSelection(messageIndex, selectedText) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = applyMarkdownHighlight(message.text, selectedText);
+    if (!result.changed) {
+      onDiagnostic?.(`Highlight skipped: ${formatHighlightSkipReason(result.reason)}`);
+      return false;
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return true;
+  }
+
+  async function hideAssistantSelection(messageIndex, selectedText) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = applyMarkdownHiddenText(message.text, selectedText);
+    if (!result.changed) {
+      onDiagnostic?.(`Hide skipped: ${formatHighlightSkipReason(result.reason)}`);
+      return false;
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return true;
+  }
+
+  async function removeAssistantHighlight(messageIndex, highlightIndex) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = removeMarkdownHighlight(message.text, highlightIndex);
+    if (!result.changed) {
+      onDiagnostic?.("Highlight removal skipped: highlight was not found.");
+      return false;
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return true;
+  }
+
+  async function removeAssistantHiddenText(messageIndex, hiddenIndex) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || message.pending) {
+      return false;
+    }
+
+    const result = removeMarkdownHiddenText(message.text, hiddenIndex);
+    if (!result.changed) {
+      onDiagnostic?.("Hidden text removal skipped: hidden text was not found.");
+      return false;
+    }
+
+    messages[index] = {
+      ...message,
+      text: result.markdown
+    };
+    render({ scrollToBottom: false });
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render({ scrollToBottom: false });
+    }
+    onChange?.();
+    return true;
+  }
+
+  async function highlightSavedAnswerSelection(unit, selectedText) {
+    return editSavedAnswerMessage(unit, (message) => applyMarkdownHighlight(message.text, selectedText));
+  }
+
+  async function hideSavedAnswerSelection(unit, selectedText) {
+    return editSavedAnswerMessage(unit, (message) => applyMarkdownHiddenText(message.text, selectedText), {
+      unchanged: "Hide skipped: selected text was not found uniquely."
+    });
+  }
+
+  async function removeSavedAnswerHighlight(unit, highlightIndex) {
+    return editSavedAnswerMessage(unit, (message) => removeMarkdownHighlight(message.text, highlightIndex), {
+      missingMessage: "Highlight removal skipped: saved answer was not found.",
+      unchanged: "Highlight removal skipped: highlight was not found."
+    });
+  }
+
+  async function removeSavedAnswerHiddenText(unit, hiddenIndex) {
+    return editSavedAnswerMessage(unit, (message) => removeMarkdownHiddenText(message.text, hiddenIndex), {
+      missingMessage: "Hidden text removal skipped: saved answer was not found.",
+      unchanged: "Hidden text removal skipped: hidden text was not found."
+    });
+  }
+
+  async function editSavedAnswerMessage(unit, editMessage, diagnostics = {}) {
+    const threadId = String(unit?.threadId || "").trim();
+    const messageIndex = Number(unit?.assistantMessageIndex);
+    if (!threadUrl || !threadId || !Number.isInteger(messageIndex) || messageIndex < 0) {
+      return false;
+    }
+
+    const targetThread = threadId === activeThreadId
+      ? { threadId: activeThreadId, messages }
+      : await getStoredChatThreadById(threadUrl, threadId);
+    const targetMessages = Array.isArray(targetThread?.messages)
+      ? targetThread.messages.map((message) => ({ ...message }))
+      : [];
+    const message = targetMessages[messageIndex];
+    if (!message || message.role !== "assistant" || message.pending) {
+      onDiagnostic?.(diagnostics.missingMessage || "Highlight skipped: saved answer was not found.");
+      return false;
+    }
+
+    const result = editMessage(message);
+    if (!result.changed) {
+      onDiagnostic?.(diagnostics.unchanged || `Highlight skipped: ${formatHighlightSkipReason(result.reason)}`);
+      return false;
+    }
+
+    targetMessages[messageIndex] = {
+      ...message,
+      text: result.markdown
+    };
+    await saveStoredChatThread(threadUrl, {
+      threadId,
+      url: threadUrl,
+      messages: targetMessages
+    }, {
+      setActive: threadId === activeThreadId
+    });
+
+    if (threadId === activeThreadId) {
+      messages = targetMessages;
+    }
+    await loadSavedQuestionAnswerUnits();
+    await refreshThreadList();
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
+  }
+
+  async function deleteMessageUnit(messageIndex) {
+    const index = Number(messageIndex);
+    if (!messages[index] || messages[index].pending) {
+      return;
+    }
+
+    const startIndex = messages[index - 1]?.role === "user" && !messages[index - 1]?.pending
+      ? index - 1
+      : index;
+    const deleteCount = index - startIndex + 1;
+    if (!window.confirm("Delete this question and response?")) {
+      return;
+    }
+
+    messages.splice(startIndex, deleteCount);
+    if (!hasVisibleMessages(messages)) {
+      await deleteCurrentThreadAfterLastMessage();
+      return;
+    }
+
+    render();
+    await persist();
+    await refreshThreadList();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+      render();
+    }
+    onChange?.();
+  }
+
+  async function deleteCurrentThreadAfterLastMessage() {
+    window.clearTimeout(saveTimer);
+    const requestId = documentRequestId;
+
+    if (threadUrl && activeThreadId) {
+      const thread = await deleteStoredChatThread(threadUrl, activeThreadId);
+      if (requestId !== documentRequestId) {
+        return;
+      }
+
+      applyThread(thread);
+      await refreshThreadList(requestId);
+      if (savedViewActive) {
+        await loadSavedQuestionAnswerUnits(requestId);
+      }
+    } else {
+      messages = [];
+      activeThreadId = "";
+      await refreshThreadList(requestId);
+    }
+
+    render();
+    onChange?.();
   }
 
   async function createThread() {
@@ -144,12 +489,25 @@ export function createConversationPanelController({
     applyThread(thread);
     await refreshThreadList(requestId);
     threadWheel.close();
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits(requestId);
+    }
     render();
     onChange?.();
   }
 
   async function selectThread(threadId) {
-    if (!threadUrl || !threadId || threadId === activeThreadId) {
+    if (!threadUrl || !threadId) {
+      return;
+    }
+
+    if (threadId === activeThreadId) {
+      if (savedViewActive) {
+        savedViewActive = false;
+        savedQuestionAnswerUnits = [];
+        render();
+        onChange?.();
+      }
       return;
     }
 
@@ -161,6 +519,8 @@ export function createConversationPanelController({
     }
 
     applyThread(thread);
+    savedViewActive = false;
+    savedQuestionAnswerUnits = [];
     await refreshThreadList(requestId);
     render();
     onChange?.();
@@ -180,6 +540,9 @@ export function createConversationPanelController({
 
     applyThread(thread);
     await refreshThreadList(requestId);
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits(requestId);
+    }
     render();
     onChange?.();
   }
@@ -193,9 +556,75 @@ export function createConversationPanelController({
     const savedThread = await saveStoredChatThread(threadUrl, {
       threadId: activeThreadId,
       url: threadUrl,
-      messages
+      messages: messages.filter((message) => !message.pending)
     });
     activeThreadId = savedThread.threadId || activeThreadId;
+    return savedThread;
+  }
+
+  async function persistCurrentAndGetSnapshot() {
+    const scopedUrl = threadUrl;
+    const scopedThreadId = activeThreadId;
+    const scopedMessages = getMessages();
+    if (!scopedUrl || (!scopedThreadId && !scopedMessages.length)) {
+      return createConversationSnapshot({
+        url: scopedUrl,
+        threadId: scopedThreadId,
+        messages: scopedMessages
+      });
+    }
+
+    window.clearTimeout(saveTimer);
+    const savedThread = await saveStoredChatThread(scopedUrl, {
+      threadId: scopedThreadId,
+      url: scopedUrl,
+      messages: scopedMessages
+    });
+    const snapshot = createConversationSnapshot({
+      url: scopedUrl,
+      threadId: savedThread.threadId || scopedThreadId,
+      messages: savedThread.messages || scopedMessages
+    });
+
+    if (threadUrl === scopedUrl && activeThreadId === scopedThreadId) {
+      activeThreadId = snapshot.threadId;
+      await refreshThreadList();
+    }
+
+    return snapshot;
+  }
+
+  async function saveMessagesForSnapshot(snapshot, nextMessages) {
+    if (!snapshot?.url || !snapshot?.threadId) {
+      return null;
+    }
+
+    const savedThread = await saveStoredChatThread(snapshot.url, {
+      threadId: snapshot.threadId,
+      url: snapshot.url,
+      messages: normalizeVisibleMessages(nextMessages)
+    });
+
+    if (isSnapshotCurrent(snapshot)) {
+      applyThread(savedThread);
+      await refreshThreadList();
+      if (savedViewActive) {
+        await loadSavedQuestionAnswerUnits();
+      }
+      render();
+      onChange?.();
+    }
+
+    return savedThread;
+  }
+
+  function isSnapshotCurrent(snapshot) {
+    return Boolean(
+      snapshot?.url &&
+      snapshot?.threadId &&
+      threadUrl === snapshot.url &&
+      activeThreadId === snapshot.threadId
+    );
   }
 
   function queueSave() {
@@ -219,6 +648,66 @@ export function createConversationPanelController({
     activeThreadId = thread.threadId || "";
   }
 
+  async function setSavedQuestionAnswerViewActive(active) {
+    savedViewActive = Boolean(active);
+    if (savedViewActive) {
+      await loadSavedQuestionAnswerUnits();
+    } else {
+      savedQuestionAnswerUnits = [];
+    }
+
+    render();
+    onChange?.();
+  }
+
+  async function toggleSavedQuestionAnswerView() {
+    await setSavedQuestionAnswerViewActive(!savedViewActive);
+  }
+
+  function isSavedQuestionAnswerViewActive() {
+    return savedViewActive;
+  }
+
+  async function loadSavedQuestionAnswerUnits(requestId = documentRequestId) {
+    const units = threadUrl
+      ? await listSavedQuestionAnswerUnits(threadUrl)
+      : [];
+    if (requestId !== documentRequestId) {
+      return;
+    }
+
+    savedQuestionAnswerUnits = units;
+  }
+
+  async function jumpToSavedQuestionAnswerUnit(unit) {
+    const threadId = String(unit?.threadId || "").trim();
+    if (!threadUrl || !threadId) {
+      return;
+    }
+
+    await persist();
+    const requestId = documentRequestId;
+
+    if (threadId !== activeThreadId) {
+      const thread = await setActiveStoredChatThread(threadUrl, threadId);
+      if (requestId !== documentRequestId) {
+        return;
+      }
+
+      applyThread(thread);
+      await refreshThreadList(requestId);
+    }
+
+    savedViewActive = false;
+    savedQuestionAnswerUnits = [];
+    render();
+    onChange?.();
+    scrollToConversationMessagePair({
+      userMessageIndex: unit.userMessageIndex,
+      assistantMessageIndex: unit.assistantMessageIndex
+    });
+  }
+
   async function refreshThreadList(requestId = documentRequestId) {
     if (!threadUrl) {
       threadSummaries = [];
@@ -235,9 +724,30 @@ export function createConversationPanelController({
     renderThreadList();
   }
 
-  function render() {
-    renderConversationMessages(threadElement, messages);
-    scrollToLatest.scrollToBottom();
+  function render({ scrollToBottom = true } = {}) {
+    if (savedViewActive) {
+      renderSavedQuestionAnswerUnits(threadElement, savedQuestionAnswerUnits, {
+        onJumpToUnit: jumpToSavedQuestionAnswerUnit,
+        onHighlightSavedAnswerSelection: highlightSavedAnswerSelection,
+        onHideSavedAnswerSelection: hideSavedAnswerSelection,
+        onRemoveSavedAnswerHighlight: removeSavedAnswerHighlight,
+        onRemoveSavedAnswerHiddenText: removeSavedAnswerHiddenText
+      });
+      scrollToLatest.hide();
+      return;
+    }
+
+    renderConversationMessages(threadElement, messages, {
+      onToggleSaved: toggleMessageSaved,
+      onDeleteUnit: deleteMessageUnit,
+      onHighlightAssistantSelection: highlightAssistantSelection,
+      onHideAssistantSelection: hideAssistantSelection,
+      onRemoveAssistantHighlight: removeAssistantHighlight,
+      onRemoveAssistantHiddenText: removeAssistantHiddenText
+    });
+    if (scrollToBottom) {
+      scrollToLatest.scrollToBottom();
+    }
     window.requestAnimationFrame(scrollToLatest.update);
   }
 
@@ -245,13 +755,106 @@ export function createConversationPanelController({
     threadWheel.render();
   }
 
+  function hasScrollableMessages() {
+    return !savedViewActive && messages.length > 0;
+  }
+
   return {
     setDocumentUrl,
     appendMessage,
+    appendTransientMessage,
+    updateTransientMessage,
+    replaceTransientMessage,
+    removeTransientMessage,
+    toggleMessageSaved,
+    highlightAssistantSelection,
+    hideAssistantSelection,
+    removeAssistantHighlight,
+    removeAssistantHiddenText,
+    deleteMessageUnit,
     getMessages,
+    hasScrollableMessages,
     persist,
+    persistCurrentAndGetSnapshot,
+    saveMessagesForSnapshot,
+    isSnapshotCurrent,
+    setSavedQuestionAnswerViewActive,
+    toggleSavedQuestionAnswerView,
+    isSavedQuestionAnswerViewActive,
     createThread,
     selectThread,
     deleteThread
   };
+}
+
+function scrollToConversationMessagePair({ userMessageIndex, assistantMessageIndex }) {
+  const indexes = [userMessageIndex, assistantMessageIndex]
+    .map((index) => Number(index))
+    .filter((index) => Number.isInteger(index) && index >= 0);
+
+  if (!indexes.length) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const targets = indexes
+      .map((index) => document.querySelector(`.conversation-message[data-message-index="${index}"]`))
+      .filter(Boolean);
+    const firstTarget = targets[0];
+    if (!firstTarget) {
+      return;
+    }
+
+    firstTarget.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+
+    targets.forEach((target) => target.classList.add("conversation-jump-highlight"));
+    window.setTimeout(() => {
+      targets.forEach((target) => target.classList.remove("conversation-jump-highlight"));
+    }, 1200);
+  });
+}
+
+function createConversationSnapshot({ url, threadId, messages }) {
+  return {
+    url: String(url || ""),
+    threadId: String(threadId || ""),
+    messages: normalizeVisibleMessages(messages)
+  };
+}
+
+function normalizeVisibleMessages(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => message?.role && message?.text && !message.pending)
+    .map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      text: String(message.text || "").trim(),
+      selectionText: String(message.selectionText || "").trim(),
+      createdAt: Number(message.createdAt) || Date.now(),
+      isSaved: isMessageSaved(message)
+    }));
+}
+
+function isMessageSaved(message) {
+  return Boolean(message?.isSaved);
+}
+
+function formatHighlightSkipReason(reason) {
+  if (reason === "ambiguous-selection") {
+    return "selected text appears more than once.";
+  }
+  if (reason === "selection-not-found") {
+    return "selected text was not found in the response markdown.";
+  }
+  return "select response text first.";
+}
+
+function hasVisibleMessages(messages) {
+  return (Array.isArray(messages) ? messages : []).some((message) => (
+    message?.role &&
+    message?.text &&
+    !message.pending
+  ));
 }

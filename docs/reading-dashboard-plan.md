@@ -1,5 +1,9 @@
 # Reading Dashboard Plan
 
+Last updated: 2026-09-06
+
+Status: dashboard MVP is implemented. This file is now a historical design note plus current-state reference. Deferred work is consolidated in `docs/unfinished-feature-plan.md`.
+
 ## Goal
 
 Build a separate extension dashboard page that shows every paper already known to the local database, including papers that are not currently open in a browser tab.
@@ -19,11 +23,12 @@ Included:
 
 - A full-page extension dashboard, likely `src/dashboard/dashboard.html`.
 - Gallery/list view over local `papers`.
-- Paper title link, conversation thread count, message count, first conversation time, latest activity time.
+- Plain paper title, message count visualization, first/early ask time, latest ask time.
 - Sort controls.
-- Open paper URL in browser tab.
-- Open the active side panel context when the paper is already open or after opening the URL.
+- Open stored paper context in the side panel by clicking the card.
 - Star/unstar papers as lightweight local triage.
+- Manage mode for import, backup, archive, delete, and select all.
+- Comparative Reading records shown as a separate dashboard record type.
 
 Not included in the first pass:
 
@@ -37,7 +42,7 @@ Important boundary: the dashboard can only show PDFs with local records. If a PD
 
 ## Current Data Foundation
 
-Current database: `pdf-ai-inspector`, version `3`.
+Current database: `pdf-ai-inspector`, version `4`.
 
 Relevant existing stores:
 
@@ -49,7 +54,7 @@ papers
   titleSource
   metadata
   activeThreadId
-  starred
+  isStarred
   starredAt
   createdAt
   updatedAt
@@ -82,6 +87,27 @@ conversationMessages
   role
   text
   selectionText
+  isSaved
+  createdAt
+
+comparisonSessions
+  comparisonId
+  documentKeys
+  title
+  messageCount
+  isStarred
+  createdAt
+  firstMessageCreatedAt
+  updatedAt
+
+comparisonMessages
+  messageId
+  comparisonId
+  sequence
+  role
+  text
+  isSaved
+  citedDocumentKeys
   createdAt
 ```
 
@@ -89,12 +115,12 @@ The dashboard should be built around `documentKey`, not title. Title remains edi
 
 ## Proposed Storage Additions
 
-Upgrade IndexedDB to version `3`.
+The current dashboard-visible migration baseline is IndexedDB version `4`.
 
 Current visible triage is a paper-level star on `papers`.
 
 ```text
-papers.starred
+papers.isStarred
 papers.starredAt
 ```
 
@@ -125,14 +151,14 @@ paperLabels.byDocumentKey
 paperLabels.byLabelId
 ```
 
-Why this structure:
+Why the paused label structure exists:
 
 - Label order is global and user-arrangeable.
 - A paper can start with one label, but the model supports multiple labels if needed.
-- Sorting by label can use the first assigned label according to global `labels.sortOrder`.
+- Sorting by label could use the first assigned label according to global `labels.sortOrder`.
 - Deleting or renaming a label does not require rewriting all paper records.
 
-Possible MVP shortcut:
+Old MVP shortcut that was not used:
 
 ```js
 papers.label = "To Read"
@@ -178,7 +204,7 @@ Return shape:
   lastConversationAt,
   updatedAt,
   activeThreadId,
-  starred,
+  isStarred,
   starredAt
 }
 ```
@@ -244,30 +270,38 @@ Layout:
 
 ```text
 top bar
-  title: Reading Dashboard
+  Paper Toaster dashboard icon
   search
   sort control
+  manage/import/backup/archive/delete controls
 
 paper gallery/list
   paper card/row
     title
-    title as embedded paper link
-    first/latest timestamps aligned to the right
+    first/latest timestamps
     message-density ring
+    add-to-comparison affordance
+    star action
+
+comparative reading list
+  comparison record
+    inferred title / first question
+    timestamp
     star action
 ```
 
-Recommended first UI shape: list-first gallery.
+Current UI shape: mixed dashboard with paper cards on the left and Comparative Reading records on the right.
 
-Reason: papers have long titles, thread counts, and timestamps. A pure visual card gallery wastes vertical space and makes scanning harder. The page can still feel like a gallery through elegant rows/cards, but information density matters.
+Reason: single papers and comparison sessions have different scanning needs. Paper cards need title/time/activity/star/add affordances; comparison records work better as a compact question/time list.
 
 Paper item content:
 
 ```text
 Title
-embedded PDF link on title
-left-aligned thread start timestamp below title
-message-density ring
+plain text title
+early/latest ask timestamps below title
+message-density ring near the title
+add-to-comparison affordance on the right edge
 star button
 ```
 
@@ -275,11 +309,11 @@ Message-density ring scale: the visible paper with the highest `messageCount` is
 
 Actions per paper:
 
-- Open PDF by clicking the title.
+- Select paper context in the side panel by clicking the card.
 - Continue active thread.
 - Rename title.
 - Star/unstar paper.
-- Remove local record, only after a confirmation.
+- Remove local record in Manage mode, only after confirmation.
 
 The remove action should be conservative and not prominent.
 
@@ -392,9 +426,10 @@ Side panel remains responsible for:
 Dashboard owns:
 
 - Library overview.
-- Label management.
+- Star/management controls.
 - Sorting/filtering.
 - Paper-level metadata edits.
+- Comparative record overview.
 
 Shared modules:
 
@@ -410,7 +445,7 @@ Avoid importing side panel controllers into the dashboard.
 
 ## Migration
 
-Version `3` migration:
+Version `3` migration, completed historically:
 
 1. Create `labels`.
 2. Create `paperLabels`.
@@ -418,6 +453,12 @@ Version `3` migration:
 4. Do not rewrite existing paper/thread/document records.
 
 Existing papers start as unlabeled.
+
+Version `4` migration, completed:
+
+1. Create `comparisonSessions`.
+2. Create `comparisonMessages`.
+3. Keep comparison records keyed separately from single-paper records while sharing paper/document stores for context rebuilds.
 
 No cache invalidation is required.
 
@@ -427,7 +468,7 @@ No cache invalidation is required.
 2. Add `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 3. Render read-only paper list from existing DB.
 4. Add sort controls.
-5. Embed paper URL into the title link.
+5. Add plain paper title and card-level side-panel selection.
 6. Add star/unstar.
 7. Add side panel entry point to open dashboard.
 
@@ -440,16 +481,26 @@ Implemented first:
 - `src/dashboard/dashboard.html`, `dashboard.css`, and `dashboard.js`.
 - `src/storage/library-store.js` for paper summary aggregation.
 - `src/storage/label-store.js` exists for paused label support, but dashboard UI does not currently use labels.
-- IndexedDB version `3` with `labels` and `paperLabels`; visible star state is stored on `papers`.
-- Side panel dashboard entry icon using `src/assets/icons/waves-arrow-down.svg`.
-- Responsive dashboard grid: one, two, or three columns depending on available browser width.
-- Compact paper cards with title-as-link, left-aligned thread start timestamp below the title, top-right message-density ring, and a bottom-right star.
+- IndexedDB version `4` with labels/paperLabels plus comparison session stores.
+- Side panel dashboard entry icon using the Paper Toaster dashboard icon.
+- Responsive dashboard layout with paper cards and comparative records.
+- Compact paper cards with plain title, ask timestamps, message-density ring, add-to-comparison affordance, and star.
+- Comparative Reading records rendered as a compact list separate from paper cards.
+- Manage mode supports Import, Select all, Backup, Archive, and Delete.
+- Dashboard-selected paper and comparison records hydrate the side panel from storage instead of triggering PDF fetch/parse.
+- Placeholder title records such as `Untitled paper` and `Title not found` are hidden from the visible dashboard.
 
 The dashboard currently aggregates all local papers in memory from IndexedDB. It does not read full conversation messages or raw Markdown.
 
 ## Open Questions
 
 - Should labels stay paused permanently, or come back later as a secondary organization layer? The normalized storage can support them if needed.
-- Should papers with only cached Markdown and no conversation appear, or should the dashboard show only papers with at least one non-empty thread? Current recommendation: show all local papers, but visually distinguish `no conversation yet`.
 - Should deleting a paper local record also delete cached Markdown and conversation history, or should these be separate actions?
 - Should dashboard search include Markdown content later, or only title/domain/metadata?
+
+Resolved:
+
+- Title is plain text, not an embedded link. Card click selects context; add/star/manage controls have their own hit targets.
+- Thread count is not shown on cards.
+- Open-time is not stored or displayed.
+- Visible organization uses stars, not labels.

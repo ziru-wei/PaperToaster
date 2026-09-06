@@ -1,10 +1,12 @@
 # Dashboard Open Items
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
+
+Status: the dashboard-to-side-panel context feature is implemented. Remaining dashboard future work is tracked in `docs/unfinished-feature-plan.md`.
 
 ## Current State
 
-The Reading Dashboard is a separate extension page that lists papers already known to the local IndexedDB database. It shows compact paper cards, title-as-link, thread start timestamps, star state, and a message-density ring.
+The Reading Dashboard is a separate extension page that lists papers already known to the local IndexedDB database. It shows compact paper cards with plain titles, ask timestamps, star state, add-to-comparison affordances, and a message-density ring. Comparative Reading records appear as a separate compact list.
 
 The side panel supports two context sources: the active PDF tab and a dashboard-selected library paper.
 
@@ -14,19 +16,20 @@ The dashboard also has a compact management mode for bulk archive/delete/import.
 
 Goal:
 
-When the Reading Dashboard is open on the left/main browser area, the PDF AI side panel should not try to inspect the dashboard page as a PDF. Instead, clicking a paper-level control in the dashboard should load that paper's saved context into the side panel.
+When the Reading Dashboard is open on the left/main browser area, the Paper Toaster side panel should not try to inspect the dashboard page as a PDF. Instead, clicking a paper card should load that paper's saved context into the side panel.
 
 Expected behavior:
 
 - The dashboard stays open in the main tab.
 - Clicking a dashboard paper card selects that paper for the side panel.
-- The side panel displays the same document title, URL, context ready state, conversation thread wheel, chat history, selected-text composer, and RAG-backed ask flow that it displays when the PDF itself is open.
+- The side panel displays the same document title, URL, context ready state, conversation thread wheel, chat history, Saved Q&A view, selected-text composer, and RAG-backed ask flow that it displays when the PDF itself is open.
 - The side panel should hydrate from local storage by `documentKey`; it should not fetch or parse the PDF again.
 - If the user switches from the dashboard to a real PDF tab, the side panel should return to active PDF tab mode.
-- The selected dashboard card shows a subtle active state.
+- The selected dashboard card shows a salient active state. Related records show secondary activation when a single paper and comparative session reference each other.
 - Dashboard cards refresh when side panel conversation activity changes.
-- The side panel title star and dashboard card star share the same `papers.starred` storage field.
+- The side panel title star and dashboard card star share the same `papers.isStarred` storage field.
 - Placeholder title records such as `Untitled paper` and `Title not found` are hidden from the dashboard list.
+- If no single paper is selected while the dashboard is open, the side panel shows Comparative Reading mode.
 
 ## Architecture
 
@@ -105,17 +108,19 @@ The dashboard paper card is the side panel context trigger.
 
 Rationale:
 
-- The title already opens the paper URL.
+- The title is plain text; the whole card selects side-panel context.
 - The star is paper triage.
 - The message-density ring is only an activity indicator.
+- The add-to-comparison affordance is separate from card selection.
 - The card-level target is easier to hit and makes context switching feel direct.
 
 ## Current Dashboard Visual Open Items
 
 - Message-density ring currently uses fixed circle size with proportional conic fill. If desired later, the circle diameter itself could also scale by message count, but fixed-size rings are easier to scan in a card grid.
-- The exact message count is currently available through tooltip/aria-label, not visible text.
+- The exact message count is currently represented by the visual ring and accessibility labels, not visible text.
 - Cards intentionally do not show thread count text.
 - Cards with placeholder titles are filtered from the visible dashboard, but their raw database records are not deleted.
+- Comparative Reading records are visible dashboard records and can be managed, backed up, archived, deleted, and starred.
 
 ## Search Open Item
 

@@ -1,6 +1,8 @@
 # Local Agent Workflow
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
+
+Status: implemented for the current MVP. Streaming responses are not implemented yet; that follow-up is tracked in `docs/unfinished-feature-plan.md`.
 
 ## Goal
 
@@ -9,7 +11,7 @@ Allow the extension to use a local AI agent through a small HTTP bridge instead 
 The extension cannot spawn local CLI tools such as Codex or Claude Code from inside Chrome. The supported architecture is:
 
 ```text
-PDF AI Inspector
+Paper Toaster
   -> build selected-text / whole-paper RAG prompt
   -> POST local HTTP bridge
   -> bridge invokes local agent or local model
@@ -59,6 +61,8 @@ Content-Type: application/json
 ```
 
 `prompt` is the canonical input. `contextPack` is included so a smarter local bridge can inspect structured paper context later, but a minimal bridge can ignore it.
+
+`source` remains the legacy internal compatibility id. Product-facing UI is now `Paper Toaster`.
 
 ## Response Contract
 
@@ -188,4 +192,4 @@ Relevant files:
 - `src/options/options.html`
 - `src/options/options.js`
 
-The RAG, conversation memory, selected text handling, and document storage pipeline are unchanged. Only the final answer provider changes.
+The RAG, conversation memory, selected text handling, comparative reading flow, and document storage pipeline are unchanged. Only the final answer provider changes.

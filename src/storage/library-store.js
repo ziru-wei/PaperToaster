@@ -77,7 +77,7 @@ export async function getLibraryPaperSummary(documentKey) {
   });
 }
 
-export async function setLibraryPaperStarred(documentKey, starred, fallback = {}) {
+export async function setLibraryPaperStarred(documentKey, isStarred, fallback = {}) {
   if (!documentKey) {
     return;
   }
@@ -96,8 +96,8 @@ export async function setLibraryPaperStarred(documentKey, starred, fallback = {}
     createdAt: existing?.createdAt || now,
     updatedAt: existing?.updatedAt || now,
     activeThreadId: existing?.activeThreadId || "",
-    starred: Boolean(starred),
-    starredAt: starred ? now : null
+    isStarred: Boolean(isStarred),
+    starredAt: isStarred ? now : null
   });
   await transactionDone(transaction);
 }
@@ -180,7 +180,7 @@ function createPaperSummary({ paper, document, threads }) {
     lastConversationAt,
     updatedAt,
     activeThreadId: paper.activeThreadId || "",
-    starred: Boolean(paper.starred),
+    isStarred: Boolean(paper.isStarred),
     starredAt: getTime(paper.starredAt)
   };
 }
@@ -207,7 +207,7 @@ function compareLibraryPapers(left, right, options) {
   }
 
   if (sortBy === "starred") {
-    const starredComparison = compareBoolean(left.starred, right.starred);
+    const starredComparison = compareBoolean(left.isStarred, right.isStarred);
     if (starredComparison) {
       return starredComparison * direction;
     }

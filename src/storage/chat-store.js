@@ -1,4 +1,5 @@
 import { getDocumentMemoryKey, normalizeLegacyDocumentUrl } from "./document-key.js";
+import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 import {
   CONVERSATION_MESSAGE_STORE,
   CONVERSATION_THREAD_STORE,
@@ -54,7 +55,28 @@ export async function getStoredChatThread(url) {
   }, url);
 }
 
-export async function saveStoredChatThread(url, thread) {
+export async function getStoredChatThreadById(url, threadId) {
+  const documentKey = getDocumentMemoryKey(url);
+  const normalizedThreadId = String(threadId || "").trim();
+  if (!documentKey || !normalizedThreadId) {
+    return createEmptyChatThread({ url, documentKey });
+  }
+
+  const db = await openPaperDatabase();
+  const thread = await getThreadRecord(db, normalizedThreadId);
+  if (!thread || thread.documentKey !== documentKey) {
+    return createEmptyChatThread({ url, documentKey });
+  }
+
+  const messages = await getThreadMessages(db, normalizedThreadId);
+  return normalizeChatThread({
+    ...thread,
+    url,
+    messages
+  }, url);
+}
+
+export async function saveStoredChatThread(url, thread, options = {}) {
   const documentKey = getDocumentMemoryKey(url);
   if (!documentKey) {
     return createEmptyChatThread({ url });
@@ -71,6 +93,7 @@ export async function saveStoredChatThread(url, thread) {
     url
   }, url);
   const now = Date.now();
+  const shouldSetActive = options.setActive !== false;
   const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE, CONVERSATION_MESSAGE_STORE], "readwrite");
 
   transaction.objectStore(PAPER_STORE).put({
@@ -82,7 +105,7 @@ export async function saveStoredChatThread(url, thread) {
     metadata: existingPaper?.metadata || null,
     createdAt: existingPaper?.createdAt || now,
     updatedAt: now,
-    activeThreadId: threadId
+    activeThreadId: shouldSetActive ? threadId : existingPaper?.activeThreadId || threadId
   });
 
   transaction.objectStore(CONVERSATION_THREAD_STORE).put({
@@ -136,6 +159,51 @@ export async function listStoredChatThreads(url) {
     }));
 
   return Promise.all(sortedThreads);
+}
+
+export async function listSavedQuestionAnswerUnits(url) {
+  const documentKey = getDocumentMemoryKey(url);
+  if (!documentKey) {
+    return [];
+  }
+
+  const db = await openPaperDatabase();
+  const threads = await getThreadRecordsForDocument(db, documentKey);
+  const units = [];
+
+  for (const thread of threads) {
+    const messages = await getThreadMessages(db, thread.threadId);
+    let latestUser = null;
+
+    for (const [messageIndex, message] of messages.entries()) {
+      if (message.role === "user") {
+        latestUser = {
+          message,
+          messageIndex
+        };
+        continue;
+      }
+
+      if (message.role !== "assistant" || !message.isSaved) {
+        continue;
+      }
+
+      units.push({
+        threadId: thread.threadId,
+        threadTitle: thread.title || DEFAULT_THREAD_TITLE,
+        userMessageIndex: latestUser?.messageIndex ?? null,
+        assistantMessageIndex: messageIndex,
+        question: latestUser?.message?.text || "",
+        selectionText: latestUser?.message?.selectionText || "",
+        answer: message.text || "",
+        createdAt: Number(message.createdAt || latestUser?.message?.createdAt || thread.updatedAt || thread.createdAt) || Date.now(),
+        questionCreatedAt: Number(latestUser?.message?.createdAt) || null,
+        answerCreatedAt: Number(message.createdAt) || null
+      });
+    }
+  }
+
+  return units.sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
 }
 
 export async function createStoredChatThread(url, options = {}) {
@@ -305,7 +373,9 @@ export function normalizeChatThread(thread, url = "") {
 
 function normalizeChatMessage(message, index = 0) {
   const role = message?.role === "assistant" ? "assistant" : "user";
-  const text = String(message?.text || "").trim().slice(0, MAX_MESSAGE_CHARS);
+  const rawText = String(message?.text || "").trim();
+  const text = (role === "assistant" ? normalizeAiResponseMarkdown(rawText) : rawText)
+    .slice(0, MAX_MESSAGE_CHARS);
   const selectionText = String(message?.selectionText || "").trim().slice(0, MAX_SELECTION_CHARS);
   if (!text) {
     return null;
@@ -315,7 +385,8 @@ function normalizeChatMessage(message, index = 0) {
     role,
     text,
     selectionText,
-    createdAt: Number(message?.createdAt) || Date.now() + index
+    createdAt: Number(message?.createdAt) || Date.now() + index,
+    isSaved: isMessageSaved(message)
   };
 }
 
@@ -399,7 +470,8 @@ async function getThreadMessages(db, threadId) {
       role: message.role,
       text: message.text,
       selectionText: message.selectionText || "",
-      createdAt: message.createdAt || null
+      createdAt: message.createdAt || null,
+      isSaved: isMessageSaved(message)
     }));
 }
 
@@ -413,6 +485,7 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
       role: message.role,
       text: message.text,
       selectionText: message.selectionText || "",
+      isSaved: isMessageSaved(message),
       createdAt: message.createdAt || now + index,
       updatedAt: now
     });
@@ -421,6 +494,10 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
   for (let index = messages.length; index < previousMessageCount; index += 1) {
     store.delete(createMessageId(threadId, index));
   }
+}
+
+function isMessageSaved(message) {
+  return Boolean(message?.isSaved);
 }
 
 function deleteThreadMessages(store, threadId) {

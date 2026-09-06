@@ -6,6 +6,8 @@ export function createComposerController({
   newThreadHintElement,
   promptPresetMenu,
   promptPresetMenuElement,
+  routeSuggestion,
+  shouldSuggestRoute = () => true,
   canSubmit,
   onSubmit,
   onNewThread
@@ -25,6 +27,7 @@ export function createComposerController({
 
   function clear() {
     textarea.value = "";
+    routeSuggestion?.reset();
     updateNewThreadPromptHint();
   }
 
@@ -33,16 +36,22 @@ export function createComposerController({
   }
 
   function handleSubmit(event) {
+    event.preventDefault();
     if (isNewThreadCommand()) {
-      event.preventDefault();
       startNewThread();
       return;
     }
 
-    onSubmit(event);
+    if (!getText() || !canSubmit()) {
+      return;
+    }
+
+    const submission = routeSuggestion?.accept() || {};
+    onSubmit(event, submission);
   }
 
   function handleInput() {
+    routeSuggestion?.reset();
     promptPresetMenu.update();
     updateNewThreadPromptHint();
   }
@@ -63,6 +72,10 @@ export function createComposerController({
       return;
     }
 
+    if (shouldSuggestRoute() && routeSuggestion?.handleKeydown(event)) {
+      return;
+    }
+
     if (promptPresetMenu.handleKeydown(event)) {
       return;
     }
@@ -73,6 +86,12 @@ export function createComposerController({
 
     event.preventDefault();
     if (!getText() || !canSubmit()) {
+      return;
+    }
+
+    if (shouldSuggestRoute() && routeSuggestion && !routeSuggestion.hasPendingSuggestionFor(getText())) {
+      promptPresetMenu.hide();
+      routeSuggestion.prepare(getText());
       return;
     }
 
@@ -93,6 +112,7 @@ export function createComposerController({
   }
 
   async function startNewThread() {
+    routeSuggestion?.reset();
     await onNewThread();
   }
 

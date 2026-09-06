@@ -1,6 +1,6 @@
 import {
-  deleteLibraryPapers,
-  exportLibraryPapers,
+  deleteLibraryRecords,
+  exportLibraryRecords,
   importLibraryArchive
 } from "../storage/library-archive-store.js";
 
@@ -17,7 +17,10 @@ export function createDashboardBulkActions({
     setManageMode,
     togglePaperSelection,
     setPaperSelected,
-    getSelectedDocumentKeys
+    toggleComparisonSelection,
+    setComparisonSelected,
+    getSelectedDocumentKeys,
+    getSelectedComparisonIds
   };
 
   function attachEventListeners() {
@@ -61,14 +64,16 @@ export function createDashboardBulkActions({
   }
 
   function renderBulkActions() {
-    const selectedCount = getSelectedDocumentKeys().length;
+    const selectedDocumentKeys = getSelectedDocumentKeys();
+    const selectedComparisonIds = getSelectedComparisonIds();
+    const selectedCount = selectedDocumentKeys.length + selectedComparisonIds.length;
     const hasSelection = selectedCount > 0;
     elements.bulkActions.hidden = !state.manageMode;
     elements.selectionSummary.textContent = `${selectedCount} selected`;
     elements.importButton.hidden = hasSelection;
     elements.selectAllButton.hidden = hasSelection;
     elements.selectAllButton.textContent = "Select all";
-    elements.selectAllButton.disabled = state.papers.length === 0;
+    elements.selectAllButton.disabled = state.papers.length === 0 && state.comparisons.length === 0;
     elements.backupSelectedButton.disabled = selectedCount === 0;
     elements.archiveSelectedButton.disabled = selectedCount === 0;
     elements.deleteSelectedButton.disabled = selectedCount === 0;
@@ -80,6 +85,7 @@ export function createDashboardBulkActions({
     state.manageMode = Boolean(manageMode);
     if (!state.manageMode) {
       state.selectedDocumentKeys.clear();
+      state.selectedComparisonIds.clear();
     }
 
     onRenderRequested();
@@ -103,46 +109,71 @@ export function createDashboardBulkActions({
     onRenderRequested();
   }
 
+  function toggleComparisonSelection(comparisonId) {
+    setComparisonSelected(comparisonId, !state.selectedComparisonIds.has(comparisonId));
+  }
+
+  function setComparisonSelected(comparisonId, selected) {
+    if (!comparisonId) {
+      return;
+    }
+
+    if (selected) {
+      state.selectedComparisonIds.add(comparisonId);
+    } else {
+      state.selectedComparisonIds.delete(comparisonId);
+    }
+
+    onRenderRequested();
+  }
+
   function selectAllVisiblePapers() {
     const visibleKeys = state.papers.map((paper) => paper.documentKey).filter(Boolean);
+    const visibleComparisonIds = state.comparisons.map((comparison) => comparison.comparisonId).filter(Boolean);
     state.selectedDocumentKeys.clear();
+    state.selectedComparisonIds.clear();
 
     for (const documentKey of visibleKeys) {
       state.selectedDocumentKeys.add(documentKey);
+    }
+    for (const comparisonId of visibleComparisonIds) {
+      state.selectedComparisonIds.add(comparisonId);
     }
 
     onRenderRequested();
   }
 
   async function archiveSelectedPapers() {
-    const selectedKeys = getSelectedDocumentKeys();
-    if (!selectedKeys.length || !window.confirm(`Archive ${selectedKeys.length} selected paper(s)? This downloads a restorable archive, then removes them from the dashboard.`)) {
+    const selection = getSelectedRecords();
+    const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
+    if (!selectedCount || !window.confirm(`Archive ${selectedCount} selected record(s)? This downloads a restorable archive, then removes them from the dashboard.`)) {
       return;
     }
 
-    const archive = await exportLibraryPapers(selectedKeys);
+    const archive = await exportLibraryRecords(selection);
     downloadArchiveFile(archive);
-    await deleteLibraryPapers(selectedKeys);
-    await afterDelete(selectedKeys);
+    await deleteLibraryRecords(selection);
+    await afterDelete(selection);
   }
 
   async function deleteSelectedPapers() {
-    const selectedKeys = getSelectedDocumentKeys();
-    if (!selectedKeys.length || !window.confirm(`Delete ${selectedKeys.length} selected paper(s)? This removes their local markdown and conversations.`)) {
+    const selection = getSelectedRecords();
+    const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
+    if (!selectedCount || !window.confirm(`Delete ${selectedCount} selected record(s)? This removes their local conversations and cached records.`)) {
       return;
     }
 
-    await deleteLibraryPapers(selectedKeys);
-    await afterDelete(selectedKeys);
+    await deleteLibraryRecords(selection);
+    await afterDelete(selection);
   }
 
   async function backupSelectedPapers() {
-    const selectedKeys = getSelectedDocumentKeys();
-    if (!selectedKeys.length) {
+    const selection = getSelectedRecords();
+    if (!selection.documentKeys.length && !selection.comparisonIds.length) {
       return;
     }
 
-    const archive = await exportLibraryPapers(selectedKeys);
+    const archive = await exportLibraryRecords(selection);
     downloadArchiveFile(archive, "backup");
   }
 
@@ -154,20 +185,33 @@ export function createDashboardBulkActions({
     const archive = JSON.parse(await file.text());
     const result = await importLibraryArchive(archive);
     state.selectedDocumentKeys.clear();
+    state.selectedComparisonIds.clear();
     await onRefreshAllRequested();
-    const summary = `Added ${result.importedPaperCount} papers · skipped ${result.skippedPaperCount} existing`;
+    const summary = `Added ${result.importedPaperCount} papers · ${result.comparisonCount} comparisons · skipped ${result.skippedPaperCount} existing`;
     elements.summary.textContent = summary;
     window.alert(`Import complete.\n${summary}`);
   }
 
-  async function afterDelete(documentKeys) {
+  async function afterDelete(selection) {
     setManageMode(false);
-    await onDeleteComplete(documentKeys);
+    await onDeleteComplete(selection);
   }
 
   function getSelectedDocumentKeys() {
     const visibleKeys = new Set(state.papers.map((paper) => paper.documentKey));
     return [...state.selectedDocumentKeys].filter((documentKey) => visibleKeys.has(documentKey));
+  }
+
+  function getSelectedComparisonIds() {
+    const visibleIds = new Set(state.comparisons.map((comparison) => comparison.comparisonId));
+    return [...state.selectedComparisonIds].filter((comparisonId) => visibleIds.has(comparisonId));
+  }
+
+  function getSelectedRecords() {
+    return {
+      documentKeys: getSelectedDocumentKeys(),
+      comparisonIds: getSelectedComparisonIds()
+    };
   }
 }
 
@@ -177,7 +221,9 @@ function downloadArchiveFile(archive, kind = "archive") {
   const link = document.createElement("a");
   const date = new Date().toISOString().slice(0, 10);
   link.href = url;
-  link.download = `reading-dashboard-${kind}-${date}-${archive.documentKeys.length}-papers.json`;
+  const paperCount = archive.documentKeys?.length || 0;
+  const comparisonCount = archive.comparisonIds?.length || 0;
+  link.download = `reading-dashboard-${kind}-${date}-${paperCount}-papers-${comparisonCount}-comparisons.json`;
   document.body.append(link);
   link.click();
   link.remove();

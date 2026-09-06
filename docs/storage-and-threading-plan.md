@@ -1,5 +1,9 @@
 # Storage And Threading Plan
 
+Last updated: 2026-09-06
+
+Status: current storage/threading MVP is implemented. Reserved or future storage work is called out explicitly and consolidated in `docs/unfinished-feature-plan.md`.
+
 ## Current Storage Architecture
 
 The extension now uses one canonical paper key as the join point for document memory and conversation memory.
@@ -25,7 +29,7 @@ Title is not a storage key. Title is editable and can be missing, duplicated, or
 
 Database: `pdf-ai-inspector`
 
-Version: `3`
+Version: `4`
 
 Stores:
 
@@ -44,7 +48,7 @@ Stores:
 - `conversationMessages`
   - Key: `messageId`.
   - Holds individual messages.
-  - Important fields: `messageId`, `threadId`, `documentKey`, `sequence`, `role`, `text`, `selectionText`, `createdAt`.
+  - Important fields: `messageId`, `threadId`, `documentKey`, `sequence`, `role`, `text`, `selectionText`, `isSaved`, `createdAt`.
 - `documentAliases`
   - Key: `aliasKey`.
   - Reserved for future key promotion.
@@ -57,6 +61,14 @@ Stores:
   - Key: `paperLabelId`.
   - Joins papers to labels.
   - Important fields: `paperLabelId`, `documentKey`, `labelId`, `assignedAt`.
+- `comparisonSessions`
+  - Key: `comparisonId`.
+  - Holds persistent Comparative Reading sessions.
+  - Important fields: `comparisonId`, `documentKeys`, `title`, `isStarred`, `starredAt`, `createdAt`, `updatedAt`, `firstMessageCreatedAt`, `messageCount`.
+- `comparisonMessages`
+  - Key: `messageId`.
+  - Holds Comparative Reading dialog messages.
+  - Important fields: `messageId`, `comparisonId`, `sequence`, `role`, `text`, `isSaved`, `citedDocumentKeys`, `createdAt`.
 
 Settings and prompt presets still use `chrome.storage.local`.
 
@@ -74,6 +86,10 @@ Settings and prompt presets still use `chrome.storage.local`.
 - Raw Markdown is not stored.
 - Selected text is one-shot composer state. Once a prompt is sent, the quote belongs only to that user message through `conversationMessages.selectionText`.
 - Dashboard labels are paper-level metadata keyed by `documentKey`; they do not belong to a specific conversation thread.
+- Comparative Reading sessions persist only paper `documentKeys` and dialog messages. They do not duplicate cleaned Markdown, retrieved chunks, or context packs; those are rebuilt from `documents` when a comparative question is asked.
+- Saved Q&A is stored as `isSaved` on assistant messages. The Saved page is a derived view over the same conversation records, not a separate notes store.
+- Deleting a Q&A asks for browser confirmation. If a thread becomes empty after deletion, the empty thread cleanup path removes it.
+- Dashboard and side-panel paper stars share `papers.isStarred`; comparison stars live on `comparisonSessions.isStarred`.
 
 ## Current Runtime Behavior
 
@@ -110,10 +126,11 @@ Controller modules:
 sidepanel.js
   -> composer-controller.js
   -> selection-panel-controller.js
+  -> scroll-to-latest-controller.js
   -> conversation-panel-controller.js
        -> conversation-message-renderer.js
-       -> scroll-to-latest-controller.js
        -> thread-wheel-controller.js
+  -> comparative-reading-controller.js
 ```
 
 Conversation controller API:
@@ -140,6 +157,8 @@ deleteStoredChatThread(url, threadId)
 - Keep UI compact; this is utility chrome, not a notes app.
 
 ## Selection Reference Plan
+
+Status: planned, not implemented.
 
 Problem: conversation messages currently store the full selected quote in `selectionText`. This is simple and reliable for the MVP, but it can make conversation memory heavy when users quote long passages repeatedly.
 
@@ -236,7 +255,11 @@ This should happen before building a serious library UI, otherwise the same pape
 
 ## Open Design Questions
 
-- Should a new thread inherit the latest selected text, or start with no selected text?
 - Should thread titles be user-editable immediately, or inferred from the first user question first?
 - What is the minimum confidence threshold for replacing full `selectionText` with `selectionRef` only?
 - Should failed or low-confidence references keep a longer fallback preview than successful exact references?
+
+Resolved:
+
+- New threads and new prompt sends do not inherit selected text. Selected text is one-shot composer state and is attached only to the message that sends it.
+- Title is not a storage key.

@@ -92,6 +92,18 @@ async function handleMessage(message, sender) {
     case MessageType.OPEN_LIBRARY_PAPER_CONTEXT:
       return openLibraryPaperContext(message, sender);
 
+    case MessageType.OPEN_COMPARISON_CONTEXT:
+      return openComparisonContext(message, sender);
+
+    case MessageType.CLEAR_DASHBOARD_CONTEXT:
+      return clearDashboardContext(message, sender);
+
+    case MessageType.ADD_PAPER_TO_ACTIVE_COMPARISON:
+      return addPaperToActiveComparison(message, sender);
+
+    case MessageType.UPDATE_COMPARISON_DRAFT:
+      return updateComparisonDraft(message);
+
     case MessageType.GET_LIBRARY_PAPER_CONTEXT:
       return {
         ok: true,
@@ -117,6 +129,7 @@ async function openLibraryPaperContext(message, sender) {
 
   const context = {
     documentKey,
+    mode: "library-paper",
     source: "dashboard",
     selectedAt: Date.now()
   };
@@ -126,13 +139,90 @@ async function openLibraryPaperContext(message, sender) {
     await openPanelForTab(sender.tab);
   }
 
-  chrome.runtime.sendMessage({
-    type: MessageType.LIBRARY_PAPER_CONTEXT_CHANGED,
-    context
-  }).catch(() => {
-    // Side panel may be closed; it will read session state when opened.
-  });
+  notifyLibraryPaperContextChanged(context);
 
+  return { ok: true, context };
+}
+
+async function openComparisonContext(message, sender) {
+  const comparisonId = String(message.comparisonId || "").trim();
+  const context = {
+    comparisonId,
+    mode: "comparative-reading",
+    source: "dashboard",
+    draftDocumentKeys: [],
+    selectedAt: Date.now()
+  };
+  await setLibraryPaperContext(context);
+
+  if (sender.tab) {
+    await openPanelForTab(sender.tab);
+  }
+
+  notifyLibraryPaperContextChanged(context);
+  return { ok: true, context };
+}
+
+async function clearDashboardContext(message, sender) {
+  const context = {
+    comparisonId: "",
+    mode: "comparative-reading",
+    source: "dashboard",
+    draftDocumentKeys: [],
+    selectedAt: Date.now()
+  };
+  await setLibraryPaperContext(context);
+
+  if (sender.tab && message.openPanel) {
+    await openPanelForTab(sender.tab);
+  }
+
+  notifyLibraryPaperContextChanged(context);
+  return { ok: true, context };
+}
+
+async function addPaperToActiveComparison(message, sender) {
+  const documentKey = String(message.documentKey || "").trim();
+  if (!documentKey) {
+    throw new Error("No document key was provided.");
+  }
+
+  const existing = await getLibraryPaperContext();
+  const isOpenDraft = existing?.mode === "comparative-reading" && !String(existing.comparisonId || "").trim();
+  const draftDocumentKeys = isOpenDraft && Array.isArray(existing?.draftDocumentKeys)
+    ? existing.draftDocumentKeys
+    : [];
+  const context = {
+    comparisonId: "",
+    mode: "comparative-reading",
+    source: "dashboard",
+    draftDocumentKeys: [...new Set([...draftDocumentKeys, documentKey])].slice(0, 5),
+    addedDocumentKey: documentKey,
+    selectedAt: Date.now()
+  };
+  await setLibraryPaperContext(context);
+
+  if (sender.tab) {
+    await openPanelForTab(sender.tab);
+  }
+
+  notifyLibraryPaperContextChanged(context);
+  return { ok: true, context };
+}
+
+async function updateComparisonDraft(message) {
+  const documentKeys = Array.isArray(message.documentKeys)
+    ? message.documentKeys.map((key) => String(key || "").trim()).filter(Boolean)
+    : [];
+  const context = {
+    comparisonId: "",
+    mode: "comparative-reading",
+    source: "dashboard",
+    draftDocumentKeys: [...new Set(documentKeys)].slice(0, 5),
+    selectedAt: Date.now()
+  };
+  await setLibraryPaperContext(context);
+  notifyLibraryPaperContextChanged(context);
   return { ok: true, context };
 }
 
@@ -143,6 +233,15 @@ async function setLibraryPaperContext(context) {
       [LIBRARY_PAPER_CONTEXT_KEY]: context
     });
   }
+}
+
+function notifyLibraryPaperContextChanged(context) {
+  chrome.runtime.sendMessage({
+    type: MessageType.LIBRARY_PAPER_CONTEXT_CHANGED,
+    context
+  }).catch(() => {
+    // Side panel may be closed; it will read session state when opened.
+  });
 }
 
 async function getLibraryPaperContext() {

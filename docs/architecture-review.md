@@ -1,6 +1,8 @@
 # Architecture Review Notes
 
-Status: MVP works, and the main pipeline is modular enough for continued iteration. Side panel orchestration is now grouped into a thin wiring file plus three coarse controllers, so the remaining concentration is mostly in document-context details and CSS polish.
+Last updated: 2026-09-06
+
+Status: MVP works, and the main pipeline is modular enough for continued iteration. Side panel orchestration is grouped into a thin wiring file plus coarse controllers, so remaining architecture work is mostly reliability-oriented rather than structural.
 
 ## Current Pipeline
 
@@ -13,14 +15,14 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`, `src/ai/local-agent-client.js`
 8. Side panel orchestration: `src/sidepanel/sidepanel.js`, `src/sidepanel/sidepanel-document-context.js`, `src/sidepanel/paper-actions-controller.js`, `src/sidepanel/ask-flow-controller.js`
 9. AI response rendering: `src/markdown/render-markdown.js` wraps the bundled `markdown-it` + `DOMPurify` renderer in `vendor/markdown-renderer/markdown-renderer.mjs`; DOMPurify returns a sanitized `DocumentFragment`, which is inserted with `replaceChildren()`
-10. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`
+10. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`, `src/sidepanel/comparative-reading-controller.js`
 11. Dashboard orchestration: `src/dashboard/dashboard.js`, `src/dashboard/dashboard-renderer.js`, `src/dashboard/dashboard-bulk-actions.js`
-12. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, settings stores
+12. Memory/storage: `src/storage/paper-database.js`, `src/storage/document-store.js`, `src/storage/chat-store.js`, `src/storage/comparison-store.js`, settings stores
 
 ## Architectural Risks
 
 - `src/sidepanel/sidepanel.js` is now a thin coordinator. The largest remaining side panel module is `sidepanel-document-context.js`, because active PDF tab mode and dashboard-selected library mode both belong to document context.
-- `src/dashboard/dashboard.js` is now a page coordinator. Card/sort DOM creation lives in `dashboard-renderer.js`; archive/import/delete selection workflow lives in `dashboard-bulk-actions.js`.
+- `src/dashboard/dashboard.js` is now a page coordinator. Card/sort DOM creation lives in `dashboard-renderer.js`; archive/import/backup/delete selection workflow lives in `dashboard-bulk-actions.js`.
 - Document cache and chat memory share the same canonical paper key. The remaining key risk is alias/key promotion for URLs that later reveal a better identifier.
 - Chat memory has been moved toward the same IndexedDB database as document memory. Settings and prompt presets still use `chrome.storage.local`.
 - `formatSelectionContextForPrompt()` belongs in the AI prompt layer, not the PDF/RAG layer.
@@ -29,6 +31,9 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 - Side panel cleanup should stay grouped by coarse responsibility. Avoid creating many tiny model/controller files unless a responsibility becomes independently reusable or difficult to test.
 - Markdown rendering for AI responses is intentionally separate from Markdown cleanup for PDF content. `clean-markdown.js` normalizes paper text for storage/RAG; `render-markdown.js` converts assistant responses into sanitized HTML for display.
 - Paper-reading RAG is now a lightweight middle layer. It uses rule-based intent routing, weak section-aware chunks, neighbor expansion, deterministic paper overview, and extractive evidence compression instead of a separate vector database or Python RAG service. Section metadata is a hint, not a hard dependency, because converted Markdown headings can be missing or wrong.
+- Comparative Reading has its own side-panel controller, renderer, storage store, and compare prompt/context modules. It reuses the provider boundary instead of creating a second AI stack.
+- Saved Q&A is conversation-message metadata (`isSaved`) plus a derived side-panel view. It should stay attached to message records, not become a separate notes system.
+- `docmarrow`/`marrow` parser code is not present in the current repo scan. No docmarrow cleanup is currently pending.
 
 ## Refactor Order
 
@@ -45,6 +50,10 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 11. Split Reading Dashboard rendering and bulk management into coarse modules. Done.
 12. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
 13. Add prompt/retrieval fixtures for paper overview, method, result, limitation, and selected-text questions.
+14. Add comparative reading fixtures for balanced per-paper retrieval and prompt shape.
+15. Add visual regression smoke tests for side panel and dashboard responsive states.
+
+Open refactor/future-work items are consolidated in `docs/unfinished-feature-plan.md`.
 
 ## Memory Key Rule
 

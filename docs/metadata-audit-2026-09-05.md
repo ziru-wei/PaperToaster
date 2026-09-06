@@ -1,5 +1,7 @@
 # PDF Metadata Audit 2026-09-05
 
+Status: completed audit snapshot. The resulting memory-key decision is now reflected in `docs/storage-and-threading-plan.md` and `docs/architecture-review.md`.
+
 Scope: 10 most recently downloaded PDFs from `/Users/ziru/Downloads` at roughly 2026-09-05 10:09-10:11.
 
 Command:

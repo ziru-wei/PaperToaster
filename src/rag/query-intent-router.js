@@ -8,6 +8,37 @@ export const QUERY_INTENTS = Object.freeze({
   TARGETED_QA: "targeted_qa"
 });
 
+const ROUTES = Object.freeze([
+  {
+    id: QUERY_INTENTS.SELECTION_EXPLAIN,
+    label: "Explain selection"
+  },
+  {
+    id: QUERY_INTENTS.TARGETED_QA,
+    label: "Targeted answer"
+  },
+  {
+    id: QUERY_INTENTS.PAPER_OVERVIEW,
+    label: "Paper overview"
+  },
+  {
+    id: QUERY_INTENTS.METHOD,
+    label: "Method"
+  },
+  {
+    id: QUERY_INTENTS.RESULT,
+    label: "Findings"
+  },
+  {
+    id: QUERY_INTENTS.LIMITATION,
+    label: "Limitations"
+  },
+  {
+    id: QUERY_INTENTS.COMPARISON,
+    label: "Compare"
+  }
+]);
+
 const PAPER_OVERVIEW_PATTERNS = [
   /\bexplain\s+(?:the|this)\s+paper\b/i,
   /\bsummar(?:y|ize)\s+(?:the|this)\s+paper\b/i,
@@ -60,6 +91,26 @@ export function routePaperQuestion({ question = "", selectionText = "" } = {}) {
   }
 
   return createIntent(QUERY_INTENTS.TARGETED_QA, "Default focused question answering route.");
+}
+
+export function listPaperQuestionRoutes() {
+  return ROUTES.map((route) => ({
+    ...route,
+    sectionKinds: getPreferredSectionKinds(route.id)
+  }));
+}
+
+export function getPaperQuestionRouteLabel(intentId) {
+  return ROUTES.find((route) => route.id === intentId)?.label || "Targeted answer";
+}
+
+export function resolvePaperQuestionIntent(intentId, reason = "Manually selected route.") {
+  const route = ROUTES.find((candidate) => candidate.id === intentId);
+  if (!route) {
+    return null;
+  }
+
+  return createIntent(route.id, reason);
 }
 
 function createIntent(id, reason) {

@@ -1,6 +1,8 @@
 # Dashboard Archive And Import
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
+
+Status: implemented for single-paper and eligible Comparative Reading records.
 
 ## Goal
 
@@ -18,6 +20,7 @@ The dashboard now has a `Manage` mode:
 - `Delete` removes selected papers from local IndexedDB.
 - `Archive` exports selected records as a JSON file, then deletes them locally.
 - `Import` reads a previously exported JSON archive and restores records into IndexedDB.
+- Comparative Reading records can also be selected in Manage mode. Backup/Archive/Delete applies to selected comparison records as well as selected paper records.
 
 Archive data is handled in `src/storage/library-archive-store.js`. The dashboard UI only owns selection state, file download/upload, and confirmation prompts.
 
@@ -28,7 +31,7 @@ The archive is a JSON object:
 ```json
 {
   "schema": "pdf-ai-inspector.library-archive",
-  "version": 1,
+  "version": 2,
   "exportedAt": "2026-09-05T00:00:00.000Z",
   "documentKeys": ["..."],
   "records": {
@@ -38,12 +41,16 @@ The archive is a JSON object:
     "conversationMessages": [],
     "documentAliases": [],
     "labels": [],
-    "paperLabels": []
+    "paperLabels": [],
+    "comparisonSessions": [],
+    "comparisonMessages": []
   }
 }
 ```
 
-The exported data includes cleaned Markdown stored in `documents`, conversation threads/messages, aliases, paper metadata, star state, and label assignments. It does not include raw Markdown or derived chunks unless those are already part of a stored document record.
+The exported data includes cleaned Markdown stored in `documents`, conversation threads/messages, aliases, paper metadata, star state, label assignments, and Comparative Reading sessions/messages whose full paper set is included in the export. It does not include raw Markdown or derived chunks unless those are already part of a stored document record.
+
+Version 2 archives include comparison records. Version 1 archives are still accepted on import for older backups.
 
 ## Delete Semantics
 
@@ -58,11 +65,13 @@ Deleting or archiving a paper removes records keyed by `documentKey` from:
 
 Labels themselves are not deleted, because a label can belong to other papers.
 
+Comparative Reading sessions are pruned when selected papers are deleted. If a comparison loses too many papers to remain meaningful, its session and messages are removed. If at least two papers remain, the deleted paper keys are removed from the session.
+
 ## Import Semantics
 
 Import defaults to `skip existing` at the paper level.
 
-If any local records already exist for an archived `documentKey`, the whole paper is skipped. This prevents an older backup from overwriting newer local Markdown or newer conversation messages. Newly added papers are imported with their document records, cleaned Markdown, conversation threads/messages, aliases, star state, and label assignments.
+If any local records already exist for an archived `documentKey`, the whole paper is skipped. This prevents an older backup from overwriting newer local Markdown or newer conversation messages. Newly added papers are imported with their document records, cleaned Markdown, conversation threads/messages, aliases, star state, label assignments, and eligible Comparative Reading sessions.
 
 After import, the dashboard shows a popup with:
 

@@ -11,10 +11,11 @@ export function formatSelectionContextForPrompt(contextPack) {
   const paperTitle = contextPack.paper.title || "Untitled paper";
   const hasSelection = Boolean(contextPack.selection.text);
   const intent = contextPack.intent?.id || "targeted_qa";
+  const intentSource = contextPack.intent?.source || "rule";
   const lines = [
     `Paper: ${paperTitle}`,
     `URL: ${contextPack.paper.url || "unknown"}`,
-    `Question route: ${intent}`,
+    `Question route: ${intent} (${intentSource})`,
     "",
     ...formatOverviewBlock(contextPack.overview),
     "",
