@@ -17,6 +17,11 @@ import {
   saveAiSettings
 } from "../storage/ai-settings-store.js";
 import { stripStoredAssistantBoldMarkers } from "../storage/maintenance-store.js";
+import {
+  MIN_COMPARISON_PAPERS,
+  getComparisonSettings,
+  saveComparisonSettings
+} from "../storage/comparison-settings-store.js";
 
 const elements = {
   aiProvider: document.querySelector("#aiProvider"),
@@ -30,6 +35,9 @@ const elements = {
   useLocalCodex: document.querySelector("#useLocalCodex"),
   clearAiKey: document.querySelector("#clearAiKey"),
   aiKeyStatus: document.querySelector("#aiKeyStatus"),
+  comparisonPaperLimit: document.querySelector("#comparisonPaperLimit"),
+  saveComparisonSettings: document.querySelector("#saveComparisonSettings"),
+  comparisonSettingsStatus: document.querySelector("#comparisonSettingsStatus"),
   addPreset: document.querySelector("#addPreset"),
   resetPresets: document.querySelector("#resetPresets"),
   savePresets: document.querySelector("#savePresets"),
@@ -71,9 +79,40 @@ elements.aiDebugMode.addEventListener("change", saveAiProviderSettings);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
 elements.stripStoredBoldMarkers.addEventListener("click", stripStoredBoldMarkers);
+elements.saveComparisonSettings.addEventListener("click", saveComparativeReadingSettings);
 
 loadAiSettings();
 loadPresets();
+loadComparisonSettings();
+
+async function loadComparisonSettings() {
+  try {
+    const settings = await getComparisonSettings();
+    elements.comparisonPaperLimit.value = String(settings.paperLimit);
+  } catch (error) {
+    setComparisonSettingsStatus(error.message || String(error), true);
+  }
+}
+
+async function saveComparativeReadingSettings() {
+  try {
+    const rawLimit = Number(elements.comparisonPaperLimit.value);
+    if (!Number.isInteger(rawLimit) || rawLimit < MIN_COMPARISON_PAPERS) {
+      throw new Error(`Maximum papers must be an integer of at least ${MIN_COMPARISON_PAPERS}.`);
+    }
+
+    const settings = await saveComparisonSettings({ paperLimit: rawLimit });
+    elements.comparisonPaperLimit.value = String(settings.paperLimit);
+    setComparisonSettingsStatus(`Comparative Reading limit saved as ${settings.paperLimit} papers.`);
+  } catch (error) {
+    setComparisonSettingsStatus(error.message || String(error), true);
+  }
+}
+
+function setComparisonSettingsStatus(message, isError = false) {
+  elements.comparisonSettingsStatus.textContent = message;
+  elements.comparisonSettingsStatus.classList.toggle("error", isError);
+}
 
 async function loadAiSettings() {
   try {

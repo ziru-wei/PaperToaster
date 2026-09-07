@@ -94,11 +94,15 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   threadElement.textContent = "";
   threadElement.classList.add("saved-qa-thread");
   threadElement.hidden = false;
+  threadElement.append(createPaperUserNoteElement(options));
 
   if (!units.length) {
-    threadElement.append(createToasterEmptyState("Toaster is plugged in...", {
+    const emptySlot = document.createElement("div");
+    emptySlot.className = "saved-qa-empty-slot";
+    emptySlot.append(createToasterEmptyState("Toaster is plugged in...", {
       className: "saved-qa-empty"
     }));
+    threadElement.append(emptySlot);
     return;
   }
 
@@ -141,6 +145,37 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
     threadElement.append(track);
   }
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
+}
+
+function createPaperUserNoteElement(options) {
+  const note = document.createElement("section");
+  note.className = "saved-paper-user-note";
+
+  const textarea = document.createElement("textarea");
+  textarea.id = "savedPaperUserNote";
+  textarea.className = "saved-paper-user-note-input";
+  textarea.rows = 1;
+  textarea.maxLength = 50000;
+  textarea.placeholder = "Add a note about this paper...";
+  textarea.value = String(options.userNote || "");
+  textarea.setAttribute("aria-label", "User note for this paper");
+  textarea.addEventListener("input", () => {
+    resizePaperUserNoteInput(textarea);
+    options.onUserNoteChange?.(textarea.value);
+  });
+  textarea.addEventListener("blur", () => options.onUserNoteCommit?.(textarea.value));
+
+  note.append(textarea);
+  window.requestAnimationFrame(() => resizePaperUserNoteInput(textarea));
+  return note;
+}
+
+function resizePaperUserNoteInput(textarea) {
+  textarea.style.height = "auto";
+  const maxHeight = Number.parseFloat(getComputedStyle(textarea).maxHeight) || textarea.scrollHeight;
+  const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
 function appendBalancedSavedQuestionAnswerUnits(track, items) {

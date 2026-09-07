@@ -3,7 +3,9 @@ import { getPaperReadingPolicyPrompt } from "../ai/selection-prompt.js";
 const COMPARISON_POLICY = [
   "Comparative reading policy:",
   "- Compare across papers instead of summarizing each paper in isolation.",
-  "- Use paper labels such as [P1] and [P2] when attributing claims.",
+  "- Derive a concise, recognizable short name from each paper title and use that name whenever referring to the paper.",
+  "- Never refer to papers as Paper 1, Paper 2, P1, P2, or similar numbered labels in the answer.",
+  "- Labels such as [P1] and [P2] in the context are internal evidence identifiers only and must not appear in the answer.",
   "- Separate direct evidence from inference when the distinction matters.",
   "- If the provided context is insufficient, state what is missing.",
   "- Do not invent paper claims, methods, results, or citations."

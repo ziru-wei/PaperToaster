@@ -1,5 +1,5 @@
 import { MessageType } from "../shared/messages.js";
-import { MAX_COMPARISON_PAPERS } from "../storage/comparison-store.js";
+import { getComparisonSettings } from "../storage/comparison-settings-store.js";
 
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
 const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
@@ -180,16 +180,17 @@ async function clearDashboardContext(message, sender) {
 }
 
 async function updateComparisonDraft(message, sender) {
+  const { paperLimit } = await getComparisonSettings();
   const documentKeys = Array.isArray(message.documentKeys)
     ? message.documentKeys.map((key) => String(key || "").trim()).filter(Boolean)
     : [];
   const uniqueDocumentKeys = [...new Set(documentKeys)];
-  const hasOverflow = Boolean(message.rejectOverflow) && uniqueDocumentKeys.length > MAX_COMPARISON_PAPERS;
+  const hasOverflow = Boolean(message.rejectOverflow) && uniqueDocumentKeys.length > paperLimit;
   const context = {
     comparisonId: "",
     mode: "comparative-reading",
     source: "dashboard",
-    draftDocumentKeys: hasOverflow ? [] : uniqueDocumentKeys.slice(0, MAX_COMPARISON_PAPERS),
+    draftDocumentKeys: hasOverflow ? [] : uniqueDocumentKeys.slice(0, paperLimit),
     draftIssue: hasOverflow ? "too-many-papers" : "",
     selectedAt: Date.now()
   };

@@ -10,6 +10,7 @@ import {
   setPinnedSavedQuestionAnswerUnit
 } from "../storage/chat-store.js";
 import { listSavedComparisonQuestionAnswerUnitsForDocument } from "../storage/comparison-store.js";
+import { getPaperUserNote, savePaperUserNote } from "../storage/paper-note-store.js";
 import {
   collapseOpenConversationSelections,
   getSavedQuestionAnswerCollapsedUnitKeys,
@@ -47,6 +48,9 @@ export function createConversationPanelController({
   let savedViewActive = false;
   let savedQuestionAnswerUnits = [];
   let savedCollapsedUnitKeys = new Set();
+  let paperUserNote = "";
+  let paperUserNoteSaveTimer = null;
+  let pendingPaperUserNote = null;
 
   const threadWheel = createThreadWheelController({
     archiveButton: threadArchiveButton,
@@ -63,6 +67,11 @@ export function createConversationPanelController({
   }, true);
   window.addEventListener("blur", () => {
     collapseOpenConversationSelections(threadElement);
+  });
+  window.addEventListener("pagehide", () => {
+    flushPaperUserNoteSave().catch((error) => {
+      onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
+    });
   });
   threadElement.addEventListener("click", (event) => {
     const quote = event.target.closest(".conversation-selection");
@@ -89,6 +98,9 @@ export function createConversationPanelController({
     }
 
     await persist();
+    await flushPaperUserNoteSave().catch((error) => {
+      onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
+    });
     if (requestId !== documentRequestId) {
       return;
     }
@@ -104,6 +116,7 @@ export function createConversationPanelController({
       threadSummaries = [];
       savedQuestionAnswerUnits = [];
       savedCollapsedUnitKeys = new Set();
+      paperUserNote = "";
       threadWheel.close();
       render();
       scrollToLatest.update();
@@ -112,12 +125,16 @@ export function createConversationPanelController({
       return;
     }
 
-    const thread = await getStoredChatThread(threadUrl);
+    const [thread, storedPaperUserNote] = await Promise.all([
+      getStoredChatThread(threadUrl),
+      getPaperUserNote(threadDocumentKey)
+    ]);
     if (requestId !== documentRequestId) {
       return;
     }
 
     applyThread(thread);
+    paperUserNote = storedPaperUserNote.text;
     await refreshThreadList(requestId);
     if (savedViewActive) {
       await loadSavedQuestionAnswerUnits(requestId);
@@ -788,6 +805,34 @@ export function createConversationPanelController({
     savedQuestionAnswerUnits = [...paperUnits, ...comparisonUnits];
   }
 
+  function updatePaperUserNote(text) {
+    paperUserNote = String(text || "");
+    pendingPaperUserNote = {
+      documentKey: threadDocumentKey,
+      text: paperUserNote
+    };
+    window.clearTimeout(paperUserNoteSaveTimer);
+    paperUserNoteSaveTimer = window.setTimeout(() => {
+      flushPaperUserNoteSave().catch((error) => {
+        onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
+      });
+    }, 300);
+  }
+
+  async function flushPaperUserNoteSave() {
+    window.clearTimeout(paperUserNoteSaveTimer);
+    paperUserNoteSaveTimer = null;
+    const pending = pendingPaperUserNote;
+    if (!pending?.documentKey) {
+      return;
+    }
+
+    await savePaperUserNote(pending.documentKey, pending.text);
+    if (pendingPaperUserNote === pending) {
+      pendingPaperUserNote = null;
+    }
+  }
+
   async function jumpToSavedQuestionAnswerUnit(unit) {
     const threadId = String(unit?.threadId || "").trim();
     if (!threadUrl || !threadId) {
@@ -838,6 +883,14 @@ export function createConversationPanelController({
     if (savedViewActive) {
       captureSavedCollapseState();
       renderSavedQuestionAnswerUnits(threadElement, savedQuestionAnswerUnits, {
+        userNote: paperUserNote,
+        onUserNoteChange: updatePaperUserNote,
+        onUserNoteCommit: (text) => {
+          updatePaperUserNote(text);
+          return flushPaperUserNoteSave().catch((error) => {
+            onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
+          });
+        },
         collapsedUnitKeys: savedCollapsedUnitKeys,
         onJumpToUnit: jumpToSavedQuestionAnswerUnit,
         onTogglePinned: toggleSavedQuestionAnswerPinned,

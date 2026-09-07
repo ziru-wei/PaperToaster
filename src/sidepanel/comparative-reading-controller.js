@@ -3,13 +3,17 @@ import { buildComparisonContextPack } from "../compare/build-comparison-context.
 import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { MessageType } from "../shared/messages.js";
 import {
-  MAX_COMPARISON_PAPERS,
   appendComparisonMessage,
   createComparisonSession,
   getComparisonSession,
   listComparisonSessions,
   saveComparisonMessages
 } from "../storage/comparison-store.js";
+import {
+  DEFAULT_COMPARISON_PAPER_LIMIT,
+  getComparisonSettings,
+  normalizeComparisonPaperLimit
+} from "../storage/comparison-settings-store.js";
 import { getAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
 import {
@@ -44,7 +48,8 @@ export function createComparativeReadingController({
     busy: false,
     contextLoading: false,
     status: "",
-    draftIssue: ""
+    draftIssue: "",
+    paperLimit: DEFAULT_COMPARISON_PAPER_LIMIT
   };
 
   async function show(context = {}) {
@@ -60,7 +65,11 @@ export function createComparativeReadingController({
     render();
 
     try {
-      await refreshSessions();
+      const [settings] = await Promise.all([
+        getComparisonSettings(),
+        refreshSessions()
+      ]);
+      state.paperLimit = settings.paperLimit;
 
       if (comparisonId) {
         await selectSession(comparisonId, { renderAfter: false });
@@ -103,8 +112,8 @@ export function createComparativeReadingController({
       return;
     }
 
-    if (state.selectedPapers.length >= MAX_COMPARISON_PAPERS) {
-      setStatus(`Comparative reading supports up to ${MAX_COMPARISON_PAPERS} papers.`);
+    if (state.selectedPapers.length >= state.paperLimit) {
+      setStatus(`Comparative reading supports up to ${state.paperLimit} papers.`);
       return;
     }
 
@@ -132,7 +141,7 @@ export function createComparativeReadingController({
     }
 
     const existingKeys = new Set(state.selectedPapers.map((paper) => paper.documentKey));
-    const availableSlots = Math.max(0, MAX_COMPARISON_PAPERS - state.selectedPapers.length);
+    const availableSlots = Math.max(0, state.paperLimit - state.selectedPapers.length);
     const keys = normalizeDocumentKeys(documentKeys)
       .filter((documentKey) => !existingKeys.has(documentKey))
       .slice(0, availableSlots);
@@ -281,7 +290,8 @@ export function createComparativeReadingController({
 
       const contextPack = await buildComparisonContextPack({
         documentKeys: state.selectedPapers.map((paper) => paper.documentKey),
-        question
+        question,
+        maxPapers: state.paperLimit
       });
       const aiSettings = await getAiSettings();
       if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
@@ -333,7 +343,7 @@ export function createComparativeReadingController({
   }
 
   function canAddPapers() {
-    return state.active && !state.activeSessionId && state.selectedPapers.length < MAX_COMPARISON_PAPERS;
+    return state.active && !state.activeSessionId && state.selectedPapers.length < state.paperLimit;
   }
 
   function getSelectedDocumentKeys() {
@@ -342,6 +352,14 @@ export function createComparativeReadingController({
 
   function hasScrollableMessages() {
     return state.active && state.messages.length > 0;
+  }
+
+  function setPaperLimit(value) {
+    state.paperLimit = normalizeComparisonPaperLimit(value);
+    if (state.active) {
+      render();
+      onChange?.();
+    }
   }
 
   async function refreshSessions() {
@@ -671,6 +689,7 @@ export function createComparativeReadingController({
     isActive,
     isBusy,
     canAddPapers,
+    setPaperLimit,
     getSelectedDocumentKeys,
     hasScrollableMessages
   };
@@ -709,8 +728,7 @@ function createEditResult(changed, reason = "") {
 function normalizeDocumentKeys(documentKeys) {
   return [...new Set((Array.isArray(documentKeys) ? documentKeys : [])
     .map((key) => String(key || "").trim())
-    .filter(Boolean))]
-    .slice(0, MAX_COMPARISON_PAPERS);
+    .filter(Boolean))];
 }
 
 function notifyComparisonContextChanged(comparisonId) {

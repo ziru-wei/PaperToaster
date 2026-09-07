@@ -1,6 +1,6 @@
 import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
-import { MAX_COMPARISON_PAPERS } from "../storage/comparison-store.js";
+import { DEFAULT_COMPARISON_PAPER_LIMIT, normalizeComparisonPaperLimit } from "../storage/comparison-settings-store.js";
 import { ensurePaperOverview } from "../rag/paper-overview.js";
 import { retrieveComparisonEvidence, routeComparisonQuestion } from "./comparison-retrieve.js";
 
@@ -8,8 +8,13 @@ const OVERVIEW_MAX_CHARS = 900;
 const EVIDENCE_MAX_CHARS_PER_PAPER = 3600;
 const EVIDENCE_LIMIT_PER_PAPER = 3;
 
-export async function buildComparisonContextPack({ documentKeys = [], question = "" }) {
-  const keys = normalizeDocumentKeys(documentKeys);
+export async function buildComparisonContextPack({
+  documentKeys = [],
+  question = "",
+  maxPapers = DEFAULT_COMPARISON_PAPER_LIMIT
+}) {
+  const paperLimit = normalizeComparisonPaperLimit(maxPapers);
+  const keys = normalizeDocumentKeys(documentKeys, paperLimit);
   if (keys.length < 2) {
     throw new Error("Choose at least two papers for comparative reading.");
   }
@@ -70,7 +75,7 @@ export async function buildComparisonContextPack({ documentKeys = [], question =
     papers,
     comparisonPlan: {
       intent,
-      maxPapers: MAX_COMPARISON_PAPERS,
+      maxPapers: paperLimit,
       evidenceBudgetPerPaper: EVIDENCE_MAX_CHARS_PER_PAPER,
       evidenceLimitPerPaper: EVIDENCE_LIMIT_PER_PAPER,
       warnings
@@ -78,11 +83,11 @@ export async function buildComparisonContextPack({ documentKeys = [], question =
   };
 }
 
-function normalizeDocumentKeys(documentKeys) {
+function normalizeDocumentKeys(documentKeys, maxPapers) {
   return [...new Set((Array.isArray(documentKeys) ? documentKeys : [])
     .map((key) => String(key || "").trim())
     .filter(Boolean))]
-    .slice(0, MAX_COMPARISON_PAPERS);
+    .slice(0, maxPapers);
 }
 
 function normalizeQuestion(question) {

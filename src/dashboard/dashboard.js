@@ -34,6 +34,7 @@ const state = {
   activeDocumentKey: "",
   activeComparisonId: "",
   activeComparisonDocumentKeys: new Set(),
+  comparisonMessageCountByDocumentKey: new Map(),
   papers: [],
   comparisons: [],
   sort: "latestThread",
@@ -174,12 +175,16 @@ async function refreshAll() {
 }
 
 async function refreshRecords() {
-  const papers = await listLibraryPapers({
-    ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread),
-    query: state.query
-  });
+  const [papers, allComparisons] = await Promise.all([
+    listLibraryPapers({
+      ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread),
+      query: state.query
+    }),
+    listDashboardComparisons()
+  ]);
   state.papers = papers.filter(isDisplayablePaper);
-  state.comparisons = await listDashboardComparisons(state.query);
+  state.comparisonMessageCountByDocumentKey = countComparisonMessagesByDocument(allComparisons);
+  state.comparisons = filterDashboardComparisons(allComparisons, state.query);
   renderPapers();
   renderSummary();
 }
@@ -202,6 +207,7 @@ function renderPapers() {
     emptyState: elements.emptyState,
     papers: state.papers,
     comparisons: state.comparisons,
+    comparisonMessageCountByDocumentKey: state.comparisonMessageCountByDocumentKey,
     sortId: state.sort,
     paperGroupMode: state.paperGroupMode,
     activeDocumentKey: state.activeDocumentKey,
@@ -387,8 +393,7 @@ async function sendSelectedPapersToMachine(documentKeys) {
   renderPapers();
 }
 
-async function listDashboardComparisons(query) {
-  const normalizedQuery = String(query || "").trim().toLowerCase();
+async function listDashboardComparisons() {
   const sessions = await listComparisonSessions();
   const summaries = [];
 
@@ -409,12 +414,31 @@ async function listDashboardComparisons(query) {
       starredAt: session.starredAt || null
     };
 
-    if (!normalizedQuery || matchesComparisonQuery(comparison, normalizedQuery)) {
-      summaries.push(comparison);
-    }
+    summaries.push(comparison);
   }
 
   return summaries;
+}
+
+function filterDashboardComparisons(comparisons, query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  return normalizedQuery
+    ? comparisons.filter((comparison) => matchesComparisonQuery(comparison, normalizedQuery))
+    : comparisons;
+}
+
+function countComparisonMessagesByDocument(comparisons) {
+  const counts = new Map();
+  comparisons.forEach((comparison) => {
+    const messageCount = Math.max(0, Number(comparison.messageCount) || 0);
+    new Set(comparison.documentKeys || []).forEach((documentKey) => {
+      if (!documentKey) {
+        return;
+      }
+      counts.set(documentKey, (counts.get(documentKey) || 0) + messageCount);
+    });
+  });
+  return counts;
 }
 
 function matchesComparisonQuery(comparison, query) {

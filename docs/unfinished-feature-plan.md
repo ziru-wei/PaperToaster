@@ -15,7 +15,7 @@ This document consolidates unfinished or deferred work that was previously sprea
 - Single-paper chat supports multi-thread memory, route suggestion before send, local Codex bridge, debug mode, Markdown-rendered assistant output, answer copy, Q&A delete, and Saved Q&A.
 - Saved Q&A can be opened from the floating side-panel affordance and can jump back to the original conversation Q&A.
 - Reading Dashboard lists stored papers, hides placeholder untitled records, supports search/sort/star/manage/import/backup/archive/delete, and can open a paper's stored context in the side panel without refetching the PDF.
-- Comparative Reading lives in the side panel when the dashboard is open, persists sessions by paper keys plus dialog, supports 2-5 papers, uses the same provider path, and appears in the dashboard as a separate record type.
+- Comparative Reading lives in the side panel when the dashboard is open, persists sessions by paper keys plus dialog, supports at least 2 papers up to the user-configured limit (default and minimum 5), uses the same provider path, and appears in the dashboard as a separate record type.
 - Dashboard records support primary activation and secondary related-record highlighting across single-paper and comparative records.
 - Archive/import includes cleaned Markdown documents, paper records, stars, threads/messages, labels if present, and eligible comparative sessions/messages. Import defaults to skip existing records.
 

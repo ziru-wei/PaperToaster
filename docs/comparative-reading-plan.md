@@ -331,7 +331,7 @@ combine paper packets into one prompt
 
 Initial limits:
 
-- Selected papers: 2-5. Hard MVP maximum: 5.
+- Selected papers: at least 2, up to the user-configured limit. The default and minimum limit is 5.
 - Retrieved chunks per paper: 2-4.
 - Overview per paper: capped to a short paragraph or bullets.
 - Total context: capped before sending to AI.
@@ -519,7 +519,7 @@ Visual direction:
 9. Reuse sidepanel chat layout and composer styling for comparative dialog.
 10. Wire dashboard paper-card add-to-comparison affordance.
 11. Wire dashboard comparison-record click to sidepanel comparative session.
-12. Preserve max 5 papers, question-inferred title, persisted dialog, Markdown rendering, and existing AI provider path.
+12. Preserve the configurable paper limit, question-inferred title, persisted dialog, Markdown rendering, and existing AI provider path.
 
 ## Testing Plan
 
@@ -574,7 +574,7 @@ Implemented:
 
 Resolved:
 
-- Maximum comparison size is 5 papers.
+- Maximum comparison size is user-configurable in extension Options; its default and minimum value is 5 papers.
 - First version infers the comparison title from the first user question.
 - Comparative answers should not be forced into a table/prose format. The model can choose the shape, and the dashboard renders Markdown.
 - Comparison records have their own Manage-mode delete/archive/backup behavior.

@@ -917,11 +917,10 @@ body.saved-qa-mode .chat-panel {
 }
 
 body.saved-qa-mode .chat-panel:has(.saved-qa-empty) {
-  display: grid;
-  overflow: hidden;
+  display: flex;
+  overflow: visible;
   flex: 1 1 auto;
   padding: 0;
-  place-items: center;
 }
 
 .chat-panel::before {
@@ -1733,9 +1732,61 @@ form {
 }
 
 .conversation-thread.saved-qa-thread:has(.saved-qa-empty) {
-  display: grid;
+  position: relative;
+  display: flex;
   min-height: 100%;
-  padding: 0;
+  flex-direction: column;
+  padding: 5px 0 64px;
+}
+
+.saved-paper-user-note {
+  position: sticky;
+  z-index: 5;
+  top: 4px;
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: 0 0 8px;
+  padding: 8px 10px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 6px;
+  background: rgba(251, 250, 245, 0.94);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.055);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+.saved-paper-user-note-input,
+.saved-paper-user-note-input:focus {
+  width: 100%;
+  min-height: 20px;
+  max-height: 180px;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 0;
+  color: #1f2937;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  outline: 0;
+  overflow-y: hidden;
+  resize: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.saved-paper-user-note-input::placeholder {
+  color: rgba(107, 114, 128, 0.54);
+}
+
+.saved-qa-empty-slot {
+  display: grid;
+  min-height: min(420px, calc(100vh - 230px));
+  flex: 1 1 auto;
   place-items: center;
 }
 
@@ -1800,6 +1851,7 @@ form {
 }
 
 @media (min-width: 680px) {
+  .saved-paper-user-note,
   .saved-qa-pinned-row,
   .saved-qa-track {
     width: min(100%, 486px);

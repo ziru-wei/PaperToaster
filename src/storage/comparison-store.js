@@ -7,8 +7,6 @@ import {
 } from "./paper-database.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 
-export const MAX_COMPARISON_PAPERS = 5;
-
 const MAX_COMPARISON_MESSAGES = 80;
 const MAX_COMPARISON_MESSAGE_CHARS = 20000;
 const DEFAULT_COMPARISON_TITLE = "Comparative reading";
@@ -361,8 +359,7 @@ function isComparisonMessageSaved(message) {
 
 function normalizeDocumentKeys(documentKeys) {
   const keys = Array.isArray(documentKeys) ? documentKeys : [];
-  return [...new Set(keys.map((key) => String(key || "").trim()).filter(Boolean))]
-    .slice(0, MAX_COMPARISON_PAPERS);
+  return [...new Set(keys.map((key) => String(key || "").trim()).filter(Boolean))];
 }
 
 function normalizeComparisonTitle(title) {

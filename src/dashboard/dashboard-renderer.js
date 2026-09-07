@@ -11,6 +11,7 @@ export function renderPaperList({
   emptyState,
   papers,
   comparisons = [],
+  comparisonMessageCountByDocumentKey = new Map(),
   sortId = "latestThread",
   paperGroupMode = "label",
   activeDocumentKey,
@@ -46,6 +47,8 @@ export function renderPaperList({
   if (paperRecords.length) {
     const createCard = (record) => createPaperCard({
       paper: record.paper,
+      activityMessageCount: (Number(record.paper.messageCount) || 0) +
+        (comparisonMessageCountByDocumentKey.get(record.paper.documentKey) || 0),
       activeDocumentKey,
       activeComparisonDocumentKeys,
       manageMode,
@@ -261,6 +264,7 @@ export function isDisplayablePaper(paper) {
 
 function createPaperCard({
   paper,
+  activityMessageCount,
   activeDocumentKey,
   activeComparisonDocumentKeys,
   manageMode,
@@ -328,7 +332,7 @@ function createPaperCard({
   title.append(createTitleText(paper));
 
   topRow.append(
-    createMessageRing(paper.messageCount),
+    createMessageRing(activityMessageCount),
     title
   );
 

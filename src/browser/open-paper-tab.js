@@ -26,6 +26,35 @@ export async function openPaperUrlInExistingTab(url) {
   };
 }
 
+export async function openExtensionPageInExistingTab(url) {
+  const targetUrl = normalizeExtensionPageUrl(url);
+  if (!targetUrl) {
+    throw new Error("No valid extension page URL is available.");
+  }
+
+  const tabs = await chrome.tabs.query({});
+  const existingTab = tabs.find((tab) => (
+    Number.isInteger(tab?.id) && normalizeExtensionPageUrl(tab.url) === targetUrl
+  ));
+  if (existingTab) {
+    await focusTab(existingTab);
+    return {
+      action: "focused",
+      tabId: existingTab.id,
+      windowId: existingTab.windowId,
+      url: existingTab.url || targetUrl
+    };
+  }
+
+  const createdTab = await chrome.tabs.create({ url: targetUrl });
+  return {
+    action: "created",
+    tabId: createdTab?.id || null,
+    windowId: createdTab?.windowId || null,
+    url: createdTab?.url || targetUrl
+  };
+}
+
 async function findExistingPaperTab(targetUrl) {
   const targetNormalizedUrl = normalizeDocumentUrl(targetUrl);
   const targetDocumentKey = getDocumentMemoryKey(targetUrl);
@@ -72,6 +101,25 @@ export function normalizeOpenableUrl(url) {
   try {
     const parsed = new URL(value);
     return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeExtensionPageUrl(url) {
+  const value = String(url || "").trim();
+  if (!value || !globalThis.chrome?.runtime?.getURL) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(value);
+    const extensionBase = new URL(chrome.runtime.getURL("/"));
+    if (parsed.protocol !== extensionBase.protocol || parsed.host !== extensionBase.host) {
+      return "";
+    }
+    parsed.hash = "";
+    return parsed.href;
   } catch {
     return "";
   }

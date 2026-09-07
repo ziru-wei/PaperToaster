@@ -69,6 +69,25 @@
       <section>
         <div class="section-header">
           <div>
+            <h2>Comparative Reading</h2>
+            <p>Set how many papers can be included in one comparison.</p>
+          </div>
+          <div class="actions">
+            <button id="saveComparisonSettings" type="button">Save</button>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label>
+            <span>Maximum papers</span>
+            <input id="comparisonPaperLimit" type="number" min="5" step="1" inputmode="numeric">
+          </label>
+        </div>
+        <div id="comparisonSettingsStatus" class="status"></div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
             <h2>Prompt Presets</h2>
             <p>Slash prompts for selected-text questions.</p>
           </div>

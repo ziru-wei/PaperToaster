@@ -1,5 +1,10 @@
 import { MessageType } from "../shared/messages.js";
+import { openExtensionPageInExistingTab } from "../browser/open-paper-tab.js";
 import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
+import {
+  COMPARISON_SETTINGS_KEY,
+  normalizeComparisonSettings
+} from "../storage/comparison-settings-store.js";
 import {
   areSavedQuestionAnswerUnitsCollapsed,
   setSavedQuestionAnswerUnitsCollapsed
@@ -207,8 +212,17 @@ async function handlePdfSelectionChanged() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes[PROMPT_PRESETS_KEY]) {
+  if (areaName !== "local") {
+    return;
+  }
+
+  if (changes[PROMPT_PRESETS_KEY]) {
     promptPresetMenu.load();
+  }
+
+  if (changes[COMPARISON_SETTINGS_KEY]) {
+    const settings = normalizeComparisonSettings(changes[COMPARISON_SETTINGS_KEY].newValue);
+    comparativeReading.setPaperLimit(settings.paperLimit);
   }
 });
 
@@ -273,8 +287,10 @@ function shouldAutoOpenSavedQuestionAnswerView(document) {
 }
 
 function openDashboard() {
-  chrome.tabs.create({
-    url: chrome.runtime.getURL("src/dashboard/dashboard.html")
+  openExtensionPageInExistingTab(
+    chrome.runtime.getURL("src/dashboard/dashboard.html")
+  ).catch((error) => {
+    addDiagnostic(`Could not open Reading Dashboard: ${error.message || String(error)}`);
   });
 }
 
