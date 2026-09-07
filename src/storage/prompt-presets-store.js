@@ -7,24 +7,9 @@ export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
     prompt: "Explain this selected passage. Use explicit examples from the original paper text to explain it."
   },
   {
-    id: "why-it-matters",
-    label: "Why it matters",
-    prompt: "Explain why this selected passage matters for the paper's main argument."
-  },
-  {
-    id: "connect-to-paper",
-    label: "Connect to paper",
-    prompt: "Explain how this selected passage connects to the paper's research question, method, and findings."
-  },
-  {
     id: "clarify-terms",
     label: "Clarify terms",
     prompt: "Clarify the key terms and assumptions in this selected passage, grounded in the paper's context."
-  },
-  {
-    id: "critique",
-    label: "Critique",
-    prompt: "Critique this selected passage. Identify what is well-supported, what is ambiguous, and what evidence from the paper matters."
   }
 ]);
 

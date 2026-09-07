@@ -1,4 +1,6 @@
 import { renderConversationMessages } from "./conversation-message-renderer.js";
+import { clearMoreToastBurn, syncMoreToastBurn } from "./more-toast-burn.js";
+import { createToasterEmptyState } from "./toaster-empty-state.js";
 
 export function renderComparativeReadingPanel({
   elements,
@@ -6,6 +8,7 @@ export function renderComparativeReadingPanel({
   selectedPapers,
   messages,
   status,
+  emptySubtitle = "More toast is needed",
   busy,
   contextReadiness,
   allowRemovePapers,
@@ -24,6 +27,7 @@ export function renderComparativeReadingPanel({
   scrollToBottom = true
 }) {
   document.body.classList.add("comparative-mode");
+  document.body.classList.toggle("comparison-empty-mode", !messages.length);
   elements.documentTitle.readOnly = true;
   elements.documentTitle.tabIndex = -1;
   elements.documentTitle.setAttribute("aria-readonly", "true");
@@ -31,9 +35,7 @@ export function renderComparativeReadingPanel({
   elements.documentTitle.placeholder = "Comparative Reading";
   elements.documentTitle.classList.remove("muted");
   elements.documentTitle.title = title || "Comparative Reading";
-  elements.tabStatus.textContent = "";
-  elements.tabStatus.removeAttribute("title");
-  elements.copyTabUrl.disabled = true;
+  elements.openPaperUrl.disabled = true;
   elements.reloadPdf.disabled = true;
   elements.documentStar.disabled = true;
   elements.conversationThreadArchive.disabled = true;
@@ -48,6 +50,7 @@ export function renderComparativeReadingPanel({
   elements.comparisonStatus.classList.toggle("error", Boolean(status));
   elements.comparisonContextBar.hidden = !visibleStatus;
   elements.selectionContextStatus.textContent = "";
+  elements.selectionQuestion.placeholder = allowRemovePapers ? "Press @ or @# to feed." : "";
 
   renderPaperChips({
     container: elements.comparisonPaperChips,
@@ -57,6 +60,7 @@ export function renderComparativeReadingPanel({
     onClearPapers,
     onOpenPaperUrl
   });
+  elements.conversationThread.classList.remove("comparison-empty-thread");
   renderConversationMessages(elements.conversationThread, messages, {
     onToggleSaved,
     onDeleteUnit,
@@ -67,6 +71,9 @@ export function renderComparativeReadingPanel({
     onRemoveAssistantCircle,
     onRemoveAssistantHiddenText
   });
+  if (!messages.length) {
+    renderComparisonEmptyState(elements.conversationThread, selectedPapers.length, emptySubtitle);
+  }
   if (scrollToBottom) {
     scrollToLatest?.scrollToBottom();
   } else {
@@ -76,10 +83,13 @@ export function renderComparativeReadingPanel({
 
 export function clearComparativeReadingPanel(elements) {
   document.body.classList.remove("comparative-mode");
+  document.body.classList.remove("comparison-empty-mode");
+  elements.conversationThread.classList.remove("comparison-empty-thread");
   elements.documentTitle.readOnly = false;
   elements.documentTitle.removeAttribute("tabindex");
   elements.documentTitle.removeAttribute("aria-readonly");
   elements.selectionText.hidden = false;
+  elements.selectionQuestion.placeholder = "Type / for prompts";
   elements.comparisonContextBar.hidden = true;
   elements.comparisonStatus.textContent = "";
   elements.comparisonStatus.hidden = false;
@@ -88,6 +98,28 @@ export function clearComparativeReadingPanel(elements) {
   elements.conversationThreadArchive.disabled = false;
   elements.comparisonPaperChips.replaceChildren();
   elements.comparisonPaperChips.hidden = true;
+}
+
+function renderComparisonEmptyState(threadElement, paperCount, subtitle) {
+  threadElement.textContent = "";
+  threadElement.classList.remove("saved-qa-thread");
+  threadElement.classList.add("comparison-empty-thread");
+  threadElement.hidden = false;
+  const empty = createToasterEmptyState("Hot air circulating...", {
+    className: "comparison-empty saved-qa-empty",
+    subtitle
+  });
+  threadElement.append(empty);
+  if (subtitle === "More toast is needed") {
+    syncMoreToastBurn({
+      element: empty.querySelector(".toaster-empty-subtitle"),
+      paperCount,
+      stateKey: threadElement
+    });
+  } else {
+    empty.querySelector(".toaster-empty-subtitle")?.classList.add("comparison-overflow-status");
+    clearMoreToastBurn(threadElement);
+  }
 }
 
 function renderContextReadiness(element, contextReadiness = {}) {

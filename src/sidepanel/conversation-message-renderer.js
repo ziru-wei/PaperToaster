@@ -1,6 +1,7 @@
 import { renderMarkdownInto } from "../markdown/render-markdown.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 import { annotate } from "../../vendor/rough-notation/rough-notation.mjs";
+import { createToasterEmptyState } from "./toaster-empty-state.js";
 
 const highlightBarCleanups = new WeakMap();
 
@@ -95,137 +96,263 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   threadElement.hidden = false;
 
   if (!units.length) {
-    const empty = document.createElement("div");
-    empty.className = "saved-qa-empty";
-    empty.setAttribute("aria-label", "Toaster is plugged in...");
-
-    const bubble = document.createElement("div");
-    bubble.className = "saved-qa-empty-bubble";
-    const speech = document.createElement("pre");
-    speech.textContent = [
-      ".--------------------------.",
-      "| Toaster is plugged in... |",
-      "'-------------v------------'"
-    ].join("\n");
-    bubble.append(speech);
-
-    const icon = document.createElement("img");
-    icon.className = "saved-qa-empty-icon";
-    icon.src = "../assets/extension/icon-128.png";
-    icon.alt = "";
-
-    empty.append(bubble, icon);
-    threadElement.append(empty);
+    threadElement.append(createToasterEmptyState("Toaster is plugged in...", {
+      className: "saved-qa-empty"
+    }));
     return;
   }
 
+  const pinnedRow = document.createElement("div");
+  pinnedRow.className = "saved-qa-pinned-row";
   const track = document.createElement("div");
   track.className = "saved-qa-track";
   const editBars = [];
   const cleanupCallbacks = [];
+  const normalItems = [];
 
   units.forEach((unit) => {
-    const unitKey = getSavedQuestionAnswerUnitKey(unit);
-    const unitElement = document.createElement("article");
-    unitElement.className = "saved-qa-unit";
-    unitElement.dataset.savedUnitKey = unitKey;
-    if (options.collapsedUnitKeys?.has(unitKey)) {
-      unitElement.classList.add("collapsed");
+    const unitElement = createSavedQuestionAnswerUnitElement({
+      unit,
+      options,
+      editBars,
+      cleanupCallbacks
+    });
+
+    if (unit.isPinned) {
+      pinnedRow.append(unitElement);
+    } else {
+      normalItems.push({
+        unit,
+        element: unitElement,
+        estimatedHeight: estimateSavedQuestionAnswerUnitHeight(
+          unit,
+          options.collapsedUnitKeys?.has(getSavedQuestionAnswerUnitKey(unit))
+        )
+      });
+    }
+  });
+
+  appendBalancedSavedQuestionAnswerUnits(track, normalItems);
+  track.classList.toggle("single-note", normalItems.length === 1);
+  if (pinnedRow.children.length) {
+    threadElement.append(pinnedRow);
+  }
+  if (track.children.length) {
+    threadElement.append(track);
+  }
+  registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
+}
+
+function appendBalancedSavedQuestionAnswerUnits(track, items) {
+  const sortedItems = [...items].sort(compareSavedQuestionAnswerUnitItemsByAge);
+  if (sortedItems.length <= 1) {
+    sortedItems.forEach((item) => track.append(item.element));
+    return;
+  }
+
+  const columns = [
+    createSavedQuestionAnswerColumn(),
+    createSavedQuestionAnswerColumn()
+  ];
+
+  sortedItems.forEach((item) => {
+    const column = chooseSavedQuestionAnswerColumn(columns, item);
+    column.height += item.estimatedHeight;
+    column.lastWasLong = isLongSavedQuestionAnswerItem(item);
+    column.element.append(item.element);
+  });
+
+  columns.forEach((column) => track.append(column.element));
+}
+
+function createSavedQuestionAnswerColumn() {
+  const element = document.createElement("div");
+  element.className = "saved-qa-column";
+  return {
+    element,
+    height: 0,
+    lastWasLong: false
+  };
+}
+
+function chooseSavedQuestionAnswerColumn(columns, item) {
+  if (!columns[0].element.children.length) {
+    return columns[0];
+  }
+
+  if (!columns[1].element.children.length) {
+    return columns[1];
+  }
+
+  return columns
+    .map((column) => ({
+      column,
+      score: column.height + getSavedQuestionAnswerLongItemPenalty(column, item)
+    }))
+    .sort((left, right) => left.score - right.score)[0].column;
+}
+
+function getSavedQuestionAnswerLongItemPenalty(column, item) {
+  return column.lastWasLong && isLongSavedQuestionAnswerItem(item)
+    ? item.estimatedHeight * 0.35
+    : 0;
+}
+
+function isLongSavedQuestionAnswerItem(item) {
+  return item.estimatedHeight >= 280;
+}
+
+function compareSavedQuestionAnswerUnitItemsByAge(left, right) {
+  return getSavedQuestionAnswerUnitTime(left.unit) - getSavedQuestionAnswerUnitTime(right.unit);
+}
+
+function getSavedQuestionAnswerUnitTime(unit) {
+  return Number(unit?.answerCreatedAt || unit?.createdAt || unit?.questionCreatedAt) || 0;
+}
+
+function estimateSavedQuestionAnswerUnitHeight(unit, isCollapsed) {
+  const questionLines = estimateWrappedLines(unit?.question, 31);
+  const baseHeight = 30 + questionLines * 15;
+  if (isCollapsed) {
+    return baseHeight + 16;
+  }
+
+  const answerText = stripMarkdownAnnotationTokens(unit?.answer || "");
+  const answerLines = estimateWrappedLines(answerText, 36);
+  const codeBonus = countMarkdownCodeBlocks(unit?.answer || "") * 18;
+  const selectionBonus = unit?.selectionText
+    ? 36 + estimateWrappedLines(unit.selectionText, 44) * 8
+    : 0;
+
+  return baseHeight + answerLines * 14 + codeBonus + selectionBonus + 32;
+}
+
+function estimateWrappedLines(text, charsPerLine) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return 1;
+  }
+
+  return Math.max(1, Math.ceil(normalized.length / charsPerLine));
+}
+
+function stripMarkdownAnnotationTokens(text) {
+  return String(text || "").replace(/\{\{(?:highlight64|hide64|circle64):[^}]+}}/g, "");
+}
+
+function countMarkdownCodeBlocks(text) {
+  return (String(text || "").match(/```/g) || []).length / 2;
+}
+
+function createSavedQuestionAnswerUnitElement({ unit, options, editBars, cleanupCallbacks }) {
+  const unitKey = getSavedQuestionAnswerUnitKey(unit);
+  const isComparisonUnit = unit?.sourceType === "comparison";
+  const unitElement = document.createElement("article");
+  unitElement.className = "saved-qa-unit";
+  unitElement.dataset.savedUnitKey = unitKey;
+  if (options.collapsedUnitKeys?.has(unitKey)) {
+    unitElement.classList.add("collapsed");
+  }
+
+  const cardShadow = document.createElement("div");
+  cardShadow.className = "saved-qa-card-shadow";
+
+  const card = document.createElement("div");
+  card.className = "saved-qa-card";
+
+  const question = document.createElement("div");
+  question.className = "saved-qa-question";
+  question.tabIndex = 0;
+  question.setAttribute("role", "button");
+  question.setAttribute("aria-expanded", String(!unitElement.classList.contains("collapsed")));
+  const questionText = document.createElement("span");
+  questionText.className = "saved-qa-question-text";
+  questionText.textContent = unit.question || "Question unavailable";
+  question.append(questionText);
+  if (!isComparisonUnit) {
+    question.append(createSavedJumpButton(unit, options.onJumpToUnit));
+  }
+  question.addEventListener("click", () => toggleSavedQuestionAnswerUnit(unitElement, question));
+  question.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
     }
 
-    const cardShadow = document.createElement("div");
-    cardShadow.className = "saved-qa-card-shadow";
+    event.preventDefault();
+    toggleSavedQuestionAnswerUnit(unitElement, question);
+  });
 
-    const card = document.createElement("div");
-    card.className = "saved-qa-card";
+  const answer = document.createElement("div");
+  answer.className = "saved-qa-answer";
+  renderMarkdownInto(answer, normalizeAiResponseMarkdown(unit.answer || ""), { omitHiddenText: true });
+  decorateSavedCodeBlocks(answer);
+  if (
+    isComparisonUnit ||
+    typeof options.onRemoveSavedAnswerHighlight === "function" ||
+    typeof options.onRemoveSavedAnswerCircle === "function" ||
+    typeof options.onRemoveSavedAnswerHiddenText === "function"
+  ) {
+    wireRenderedAnnotations({
+      textElement: answer,
+      onRemoveHighlight: !isComparisonUnit && typeof options.onRemoveSavedAnswerHighlight === "function"
+        ? (highlightIndex) => options.onRemoveSavedAnswerHighlight(unit, highlightIndex)
+        : null,
+      onRemoveCircle: !isComparisonUnit && typeof options.onRemoveSavedAnswerCircle === "function"
+        ? (circleIndex) => options.onRemoveSavedAnswerCircle(unit, circleIndex)
+        : null,
+      onRemoveHiddenText: !isComparisonUnit && typeof options.onRemoveSavedAnswerHiddenText === "function"
+        ? (hiddenIndex) => options.onRemoveSavedAnswerHiddenText(unit, hiddenIndex)
+        : null,
+      cleanupCallbacks
+    });
+  }
 
-    const question = document.createElement("div");
-    question.className = "saved-qa-question";
-    question.tabIndex = 0;
-    question.setAttribute("role", "button");
-    question.setAttribute("aria-expanded", String(!unitElement.classList.contains("collapsed")));
-    const questionText = document.createElement("span");
-    questionText.className = "saved-qa-question-text";
-    questionText.textContent = unit.question || "Question unavailable";
-    const jumpButton = createSavedJumpButton(unit, options.onJumpToUnit);
-    question.append(questionText, jumpButton);
-    question.addEventListener("click", () => toggleSavedQuestionAnswerUnit(unitElement, question));
-    question.addEventListener("keydown", (event) => {
+  card.append(question, answer);
+  if (!isComparisonUnit) {
+    card.append(createSavedPinButton(unit, options.onTogglePinned));
+  }
+  cardShadow.append(card);
+  unitElement.append(cardShadow);
+
+  if (!isComparisonUnit && typeof options.onHighlightSavedAnswerSelection === "function") {
+    const editBar = createAssistantEditBar({
+      anchorElement: unitElement,
+      targetElement: answer,
+      onHighlightSelection: (selectedText) => options.onHighlightSavedAnswerSelection(unit, selectedText),
+      onCircleSelection: typeof options.onCircleSavedAnswerSelection === "function"
+        ? (selectedText) => options.onCircleSavedAnswerSelection(unit, selectedText)
+        : null,
+      onHideSelection: typeof options.onHideSavedAnswerSelection === "function"
+        ? (selectedText) => options.onHideSavedAnswerSelection(unit, selectedText)
+        : null
+    });
+    editBars.push(editBar);
+    unitElement.append(editBar.bar);
+  }
+
+  if (unit.selectionText) {
+    const selection = document.createElement("blockquote");
+    selection.className = "saved-qa-selection";
+    selection.tabIndex = 0;
+    selection.setAttribute("aria-label", "Selected text");
+    selection.setAttribute("aria-expanded", "false");
+    const selectionText = document.createElement("span");
+    selectionText.className = "saved-qa-selection-text";
+    selectionText.textContent = unit.selectionText;
+    selection.append(selectionText);
+    selection.addEventListener("click", () => toggleSavedSelection(selection));
+    selection.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
 
       event.preventDefault();
-      toggleSavedQuestionAnswerUnit(unitElement, question);
+      toggleSavedSelection(selection);
     });
+    unitElement.append(selection);
+  }
 
-    const answer = document.createElement("div");
-    answer.className = "saved-qa-answer";
-    renderMarkdownInto(answer, normalizeAiResponseMarkdown(unit.answer || ""), { omitHiddenText: true });
-    decorateSavedCodeBlocks(answer);
-    if (typeof options.onRemoveSavedAnswerHighlight === "function" || typeof options.onRemoveSavedAnswerHiddenText === "function") {
-      wireRenderedAnnotations({
-        textElement: answer,
-        onRemoveHighlight: typeof options.onRemoveSavedAnswerHighlight === "function"
-          ? (highlightIndex) => options.onRemoveSavedAnswerHighlight(unit, highlightIndex)
-          : null,
-        onRemoveCircle: typeof options.onRemoveSavedAnswerCircle === "function"
-          ? (circleIndex) => options.onRemoveSavedAnswerCircle(unit, circleIndex)
-          : null,
-        onRemoveHiddenText: typeof options.onRemoveSavedAnswerHiddenText === "function"
-          ? (hiddenIndex) => options.onRemoveSavedAnswerHiddenText(unit, hiddenIndex)
-          : null,
-        cleanupCallbacks
-      });
-    }
-
-    card.append(question, answer, createSavedPinButton(unit, options.onTogglePinned));
-    cardShadow.append(card);
-    unitElement.append(cardShadow);
-
-    if (typeof options.onHighlightSavedAnswerSelection === "function") {
-      const editBar = createAssistantEditBar({
-        anchorElement: unitElement,
-        targetElement: answer,
-        onHighlightSelection: (selectedText) => options.onHighlightSavedAnswerSelection(unit, selectedText),
-        onCircleSelection: typeof options.onCircleSavedAnswerSelection === "function"
-          ? (selectedText) => options.onCircleSavedAnswerSelection(unit, selectedText)
-          : null,
-        onHideSelection: typeof options.onHideSavedAnswerSelection === "function"
-          ? (selectedText) => options.onHideSavedAnswerSelection(unit, selectedText)
-          : null
-      });
-      editBars.push(editBar);
-      unitElement.append(editBar.bar);
-    }
-
-    if (unit.selectionText) {
-      const selection = document.createElement("blockquote");
-      selection.className = "saved-qa-selection";
-      selection.tabIndex = 0;
-      selection.setAttribute("aria-label", "Selected text");
-      selection.setAttribute("aria-expanded", "false");
-      const selectionText = document.createElement("span");
-      selectionText.className = "saved-qa-selection-text";
-      selectionText.textContent = unit.selectionText;
-      selection.append(selectionText);
-      selection.addEventListener("click", () => toggleSavedSelection(selection));
-      selection.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
-
-        event.preventDefault();
-        toggleSavedSelection(selection);
-      });
-      unitElement.append(selection);
-    }
-
-    track.append(unitElement);
-  });
-
-  threadElement.append(track);
-  registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
+  return unitElement;
 }
 
 function decorateSavedCodeBlocks(answerElement) {
@@ -322,6 +449,12 @@ function setSavedQuestionAnswerUnitCollapsed(unitElement, collapsed, questionEle
 }
 
 function getSavedQuestionAnswerUnitKey(unit) {
+  if (unit?.sourceType === "comparison") {
+    const comparisonId = String(unit?.comparisonId || "").trim();
+    const assistantMessageIndex = Number(unit?.assistantMessageIndex);
+    return `comparison:${comparisonId}:${Number.isInteger(assistantMessageIndex) ? assistantMessageIndex : ""}`;
+  }
+
   const threadId = String(unit?.threadId || "").trim();
   const assistantMessageIndex = Number(unit?.assistantMessageIndex);
   return `${threadId}:${Number.isInteger(assistantMessageIndex) ? assistantMessageIndex : ""}`;

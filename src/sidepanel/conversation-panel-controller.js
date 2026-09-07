@@ -9,6 +9,7 @@ import {
   setActiveStoredChatThread,
   setPinnedSavedQuestionAnswerUnit
 } from "../storage/chat-store.js";
+import { listSavedComparisonQuestionAnswerUnitsForDocument } from "../storage/comparison-store.js";
 import {
   collapseOpenConversationSelections,
   getSavedQuestionAnswerCollapsedUnitKeys,
@@ -37,6 +38,7 @@ export function createConversationPanelController({
 }) {
   let messages = [];
   let threadUrl = "";
+  let threadDocumentKey = "";
   let activeThreadId = "";
   let threadSummaries = [];
   let saveTimer = null;
@@ -78,10 +80,11 @@ export function createConversationPanelController({
     toggleConversationSelection(threadElement, quote);
   });
 
-  async function setDocumentUrl(url) {
+  async function setDocumentUrl(url, options = {}) {
     const requestId = ++documentRequestId;
     const nextUrl = String(url || "");
-    if (threadUrl === nextUrl) {
+    const nextDocumentKey = String(options.documentKey || "").trim();
+    if (threadUrl === nextUrl && threadDocumentKey === nextDocumentKey) {
       return;
     }
 
@@ -91,10 +94,12 @@ export function createConversationPanelController({
     }
 
     threadUrl = nextUrl;
+    threadDocumentKey = nextDocumentKey;
     savedCollapsedUnitKeys = new Set();
 
     if (!threadUrl) {
       messages = [];
+      threadDocumentKey = "";
       activeThreadId = "";
       threadSummaries = [];
       savedQuestionAnswerUnits = [];
@@ -768,14 +773,19 @@ export function createConversationPanelController({
   }
 
   async function loadSavedQuestionAnswerUnits(requestId = documentRequestId) {
-    const units = threadUrl
-      ? await listSavedQuestionAnswerUnits(threadUrl)
-      : [];
+    const [paperUnits, comparisonUnits] = threadUrl
+      ? await Promise.all([
+          listSavedQuestionAnswerUnits(threadUrl),
+          threadDocumentKey
+            ? listSavedComparisonQuestionAnswerUnitsForDocument(threadDocumentKey)
+            : []
+        ])
+      : [[], []];
     if (requestId !== documentRequestId) {
       return;
     }
 
-    savedQuestionAnswerUnits = units;
+    savedQuestionAnswerUnits = [...paperUnits, ...comparisonUnits];
   }
 
   async function jumpToSavedQuestionAnswerUnit(unit) {

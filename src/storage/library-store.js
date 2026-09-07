@@ -7,6 +7,8 @@ import {
   transactionDone
 } from "./paper-database.js";
 
+const PAPER_GROUP_TONE_COUNT = 8;
+
 export async function listLibraryPapers(options = {}) {
   const db = await openPaperDatabase();
   const [papers, documents, threads] = await Promise.all([
@@ -77,6 +79,17 @@ export async function getLibraryPaperSummary(documentKey) {
   });
 }
 
+export async function listLibraryPaperGroups() {
+  const db = await openPaperDatabase();
+  const papers = await getAllFromStore(db, PAPER_STORE);
+  return papers
+    .filter((paper) => normalizeLibraryPaperGroup(paper.group))
+    .map((paper) => ({
+      group: paper.group,
+      groupTone: paper.groupTone
+    }));
+}
+
 export async function setLibraryPaperStarred(documentKey, isStarred, fallback = {}) {
   if (!documentKey) {
     return;
@@ -100,6 +113,108 @@ export async function setLibraryPaperStarred(documentKey, isStarred, fallback = 
     starredAt: isStarred ? now : null
   });
   await transactionDone(transaction);
+}
+
+export async function setLibraryPaperGroup(documentKey, group, fallback = {}) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return;
+  }
+
+  const db = await openPaperDatabase();
+  const now = Date.now();
+  const allPapers = await getAllFromStore(db, PAPER_STORE);
+  const existing = allPapers.find((paper) => paper.documentKey === normalizedDocumentKey);
+  const normalizedGroup = normalizeLibraryPaperGroup(group);
+  if (normalizedGroup && !canCreateLibraryPaperGroup(normalizedGroup, allPapers)) {
+    throw new Error(`Paper labels are limited to ${PAPER_GROUP_TONE_COUNT}.`);
+  }
+  const groupTone = normalizedGroup ? resolveLibraryPaperGroupTone(normalizedGroup, allPapers) : null;
+  const transaction = db.transaction(PAPER_STORE, "readwrite");
+  transaction.objectStore(PAPER_STORE).put({
+    ...(existing || {}),
+    documentKey: normalizedDocumentKey,
+    canonicalUrl: existing?.canonicalUrl || fallback.canonicalUrl || "",
+    title: existing?.title || fallback.title || "",
+    titleSource: existing?.titleSource || fallback.titleSource || "",
+    metadata: existing?.metadata || fallback.metadata || null,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    activeThreadId: existing?.activeThreadId || "",
+    isStarred: Boolean(existing?.isStarred),
+    starredAt: existing?.starredAt || null,
+    group: normalizedGroup,
+    groupTone
+  });
+  await transactionDone(transaction);
+}
+
+export async function renameLibraryPaperGroup(oldGroup, newGroup) {
+  const normalizedOldGroup = normalizeLibraryPaperGroup(oldGroup);
+  const normalizedNewGroup = normalizeLibraryPaperGroup(newGroup);
+  if (!normalizedOldGroup) {
+    return [];
+  }
+  if (!normalizedNewGroup) {
+    return deleteLibraryPaperGroup(normalizedOldGroup);
+  }
+  if (normalizedOldGroup.toLowerCase() === normalizedNewGroup.toLowerCase()) {
+    return [];
+  }
+
+  const db = await openPaperDatabase();
+  const papers = await getAllFromStore(db, PAPER_STORE);
+  const matchingPapers = papers.filter((paper) =>
+    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedOldGroup.toLowerCase()
+  );
+  if (!matchingPapers.length) {
+    return [];
+  }
+
+  const now = Date.now();
+  const groupTone = resolveRenamedLibraryPaperGroupTone(normalizedOldGroup, normalizedNewGroup, papers);
+  const transaction = db.transaction(PAPER_STORE, "readwrite");
+  const store = transaction.objectStore(PAPER_STORE);
+  matchingPapers.forEach((paper) => {
+    store.put({
+      ...paper,
+      updatedAt: now,
+      group: normalizedNewGroup,
+      groupTone
+    });
+  });
+  await transactionDone(transaction);
+  return matchingPapers.map((paper) => paper.documentKey).filter(Boolean);
+}
+
+export async function deleteLibraryPaperGroup(group) {
+  const normalizedGroup = normalizeLibraryPaperGroup(group);
+  if (!normalizedGroup) {
+    return [];
+  }
+
+  const db = await openPaperDatabase();
+  const papers = await getAllFromStore(db, PAPER_STORE);
+  const matchingPapers = papers.filter((paper) =>
+    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedGroup.toLowerCase()
+  );
+  if (!matchingPapers.length) {
+    return [];
+  }
+
+  const now = Date.now();
+  const transaction = db.transaction(PAPER_STORE, "readwrite");
+  const store = transaction.objectStore(PAPER_STORE);
+  matchingPapers.forEach((paper) => {
+    store.put({
+      ...paper,
+      updatedAt: now,
+      group: "",
+      groupTone: null
+    });
+  });
+  await transactionDone(transaction);
+  return matchingPapers.map((paper) => paper.documentKey).filter(Boolean);
 }
 
 function getAllFromStore(db, storeName) {
@@ -181,7 +296,9 @@ function createPaperSummary({ paper, document, threads }) {
     updatedAt,
     activeThreadId: paper.activeThreadId || "",
     isStarred: Boolean(paper.isStarred),
-    starredAt: getTime(paper.starredAt)
+    starredAt: getTime(paper.starredAt),
+    group: normalizeLibraryPaperGroup(paper.group),
+    groupTone: normalizeLibraryPaperGroupTone(paper.groupTone, paper.group)
   };
 }
 
@@ -194,7 +311,8 @@ function matchesLibraryFilters(paper, options) {
   return [
     paper.title,
     paper.canonicalUrl,
-    paper.domain
+    paper.domain,
+    paper.group
   ].some((value) => String(value || "").toLowerCase().includes(query));
 }
 
@@ -278,6 +396,101 @@ function getTime(value) {
 
 function getThreadStartedAt(thread) {
   return getTime(thread?.firstMessageCreatedAt || thread?.createdAt);
+}
+
+function normalizeLibraryPaperGroup(group) {
+  return String(group || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 64);
+}
+
+function normalizeLibraryPaperGroupTone(tone, group = "") {
+  const toneNumber = Number(tone);
+  if (Number.isInteger(toneNumber) && toneNumber >= 0 && toneNumber < PAPER_GROUP_TONE_COUNT) {
+    return toneNumber;
+  }
+
+  return normalizeLibraryPaperGroup(group) ? getStableGroupToneIndex(group) : null;
+}
+
+function resolveLibraryPaperGroupTone(group, papers) {
+  const normalizedGroup = normalizeLibraryPaperGroup(group);
+  const usedTones = new Set();
+
+  for (const paper of papers || []) {
+    const paperGroup = normalizeLibraryPaperGroup(paper.group);
+    if (!paperGroup) {
+      continue;
+    }
+
+    const paperTone = normalizeLibraryPaperGroupTone(paper.groupTone, paperGroup);
+    if (paperGroup.toLowerCase() === normalizedGroup.toLowerCase()) {
+      return paperTone;
+    }
+    if (paperTone !== null) {
+      usedTones.add(paperTone);
+    }
+  }
+
+  for (let tone = 0; tone < PAPER_GROUP_TONE_COUNT; tone += 1) {
+    if (!usedTones.has(tone)) {
+      return tone;
+    }
+  }
+
+  return getStableGroupToneIndex(normalizedGroup);
+}
+
+function canCreateLibraryPaperGroup(group, papers) {
+  const normalizedGroup = normalizeLibraryPaperGroup(group);
+  if (!normalizedGroup) {
+    return true;
+  }
+
+  const groups = getDistinctLibraryPaperGroups(papers);
+  if (groups.some((existingGroup) => existingGroup.toLowerCase() === normalizedGroup.toLowerCase())) {
+    return true;
+  }
+
+  return groups.length < PAPER_GROUP_TONE_COUNT;
+}
+
+function getDistinctLibraryPaperGroups(papers) {
+  const groups = [];
+  for (const paper of papers || []) {
+    const group = normalizeLibraryPaperGroup(paper.group);
+    if (!group || groups.some((existingGroup) => existingGroup.toLowerCase() === group.toLowerCase())) {
+      continue;
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function resolveRenamedLibraryPaperGroupTone(oldGroup, newGroup, papers) {
+  const normalizedOldGroup = normalizeLibraryPaperGroup(oldGroup);
+  const normalizedNewGroup = normalizeLibraryPaperGroup(newGroup);
+  const existingNewGroupPaper = (papers || []).find((paper) =>
+    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedNewGroup.toLowerCase()
+  );
+  if (existingNewGroupPaper) {
+    return normalizeLibraryPaperGroupTone(existingNewGroupPaper.groupTone, normalizedNewGroup);
+  }
+
+  const existingOldGroupPaper = (papers || []).find((paper) =>
+    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedOldGroup.toLowerCase()
+  );
+  return normalizeLibraryPaperGroupTone(existingOldGroupPaper?.groupTone, normalizedOldGroup);
+}
+
+function getStableGroupToneIndex(group) {
+  const text = normalizeLibraryPaperGroup(group).toLowerCase();
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+  return hash % PAPER_GROUP_TONE_COUNT;
 }
 
 function getDomain(url) {

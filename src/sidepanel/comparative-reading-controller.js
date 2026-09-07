@@ -1,5 +1,6 @@
 import { answerComparisonQuestion } from "../compare/comparison-answer.js";
 import { buildComparisonContextPack } from "../compare/build-comparison-context.js";
+import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { MessageType } from "../shared/messages.js";
 import {
   MAX_COMPARISON_PAPERS,
@@ -42,7 +43,8 @@ export function createComparativeReadingController({
     messages: [],
     busy: false,
     contextLoading: false,
-    status: ""
+    status: "",
+    draftIssue: ""
   };
 
   async function show(context = {}) {
@@ -54,6 +56,7 @@ export function createComparativeReadingController({
     state.messages = [];
     state.contextLoading = true;
     state.status = "";
+    state.draftIssue = String(context.draftIssue || "");
     render();
 
     try {
@@ -113,6 +116,7 @@ export function createComparativeReadingController({
 
     state.selectedPapers.push(paper);
     state.status = "";
+    state.draftIssue = "";
     if (!state.activeSessionId && options.syncDraft !== false) {
       notifyComparisonDraftChanged(state.selectedPapers);
     }
@@ -122,12 +126,33 @@ export function createComparativeReadingController({
     }
   }
 
+  async function addPapers(documentKeys) {
+    if (state.activeSessionId) {
+      return;
+    }
+
+    const existingKeys = new Set(state.selectedPapers.map((paper) => paper.documentKey));
+    const availableSlots = Math.max(0, MAX_COMPARISON_PAPERS - state.selectedPapers.length);
+    const keys = normalizeDocumentKeys(documentKeys)
+      .filter((documentKey) => !existingKeys.has(documentKey))
+      .slice(0, availableSlots);
+    for (const documentKey of keys) {
+      await addPaper(documentKey, { renderAfter: false, syncDraft: false });
+    }
+    state.status = "";
+    state.draftIssue = "";
+    notifyComparisonDraftChanged(state.selectedPapers);
+    render();
+    onChange?.();
+  }
+
   async function removePaper(documentKey) {
     if (state.activeSessionId) {
       return;
     }
 
     state.selectedPapers = state.selectedPapers.filter((paper) => paper.documentKey !== documentKey);
+    state.draftIssue = "";
     notifyComparisonDraftChanged(state.selectedPapers);
     render();
     onChange?.();
@@ -140,6 +165,7 @@ export function createComparativeReadingController({
 
     state.selectedPapers = [];
     state.status = "";
+    state.draftIssue = "";
     notifyComparisonDraftChanged([]);
     render();
     onChange?.();
@@ -150,6 +176,7 @@ export function createComparativeReadingController({
     state.selectedPapers = [];
     state.messages = [];
     state.status = "";
+    state.draftIssue = "";
     getComposer()?.clear();
     notifyComparisonDraftChanged([]);
     render();
@@ -166,6 +193,7 @@ export function createComparativeReadingController({
     state.selectedPapers = await hydratePapers(session.documentKeys);
     state.messages = session.messages || [];
     state.status = "";
+    state.draftIssue = "";
     if (options.renderAfter !== false) {
       render();
       onChange?.();
@@ -304,6 +332,14 @@ export function createComparativeReadingController({
     return state.busy;
   }
 
+  function canAddPapers() {
+    return state.active && !state.activeSessionId && state.selectedPapers.length < MAX_COMPARISON_PAPERS;
+  }
+
+  function getSelectedDocumentKeys() {
+    return state.selectedPapers.map((paper) => paper.documentKey);
+  }
+
   function hasScrollableMessages() {
     return state.active && state.messages.length > 0;
   }
@@ -347,6 +383,9 @@ export function createComparativeReadingController({
       selectedPapers: state.selectedPapers,
       messages: state.messages,
       status: state.status,
+      emptySubtitle: state.draftIssue === "too-many-papers"
+        ? "That's too much."
+        : "More toast is needed",
       busy: state.busy,
       contextReadiness: getContextReadiness(),
       allowRemovePapers: !state.activeSessionId,
@@ -611,7 +650,7 @@ export function createComparativeReadingController({
     }
 
     if (globalThis.chrome?.tabs?.create) {
-      chrome.tabs.create({ url }).catch((error) => {
+      openPaperUrlInExistingTab(url).catch((error) => {
         setStatus("Could not open paper URL.");
         onDiagnostic?.(`Could not open comparative paper URL: ${error.message || String(error)}`);
       });
@@ -625,11 +664,14 @@ export function createComparativeReadingController({
     show,
     hide,
     addPaper,
+    addPapers,
     ask,
     startNewSession,
     canAsk,
     isActive,
     isBusy,
+    canAddPapers,
+    getSelectedDocumentKeys,
     hasScrollableMessages
   };
 }
@@ -669,20 +711,6 @@ function normalizeDocumentKeys(documentKeys) {
     .map((key) => String(key || "").trim())
     .filter(Boolean))]
     .slice(0, MAX_COMPARISON_PAPERS);
-}
-
-function normalizeOpenableUrl(url) {
-  const value = String(url || "").trim();
-  if (!value) {
-    return "";
-  }
-
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
-  } catch {
-    return "";
-  }
 }
 
 function notifyComparisonContextChanged(comparisonId) {

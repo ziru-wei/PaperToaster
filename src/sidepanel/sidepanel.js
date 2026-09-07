@@ -9,6 +9,7 @@ import { createComposerController } from "./composer-controller.js";
 import { createComparativeReadingController } from "./comparative-reading-controller.js";
 import { createConversationPanelController } from "./conversation-panel-controller.js";
 import { createPaperActionsController } from "./paper-actions-controller.js";
+import { createPaperMentionMenuController } from "./paper-mention-menu.js";
 import { createPromptPresetMenuController } from "./prompt-preset-menu.js";
 import { createRouteSuggestionController } from "./route-suggestion-controller.js";
 import { createScrollToLatestController } from "./scroll-to-latest-controller.js";
@@ -23,6 +24,7 @@ let composer = null;
 let paperActions = null;
 let conversation = null;
 let comparativeReading = null;
+let paperMentionMenu = null;
 let lastAutoOpenedSavedContextId = "";
 
 const scrollToLatest = createScrollToLatestController({
@@ -69,20 +71,32 @@ comparativeReading = createComparativeReadingController({
   onDiagnostic: addDiagnostic
 });
 
+paperMentionMenu = createPaperMentionMenuController({
+  textarea: elements.selectionQuestion,
+  menuElement: elements.promptPresetMenu,
+  isEnabled: () => comparativeReading.isActive() && comparativeReading.canAddPapers(),
+  getSelectedDocumentKeys: () => comparativeReading.getSelectedDocumentKeys(),
+  onSelectPaper: (documentKey) => comparativeReading.addPaper(documentKey),
+  onSelectPapers: (documentKeys) => comparativeReading.addPapers(documentKeys),
+  onError: (error) => documentContext?.showError(error.message || String(error))
+});
+
 const documentContext = createSidePanelDocumentContext({
   elements,
   conversation,
   selectionPanel,
   onDocumentChange: async (document) => {
+    composer?.hideMenus();
     comparativeReading.hide();
     routeSuggestion.reset();
-    paperActions?.render(document);
+    await paperActions?.render(document);
     if (shouldAutoOpenSavedQuestionAnswerView(document)) {
       await conversation.setSavedQuestionAnswerViewActive(true);
     }
     syncSavedQuestionAnswerMode();
   },
   onComparativeReadingContext: async (context) => {
+    composer?.hideMenus();
     lastAutoOpenedSavedContextId = "";
     await conversation.setSavedQuestionAnswerViewActive(false);
     syncSavedQuestionAnswerMode();
@@ -96,6 +110,7 @@ const documentContext = createSidePanelDocumentContext({
 
 paperActions = createPaperActionsController({
   starElement: elements.documentStar,
+  labelElement: elements.documentLabel,
   getCurrentDocument: documentContext.getCurrentDocument,
   onDiagnostic: addDiagnostic,
   onError: documentContext.showError
@@ -116,7 +131,9 @@ composer = createComposerController({
   textarea: elements.selectionQuestion,
   newThreadHintElement: elements.newThreadPromptHint,
   promptPresetMenu,
+  paperMentionMenu,
   promptPresetMenuElement: elements.promptPresetMenu,
+  usePaperMentionMenu: () => comparativeReading.isActive(),
   routeSuggestion,
   shouldSuggestRoute: () => !comparativeReading.isActive(),
   canSubmit: () => comparativeReading.isActive() ? comparativeReading.canAsk() : selectionPanel.canAsk(),
@@ -167,6 +184,10 @@ chrome.runtime.onMessage.addListener((message) => {
     documentContext.scheduleRefreshState();
   }
 
+  if (message?.type === MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED) {
+    paperMentionMenu.invalidate();
+  }
+
   if (
     message?.type === MessageType.LIBRARY_PAPER_ACTIVITY_CHANGED &&
     message.documentKey &&
@@ -214,7 +235,7 @@ function syncSavedQuestionAnswerMode() {
   const isActive = conversation.isSavedQuestionAnswerViewActive();
   const hasDocument = Boolean(documentContext.getCurrentDocument());
   const isComparative = Boolean(comparativeReading?.isActive());
-  const savedModeActive = isActive && !isComparative;
+  const savedModeActive = isActive && hasDocument && !isComparative;
 
   document.body.classList.toggle("saved-qa-mode", savedModeActive);
   elements.savedQaControls.hidden = isComparative || !hasDocument;

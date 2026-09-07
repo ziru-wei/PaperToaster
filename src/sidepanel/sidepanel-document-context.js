@@ -1,4 +1,5 @@
 import { MessageType } from "../shared/messages.js";
+import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { DEFAULT_PARSER_ID } from "../parsers/parser-registry.js";
 import {
   canLoadDocumentFromTab,
@@ -25,11 +26,12 @@ export function createSidePanelDocumentContext({
   let titleSaveTimer = null;
   let refreshTimer = null;
   let documentRequestId = 0;
+  let currentPaperUrl = "";
 
   elements.reloadPdf.addEventListener("click", () => {
     loadPdf({ bypassCache: true });
   });
-  elements.copyTabUrl.addEventListener("click", copyActiveTabUrl);
+  elements.openPaperUrl.addEventListener("click", openCurrentPaperUrl);
   elements.documentTitle.addEventListener("input", updateManualDocumentTitle);
 
   function start() {
@@ -260,6 +262,7 @@ export function createSidePanelDocumentContext({
     if (!document) {
       currentDocument = null;
       await conversation.setDocumentUrl("");
+      await conversation.setSavedQuestionAnswerViewActive(false);
       renderDocumentTitle(null);
       await onDocumentChange?.(null);
       renderContextReady(false);
@@ -271,23 +274,23 @@ export function createSidePanelDocumentContext({
     currentDocument = document;
     renderIdleState(false);
     renderDocumentTitle(document);
-    renderUrlLine(document.url || "");
+    renderPaperUrl(document.url || "");
     renderContextReady(true, document);
     elements.pdfStatus.textContent = "";
-    await conversation.setDocumentUrl(document.url);
+    await conversation.setDocumentUrl(document.url, {
+      documentKey: document.documentKey
+    });
     await onDocumentChange?.(document);
     onAskReadinessChange?.();
   }
 
   function renderTab(tab) {
     if (!tab) {
-      elements.tabStatus.textContent = "No active tab found.";
-      elements.tabStatus.removeAttribute("title");
-      elements.copyTabUrl.disabled = true;
+      renderPaperUrl("");
       return;
     }
 
-    renderUrlLine(tab.url);
+    renderPaperUrl(tab.url);
   }
 
   function renderLibraryPaperHeader(paper) {
@@ -299,28 +302,43 @@ export function createSidePanelDocumentContext({
     renderDocumentTitle({
       title: paper.title || "Untitled paper"
     });
-    renderUrlLine(paper.canonicalUrl || paper.documentKey || "");
+    renderPaperUrl(paper.canonicalUrl || paper.documentKey || "");
   }
 
-  function renderUrlLine(url) {
-    elements.tabStatus.textContent = url || "";
-    elements.tabStatus.title = url || "";
-    elements.copyTabUrl.disabled = !url;
+  function renderPaperUrl(url) {
+    currentPaperUrl = normalizeOpenableUrl(url);
+    elements.openPaperUrl.disabled = !currentPaperUrl;
   }
 
-  async function copyActiveTabUrl() {
-    const url = currentDocument?.url || elements.tabStatus.textContent.trim() || activeTab?.url || "";
+  async function openCurrentPaperUrl() {
+    const url = getCurrentPaperUrl();
     if (!url) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(url);
-      elements.copyTabUrl.classList.add("copied");
-      window.setTimeout(() => elements.copyTabUrl.classList.remove("copied"), 700);
+      await openPaperUrlInExistingTab(url);
     } catch (error) {
-      showError(`Could not copy URL.\n${error.message || String(error)}`);
+      showError(`Could not open paper URL.\n${error.message || String(error)}`);
     }
+  }
+
+  function getCurrentPaperUrl() {
+    const documentUrl = normalizeOpenableUrl(currentDocument?.url);
+    if (documentUrl) {
+      return documentUrl;
+    }
+
+    if (currentPaperUrl) {
+      return currentPaperUrl;
+    }
+
+    const activeUrl = normalizeOpenableUrl(activeTab?.url);
+    if (!isReadingDashboardTab(activeTab) && activeUrl) {
+      return activeUrl;
+    }
+
+    return "";
   }
 
   function updateManualDocumentTitle() {
@@ -417,9 +435,7 @@ export function createSidePanelDocumentContext({
 
     elements.pdfStatus.textContent = "";
     elements.pdfStatus.classList.remove("error");
-    elements.tabStatus.textContent = "";
-    elements.tabStatus.removeAttribute("title");
-    elements.copyTabUrl.disabled = true;
+    renderPaperUrl("");
     elements.reloadPdf.disabled = true;
     elements.documentStar.disabled = true;
     elements.conversationThreadArchive.disabled = true;
@@ -483,6 +499,8 @@ function mergeLibraryDocument(document, paper, context = {}) {
     title: document.title || paper?.title || "",
     titleSource: document.titleSource || paper?.titleSource || "",
     isStarred: Boolean(paper?.isStarred),
+    group: paper?.group || "",
+    groupTone: paper?.groupTone ?? null,
     sidePanelContextMode: String(context?.mode || ""),
     sidePanelContextSource: String(context?.source || ""),
     sidePanelContextSelectedAt: Number(context?.selectedAt) || 0

@@ -1,4 +1,11 @@
-import { getLibraryPaperSummary, listLibraryPapers, setLibraryPaperStarred } from "../storage/library-store.js";
+import {
+  deleteLibraryPaperGroup,
+  getLibraryPaperSummary,
+  listLibraryPapers,
+  renameLibraryPaperGroup,
+  setLibraryPaperGroup,
+  setLibraryPaperStarred
+} from "../storage/library-store.js";
 import { listComparisonSessions, setComparisonSessionStarred } from "../storage/comparison-store.js";
 import { createDashboardBulkActions } from "./dashboard-bulk-actions.js";
 import {
@@ -10,14 +17,17 @@ import { MessageType } from "../shared/messages.js";
 
 const SORT_OPTIONS = [
   { id: "latestThread", label: "Latest ask", sortBy: "latestThread", sortDirection: "desc" },
-  { id: "firstConversation", label: "Early ask", sortBy: "firstConversation", sortDirection: "asc" },
-  { id: "messageCount", label: "Message count", sortBy: "messageCount", sortDirection: "desc" },
-  { id: "type", label: "Type", sortBy: "type", sortDirection: "asc" },
-  { id: "starred", label: "Starred", sortBy: "starred", sortDirection: "desc" }
+  { id: "starred", label: "Starred", sortBy: "starred", sortDirection: "desc" },
+  { id: "label", label: "Label", sortBy: "title", sortDirection: "asc" }
 ];
 
 const SORT_CONFIG = {
   ...Object.fromEntries(SORT_OPTIONS.map((option) => [option.id, option]))
+};
+
+const PAPER_GROUP_MODE = {
+  LABEL: "label",
+  RECENT_CONVERSATION: "recent-conversation"
 };
 
 const state = {
@@ -28,6 +38,7 @@ const state = {
   comparisons: [],
   sort: "latestThread",
   query: "",
+  paperGroupMode: PAPER_GROUP_MODE.LABEL,
   manageMode: false,
   selectedDocumentKeys: new Set(),
   selectedComparisonIds: new Set()
@@ -42,12 +53,13 @@ const elements = {
   bulkActions: document.querySelector("#bulkActions"),
   selectionSummary: document.querySelector("#selectionSummary"),
   selectAllButton: document.querySelector("#selectAllButton"),
-  clearUnaskedButton: document.querySelector("#clearUnaskedButton"),
+  sendToMachineButton: document.querySelector("#sendToMachineButton"),
   backupSelectedButton: document.querySelector("#backupSelectedButton"),
   archiveSelectedButton: document.querySelector("#archiveSelectedButton"),
   deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
   sortButton: document.querySelector("#paperSortButton"),
   sortMenu: document.querySelector("#paperSortMenu"),
+  groupLayoutButton: document.querySelector("#paperGroupLayoutButton"),
   paperList: document.querySelector("#paperList"),
   emptyState: document.querySelector("#emptyState")
 };
@@ -55,7 +67,7 @@ const elements = {
 const bulkActions = createDashboardBulkActions({
   state,
   elements,
-  onGetClearUnaskedSelection: getClearUnaskedSelection,
+  onSendToMachine: sendSelectedPapersToMachine,
   onDeleteComplete: handlePapersDeleted,
   onRenderRequested: renderDashboard,
   onRefreshAllRequested: refreshAll
@@ -83,6 +95,19 @@ elements.sortButton.addEventListener("click", (event) => {
   setSortMenuOpen(elements.sortMenu.hidden);
 });
 
+elements.groupLayoutButton.addEventListener("click", () => {
+  state.paperGroupMode = state.paperGroupMode === PAPER_GROUP_MODE.LABEL
+    ? PAPER_GROUP_MODE.RECENT_CONVERSATION
+    : PAPER_GROUP_MODE.LABEL;
+  const groupingCriterion = getGroupingCriterion();
+  if (state.sort === groupingCriterion) {
+    state.sort = groupingCriterion === "label" ? "latestThread" : "label";
+  }
+  renderGroupLayoutButton();
+  renderSortMenu();
+  renderPapers();
+});
+
 bulkActions.attachEventListeners();
 
 window.addEventListener("focus", () => {
@@ -97,6 +122,27 @@ document.addEventListener("click", (event) => {
   }
 
   setSortMenuOpen(false);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || shouldIgnoreDashboardEscape(event.target)) {
+    return;
+  }
+
+  event.preventDefault();
+  state.activeDocumentKey = "";
+  state.activeComparisonId = "";
+  state.activeComparisonDocumentKeys = new Set();
+  if (state.manageMode) {
+    bulkActions.setManageMode(false);
+  } else {
+    renderPapers();
+  }
+  clearDashboardContext({ openPanel: true })
+    .then(renderPapers)
+    .catch((error) => {
+      console.debug("[Paper Toaster] Could not clear dashboard context from Escape", error);
+    });
 });
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -115,6 +161,7 @@ initializeDashboard().catch((error) => {
   elements.summary.textContent = `Could not load dashboard: ${error.message || String(error)}`;
 });
 renderSortMenu();
+renderGroupLayoutButton();
 
 async function initializeDashboard() {
   await clearDashboardContext();
@@ -145,10 +192,7 @@ function renderDashboard() {
 function renderSummary() {
   const totalMessages = state.papers.reduce((sum, paper) => sum + paper.messageCount, 0);
   const totalComparisonMessages = state.comparisons.reduce((sum, comparison) => sum + comparison.messageCount, 0);
-  const selectedCount = bulkActions.getSelectedDocumentKeys().length + bulkActions.getSelectedComparisonIds().length;
-  elements.summary.textContent = state.manageMode
-    ? `${state.papers.length} papers · ${selectedCount} selected`
-    : `${state.papers.length} papers · ${state.comparisons.length} comparisons · ${totalMessages + totalComparisonMessages} messages`;
+  elements.summary.textContent = `${state.papers.length} papers · ${state.comparisons.length} comparisons · ${totalMessages + totalComparisonMessages} messages`;
   bulkActions.renderBulkActions();
 }
 
@@ -159,6 +203,7 @@ function renderPapers() {
     papers: state.papers,
     comparisons: state.comparisons,
     sortId: state.sort,
+    paperGroupMode: state.paperGroupMode,
     activeDocumentKey: state.activeDocumentKey,
     activeComparisonId: state.activeComparisonId,
     activeComparisonDocumentKeys: getActiveComparisonDocumentKeys(),
@@ -168,12 +213,13 @@ function renderPapers() {
     onOpenPaperContext: openPaperContextInSidePanel,
     onOpenComparisonContext: openComparisonContextInSidePanel,
     onTogglePaperSelection: bulkActions.togglePaperSelection,
-    onSetPaperSelected: bulkActions.setPaperSelected,
+    onSetPaperGroupSelected: bulkActions.setPaperSelection,
     onToggleComparisonSelection: bulkActions.toggleComparisonSelection,
-    onSetComparisonSelected: bulkActions.setComparisonSelected,
     onTogglePaperStarred: togglePaperStarred,
     onToggleComparisonStarred: toggleComparisonStarred,
-    onAddPaperToComparison: addPaperToComparison
+    onUpdatePaperGroup: updatePaperGroup,
+    onRenamePaperGroup: renamePaperGroup,
+    onDeletePaperGroup: deletePaperGroup
   });
 }
 
@@ -217,27 +263,6 @@ async function openComparisonContextInSidePanel(comparisonId) {
   }
 }
 
-async function addPaperToComparison(documentKey) {
-  if (!documentKey) {
-    return;
-  }
-
-  state.activeDocumentKey = "";
-  renderPapers();
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: MessageType.ADD_PAPER_TO_ACTIVE_COMPARISON,
-      documentKey
-    });
-    applyActiveDashboardContext(response?.context);
-  } catch (error) {
-    console.debug("[PDF AI] Could not add paper to comparative reading", error);
-  } finally {
-    renderPapers();
-  }
-}
-
 async function refreshActivePaperContext() {
   try {
     const response = await chrome.runtime.sendMessage({
@@ -249,10 +274,11 @@ async function refreshActivePaperContext() {
   }
 }
 
-async function clearDashboardContext() {
+async function clearDashboardContext(options = {}) {
   try {
     const response = await chrome.runtime.sendMessage({
-      type: MessageType.CLEAR_DASHBOARD_CONTEXT
+      type: MessageType.CLEAR_DASHBOARD_CONTEXT,
+      openPanel: Boolean(options.openPanel)
     });
     applyActiveDashboardContext(response?.context);
   } catch (error) {
@@ -279,6 +305,24 @@ async function togglePaperStarred(paper) {
   await refreshRecords();
 }
 
+async function updatePaperGroup(paper, group) {
+  await setLibraryPaperGroup(paper.documentKey, group, paper);
+  notifyPaperActivityChanged(paper.documentKey);
+  await refreshRecords();
+}
+
+async function renamePaperGroup(oldGroup, newGroup) {
+  const changedDocumentKeys = await renameLibraryPaperGroup(oldGroup, newGroup);
+  changedDocumentKeys.forEach(notifyPaperActivityChanged);
+  await refreshRecords();
+}
+
+async function deletePaperGroup(group) {
+  const changedDocumentKeys = await deleteLibraryPaperGroup(group);
+  changedDocumentKeys.forEach(notifyPaperActivityChanged);
+  await refreshRecords();
+}
+
 async function toggleComparisonStarred(comparison) {
   await setComparisonSessionStarred(comparison.comparisonId, !comparison.isStarred);
   await refreshRecords();
@@ -290,6 +334,7 @@ function renderSortMenu() {
     sortMenu: elements.sortMenu,
     sortOptions: SORT_OPTIONS,
     activeSort: state.sort,
+    groupingCriterion: getGroupingCriterion(),
     onSelectSort: async (option) => {
       state.sort = option.id;
       renderSortMenu();
@@ -297,6 +342,20 @@ function renderSortMenu() {
       await refreshRecords();
     }
   });
+}
+
+function getGroupingCriterion() {
+  return state.paperGroupMode === PAPER_GROUP_MODE.LABEL ? "label" : "latestThread";
+}
+
+function renderGroupLayoutButton() {
+  const groupsByRecentConversation = state.paperGroupMode === PAPER_GROUP_MODE.RECENT_CONVERSATION;
+  elements.groupLayoutButton.classList.toggle("active", groupsByRecentConversation);
+  elements.groupLayoutButton.setAttribute("aria-pressed", String(groupsByRecentConversation));
+  elements.groupLayoutButton.setAttribute(
+    "aria-label",
+    groupsByRecentConversation ? "Group papers by label" : "Group papers by latest conversation"
+  );
 }
 
 async function handlePapersDeleted(selection) {
@@ -317,27 +376,15 @@ async function handlePapersDeleted(selection) {
   await refreshRecords();
 }
 
-async function getClearUnaskedSelection() {
-  const [papers, comparisonSessions] = await Promise.all([
-    listLibraryPapers({
-      sortBy: "latestThread",
-      sortDirection: "desc"
-    }),
-    listComparisonSessions()
-  ]);
-  const comparisonDocumentKeys = new Set(
-    comparisonSessions.flatMap((session) => Array.isArray(session.documentKeys) ? session.documentKeys : [])
-  );
-
-  return {
-    documentKeys: papers
-      .filter(isDisplayablePaper)
-      .filter((paper) => Number(paper.messageCount || 0) === 0)
-      .filter((paper) => !comparisonDocumentKeys.has(paper.documentKey))
-      .map((paper) => paper.documentKey)
-      .filter(Boolean),
-    comparisonIds: []
-  };
+async function sendSelectedPapersToMachine(documentKeys) {
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.UPDATE_COMPARISON_DRAFT,
+    documentKeys,
+    rejectOverflow: true,
+    openPanel: true
+  });
+  applyActiveDashboardContext(response?.context);
+  renderPapers();
 }
 
 async function listDashboardComparisons(query) {
@@ -418,4 +465,33 @@ function setSortMenuOpen(open) {
   elements.sortMenu.hidden = !open;
   elements.sortButton.setAttribute("aria-expanded", String(open));
   elements.sortButton.classList.toggle("active", open);
+}
+
+function shouldIgnoreDashboardEscape(target) {
+  if (!elements.sortMenu.hidden) {
+    setSortMenuOpen(false);
+    return true;
+  }
+
+  const activeElement = document.activeElement;
+  const eventTarget = target || activeElement;
+  if (isEditableElement(eventTarget) || isEditableElement(activeElement)) {
+    return true;
+  }
+
+  return Boolean(eventTarget?.closest?.(
+    ".paper-group-editor, .paper-group-control"
+  ));
+}
+
+function isEditableElement(element) {
+  if (!element || element === document.body) {
+    return false;
+  }
+
+  const tagName = String(element.tagName || "").toLowerCase();
+  return tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    Boolean(element.isContentEditable);
 }

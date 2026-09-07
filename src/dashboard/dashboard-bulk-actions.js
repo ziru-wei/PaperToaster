@@ -7,7 +7,7 @@ import {
 export function createDashboardBulkActions({
   state,
   elements,
-  onGetClearUnaskedSelection,
+  onSendToMachine,
   onDeleteComplete,
   onRenderRequested,
   onRefreshAllRequested
@@ -17,9 +17,8 @@ export function createDashboardBulkActions({
     renderBulkActions,
     setManageMode,
     togglePaperSelection,
-    setPaperSelected,
+    setPaperSelection,
     toggleComparisonSelection,
-    setComparisonSelected,
     getSelectedDocumentKeys,
     getSelectedComparisonIds
   };
@@ -45,9 +44,9 @@ export function createDashboardBulkActions({
       selectAllVisiblePapers();
     });
 
-    elements.clearUnaskedButton.addEventListener("click", () => {
-      clearUnaskedPapers().catch((error) => {
-        elements.summary.textContent = `Could not clear unasked papers: ${error.message || String(error)}`;
+    elements.sendToMachineButton.addEventListener("click", () => {
+      sendSelectedPapers().catch((error) => {
+        elements.summary.textContent = `Could not send papers: ${error.message || String(error)}`;
       });
     });
 
@@ -77,20 +76,19 @@ export function createDashboardBulkActions({
     const hasSelection = selectedCount > 0;
     elements.bulkActions.hidden = !state.manageMode;
     elements.selectionSummary.textContent = `${selectedCount} selected`;
-    elements.importButton.hidden = hasSelection;
     elements.selectAllButton.hidden = hasSelection;
-    elements.clearUnaskedButton.hidden = hasSelection;
+    elements.sendToMachineButton.hidden = selectedDocumentKeys.length === 0;
     elements.backupSelectedButton.hidden = !hasSelection;
     elements.archiveSelectedButton.hidden = !hasSelection;
     elements.deleteSelectedButton.hidden = !hasSelection;
     elements.selectAllButton.textContent = "Select all";
     elements.selectAllButton.disabled = state.papers.length === 0 && state.comparisons.length === 0;
-    elements.clearUnaskedButton.disabled = false;
+    elements.sendToMachineButton.disabled = selectedDocumentKeys.length === 0;
     elements.backupSelectedButton.disabled = selectedCount === 0;
     elements.archiveSelectedButton.disabled = selectedCount === 0;
     elements.deleteSelectedButton.disabled = selectedCount === 0;
     elements.manageButton.classList.toggle("active", state.manageMode);
-    elements.manageButton.setAttribute("aria-label", state.manageMode ? "Done managing papers" : "Manage papers");
+    elements.manageButton.setAttribute("aria-label", state.manageMode ? "Done selecting papers" : "Select papers");
     elements.manageButton.setAttribute("aria-pressed", String(state.manageMode));
   }
 
@@ -119,6 +117,21 @@ export function createDashboardBulkActions({
       state.selectedDocumentKeys.delete(documentKey);
     }
 
+    onRenderRequested();
+  }
+
+  function setPaperSelection(documentKeys, selected) {
+    const keys = Array.isArray(documentKeys) ? documentKeys : [];
+    keys.forEach((documentKey) => {
+      if (!documentKey) {
+        return;
+      }
+      if (selected) {
+        state.selectedDocumentKeys.add(documentKey);
+      } else {
+        state.selectedDocumentKeys.delete(documentKey);
+      }
+    });
     onRenderRequested();
   }
 
@@ -180,26 +193,14 @@ export function createDashboardBulkActions({
     await afterDelete(selection);
   }
 
-  async function clearUnaskedPapers() {
-    const selection = await Promise.resolve(onGetClearUnaskedSelection?.());
-    const documentKeys = Array.isArray(selection?.documentKeys) ? selection.documentKeys : [];
+  async function sendSelectedPapers() {
+    const documentKeys = getSelectedDocumentKeys();
     if (!documentKeys.length) {
-      window.alert("No unasked standalone papers to clear.");
       return;
     }
 
-    if (!window.confirm(`Clear ${documentKeys.length} unasked standalone paper(s)? This removes local paper records with no Q&A history and leaves comparative readings untouched.`)) {
-      return;
-    }
-
-    await deleteLibraryRecords({
-      documentKeys,
-      comparisonIds: []
-    });
-    await afterDelete({
-      documentKeys,
-      comparisonIds: []
-    });
+    await onSendToMachine(documentKeys);
+    setManageMode(false);
   }
 
   async function backupSelectedPapers() {

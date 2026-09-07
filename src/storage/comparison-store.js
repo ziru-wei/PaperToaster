@@ -203,6 +203,73 @@ export async function listComparisonMessages(comparisonId) {
   return getComparisonMessages(db, normalizedId);
 }
 
+export async function listSavedComparisonQuestionAnswerUnitsForDocument(documentKey) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return [];
+  }
+
+  const db = await openPaperDatabase();
+  const sessions = await requestToPromise(
+    db.transaction(COMPARISON_SESSION_STORE, "readonly")
+      .objectStore(COMPARISON_SESSION_STORE)
+      .getAll()
+  );
+  const relatedSessions = new Map(
+    sessions
+      .map(normalizeComparisonSession)
+      .filter((session) => session.documentKeys.includes(normalizedDocumentKey))
+      .map((session) => [session.comparisonId, session])
+  );
+  if (!relatedSessions.size) {
+    return [];
+  }
+
+  const messagesByComparisonId = new Map(await Promise.all(
+    [...relatedSessions.keys()].map(async (comparisonId) => [
+      comparisonId,
+      await getComparisonMessages(db, comparisonId)
+    ])
+  ));
+
+  const units = [];
+  for (const [comparisonId, comparisonMessages] of messagesByComparisonId.entries()) {
+    const session = relatedSessions.get(comparisonId);
+    const sortedMessages = comparisonMessages.sort((left, right) => (left.sequence || 0) - (right.sequence || 0));
+    let latestUser = null;
+
+    for (const message of sortedMessages) {
+      if (message.role === "user") {
+        latestUser = message;
+        continue;
+      }
+
+      if (message.role !== "assistant" || !isComparisonMessageSaved(message)) {
+        continue;
+      }
+
+      units.push({
+        sourceType: "comparison",
+        comparisonId,
+        threadTitle: session.title || DEFAULT_COMPARISON_TITLE,
+        userMessageIndex: Number.isInteger(latestUser?.sequence) ? latestUser.sequence : null,
+        assistantMessageIndex: Number.isInteger(message.sequence) ? message.sequence : null,
+        question: latestUser?.text || session.title || DEFAULT_COMPARISON_TITLE,
+        selectionText: "",
+        answer: message.text || "",
+        isPinned: false,
+        createdAt: Number(message.createdAt || latestUser?.createdAt || session.updatedAt || session.createdAt) || Date.now(),
+        questionCreatedAt: Number(latestUser?.createdAt) || null,
+        answerCreatedAt: Number(message.createdAt) || null,
+        documentKeys: session.documentKeys,
+        citedDocumentKeys: message.citedDocumentKeys || []
+      });
+    }
+  }
+
+  return units.sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
+}
+
 export function inferComparisonTitle(question = "") {
   const normalized = String(question || "")
     .replace(/\s+/g, " ")
@@ -278,6 +345,7 @@ function normalizeComparisonMessage(message) {
   }
 
   return {
+    comparisonId: String(message?.comparisonId || "").trim(),
     role,
     text,
     citedDocumentKeys: normalizeDocumentKeys(message?.citedDocumentKeys || []),

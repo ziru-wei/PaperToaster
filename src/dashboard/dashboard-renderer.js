@@ -1,9 +1,18 @@
+import {
+  createPaperLabelControl,
+  getPaperLabelOptions,
+  normalizePaperLabel
+} from "../components/paper-label-control.js";
+
+const FULL_MESSAGE_RING_COUNT = 10;
+
 export function renderPaperList({
   container,
   emptyState,
   papers,
   comparisons = [],
   sortId = "latestThread",
+  paperGroupMode = "label",
   activeDocumentKey,
   activeComparisonId = "",
   activeComparisonDocumentKeys = new Set(),
@@ -13,20 +22,21 @@ export function renderPaperList({
   onOpenPaperContext,
   onOpenComparisonContext,
   onTogglePaperSelection,
-  onSetPaperSelected,
+  onSetPaperGroupSelected,
   onToggleComparisonSelection,
-  onSetComparisonSelected,
   onTogglePaperStarred,
   onToggleComparisonStarred,
-  onAddPaperToComparison
+  onUpdatePaperGroup,
+  onRenamePaperGroup,
+  onDeletePaperGroup
 }) {
+  const groupOptions = getPaperLabelOptions(papers);
   const paperRecords = sortDashboardRecords(papers.map((paper) => ({ type: "single-paper", paper })), sortId);
   const comparisonRecords = sortDashboardRecords(
     comparisons.map((comparison) => ({ type: "comparative-reading", comparison })),
     sortId
   );
   const records = [...paperRecords, ...comparisonRecords];
-  const maxPaperMessageCount = getMaxRecordMessageCount(paperRecords);
 
   const layout = document.createElement("div");
   layout.className = "dashboard-record-layout";
@@ -34,22 +44,26 @@ export function renderPaperList({
   layout.classList.toggle("has-papers", paperRecords.length > 0);
 
   if (paperRecords.length) {
-    const paperGrid = document.createElement("div");
-    paperGrid.className = "paper-record-grid";
-    paperGrid.append(...paperRecords.map((record) => createPaperCard({
+    const createCard = (record) => createPaperCard({
       paper: record.paper,
-      maxMessageCount: maxPaperMessageCount,
       activeDocumentKey,
       activeComparisonDocumentKeys,
       manageMode,
       selectedDocumentKeys,
       onOpenPaperContext,
       onTogglePaperSelection,
-      onSetPaperSelected,
       onTogglePaperStarred,
-      onAddPaperToComparison
-    })));
-    layout.append(paperGrid);
+      onUpdatePaperGroup,
+      onRenamePaperGroup,
+      onDeletePaperGroup,
+      groupOptions
+    });
+
+    layout.append(createPaperGroups(paperRecords, createCard, paperGroupMode, {
+      manageMode,
+      selectedDocumentKeys,
+      onSetPaperGroupSelected
+    }));
   }
 
   if (comparisonRecords.length) {
@@ -63,7 +77,6 @@ export function renderPaperList({
       selectedComparisonIds,
       onOpenComparisonContext,
       onToggleComparisonSelection,
-      onSetComparisonSelected,
       onToggleComparisonStarred
     })));
     layout.append(comparisonGrid);
@@ -77,16 +90,164 @@ export function renderPaperList({
   emptyState.hidden = records.length > 0;
 }
 
-export function renderSortMenu({ sortButton, sortMenu, sortOptions, activeSort, onSelectSort }) {
+function createPaperGroups(paperRecords, createCard, mode, {
+  manageMode,
+  selectedDocumentKeys,
+  onSetPaperGroupSelected
+}) {
+  const container = document.createElement("div");
+  container.className = "paper-card-groups";
+  const groups = mode === "recent-conversation"
+    ? createRecentConversationGroups(paperRecords)
+    : createLabelGroups(paperRecords);
+
+  groups.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = "paper-card-group";
+
+    const header = document.createElement("div");
+    header.className = "paper-card-group-header";
+
+    const heading = document.createElement("h2");
+    heading.className = "paper-card-group-heading";
+    heading.textContent = group.label;
+
+    if (manageMode) {
+      header.append(createGroupSelectButton(group, selectedDocumentKeys, onSetPaperGroupSelected));
+    }
+    header.append(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "paper-card-group-grid";
+    grid.append(...group.records.map(createCard));
+    section.append(header, grid);
+    container.append(section);
+  });
+
+  return container;
+}
+
+function createGroupSelectButton(group, selectedDocumentKeys, onSetPaperGroupSelected) {
+  const documentKeys = group.records
+    .map((record) => record.paper.documentKey)
+    .filter(Boolean);
+  const selectedCount = documentKeys.filter((documentKey) => selectedDocumentKeys.has(documentKey)).length;
+  const allSelected = documentKeys.length > 0 && selectedCount === documentKeys.length;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "paper-group-select";
+  button.classList.toggle("active", allSelected);
+  button.classList.toggle("partial", selectedCount > 0 && !allSelected);
+  button.setAttribute("aria-label", `${allSelected ? "Deselect" : "Select"} all papers in ${group.label}`);
+  button.setAttribute("aria-pressed", String(allSelected));
+  button.addEventListener("click", () => {
+    onSetPaperGroupSelected?.(documentKeys, !allSelected);
+  });
+  return button;
+}
+
+function createLabelGroups(paperRecords) {
+  const recordsByLabel = new Map();
+
+  paperRecords.forEach((record) => {
+    const label = normalizePaperLabel(record.paper.group);
+    const key = label.toLowerCase();
+    if (!recordsByLabel.has(key)) {
+      recordsByLabel.set(key, { label, records: [] });
+    }
+    recordsByLabel.get(key).records.push(record);
+  });
+
+  return [...recordsByLabel.values()].sort((left, right) => {
+    if (!left.label) {
+      return 1;
+    }
+    if (!right.label) {
+      return -1;
+    }
+    return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
+  }).map((group) => ({
+    ...group,
+    label: group.label || "Unlabeled"
+  }));
+}
+
+function createRecentConversationGroups(paperRecords, now = new Date()) {
+  const currentDate = new Date(now);
+  const today = startOfLocalDay(currentDate);
+  const yesterday = daysBefore(today, 1);
+  const sevenDaysAgo = daysBefore(today, 7);
+  const fourteenDaysAgo = daysBefore(today, 14);
+  const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime();
+  const definitions = [
+    { id: "today", label: "Today" },
+    { id: "yesterday", label: "Yesterday" },
+    { id: "past-seven", label: "Past 7 days" },
+    { id: "past-fourteen", label: "Past 14 days" },
+    { id: "this-month", label: "This month" },
+    { id: "earlier", label: "Earlier" },
+    { id: "no-conversations", label: "No conversations" }
+  ];
+  const recordsByGroup = new Map(definitions.map((definition) => [definition.id, []]));
+
+  paperRecords.forEach((record) => {
+    const timestamp = Number(record.paper.lastConversationAt || record.paper.lastThreadStartedAt) || 0;
+    let groupId = "no-conversations";
+    if (timestamp >= today) {
+      groupId = "today";
+    } else if (timestamp >= yesterday) {
+      groupId = "yesterday";
+    } else if (timestamp >= sevenDaysAgo) {
+      groupId = "past-seven";
+    } else if (timestamp >= fourteenDaysAgo) {
+      groupId = "past-fourteen";
+    } else if (timestamp >= monthStart) {
+      groupId = "this-month";
+    } else if (timestamp) {
+      groupId = "earlier";
+    }
+    recordsByGroup.get(groupId).push(record);
+  });
+
+  return definitions
+    .map((definition) => ({
+      label: definition.label,
+      records: recordsByGroup.get(definition.id)
+    }))
+    .filter((group) => group.records.length);
+}
+
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function daysBefore(timestamp, days) {
+  const date = new Date(timestamp);
+  date.setDate(date.getDate() - days);
+  return date.getTime();
+}
+
+export function renderSortMenu({
+  sortButton,
+  sortMenu,
+  sortOptions,
+  activeSort,
+  groupingCriterion,
+  onSelectSort
+}) {
   const activeOption = sortOptions.find((option) => option.id === activeSort) || sortOptions[0];
   sortButton.title = `Sort: ${activeOption.label}`;
   sortMenu.replaceChildren(...sortOptions.map((option) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "sort-menu-option";
+    const isGroupingCriterion = option.id === groupingCriterion;
     button.classList.toggle("active", option.id === activeSort);
+    button.classList.toggle("grouping-criterion", isGroupingCriterion);
+    button.disabled = isGroupingCriterion;
     button.setAttribute("role", "menuitemradio");
     button.setAttribute("aria-checked", String(option.id === activeSort));
+    button.setAttribute("aria-disabled", String(isGroupingCriterion));
     button.textContent = option.label;
     button.addEventListener("click", () => onSelectSort(option));
     return button;
@@ -100,25 +261,25 @@ export function isDisplayablePaper(paper) {
 
 function createPaperCard({
   paper,
-  maxMessageCount,
   activeDocumentKey,
   activeComparisonDocumentKeys,
   manageMode,
   selectedDocumentKeys,
   onOpenPaperContext,
   onTogglePaperSelection,
-  onSetPaperSelected,
   onTogglePaperStarred,
-  onAddPaperToComparison
+  onUpdatePaperGroup,
+  onRenamePaperGroup,
+  onDeletePaperGroup,
+  groupOptions
 }) {
   const card = document.createElement("article");
   const isActive = paper.documentKey === activeDocumentKey;
   const isComparisonRelated = !isActive && activeComparisonDocumentKeys.has(paper.documentKey);
   const isSelected = selectedDocumentKeys.has(paper.documentKey);
   card.className = "paper-card";
-  card.classList.toggle("active", isActive);
+  card.classList.toggle("active", !manageMode && isActive);
   card.classList.toggle("comparison-related", isComparisonRelated);
-  card.classList.toggle("editing", manageMode);
   card.classList.toggle("selected", isSelected);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
@@ -144,12 +305,6 @@ function createPaperCard({
     }
 
     if (event.key !== "Enter" && event.key !== " ") {
-      if (!manageMode && event.key.toLowerCase() === "c") {
-        event.preventDefault();
-        Promise.resolve(onAddPaperToComparison?.(paper.documentKey)).catch((error) => {
-          console.debug("[PDF AI] Could not add paper to comparison", error);
-        });
-      }
       return;
     }
 
@@ -172,14 +327,9 @@ function createPaperCard({
   title.className = "paper-title";
   title.append(createTitleText(paper));
 
-  const addButton = !manageMode && paper.hasMarkdown
-    ? createAddToComparisonButton(paper, onAddPaperToComparison)
-    : null;
-
   topRow.append(
-    createMessageRing(paper.messageCount, maxMessageCount),
-    title,
-    ...(addButton ? [addButton] : [])
+    createMessageRing(paper.messageCount),
+    title
   );
 
   const footer = document.createElement("div");
@@ -188,33 +338,20 @@ function createPaperCard({
   if (!manageMode) {
     footer.append(createStarButton(paper, onTogglePaperStarred));
   }
-  const time = createPaperTimeLine(paper);
-  if (time) {
-    footer.append(time);
-  }
+  const meta = document.createElement("div");
+  meta.className = "paper-footer-meta";
+  meta.append(createPaperLabelControl({
+    paper,
+    onUpdatePaperGroup,
+    onRenamePaperGroup,
+    onDeletePaperGroup,
+    groupOptions
+  }));
+  footer.append(meta);
 
   main.append(topRow, footer);
-  if (manageMode) {
-    card.append(createPaperCheckbox(paper, selectedDocumentKeys, onSetPaperSelected));
-  }
   card.append(main);
   return card;
-}
-
-function createAddToComparisonButton(paper, onAddPaperToComparison) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "paper-compare-add";
-  button.setAttribute("aria-label", `Add ${paper.title || "paper"} to Comparative Reading`);
-  button.textContent = "+";
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    Promise.resolve(onAddPaperToComparison?.(paper.documentKey)).catch((error) => {
-      console.debug("[PDF AI] Could not add paper to comparison", error);
-    });
-  });
-  return button;
 }
 
 function createComparisonRecordCard({
@@ -225,7 +362,6 @@ function createComparisonRecordCard({
   selectedComparisonIds,
   onOpenComparisonContext,
   onToggleComparisonSelection,
-  onSetComparisonSelected,
   onToggleComparisonStarred
 }) {
   const card = document.createElement("article");
@@ -235,9 +371,8 @@ function createComparisonRecordCard({
     comparison.documentKeys.includes(activeDocumentKey);
   const isSelected = selectedComparisonIds.has(comparison.comparisonId);
   card.className = "comparison-record-card";
-  card.classList.toggle("active", isActive);
+  card.classList.toggle("active", !manageMode && isActive);
   card.classList.toggle("related", isRelated);
-  card.classList.toggle("editing", manageMode);
   card.classList.toggle("selected", isSelected);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
@@ -299,61 +434,14 @@ function createComparisonRecordCard({
   }
 
   main.append(title, meta);
-  if (manageMode) {
-    card.append(createComparisonCheckbox(comparison, selectedComparisonIds, onSetComparisonSelected));
-  }
   card.append(main);
   return card;
 }
 
-function createPaperCheckbox(paper, selectedDocumentKeys, onSetPaperSelected) {
-  const label = document.createElement("label");
-  label.className = "paper-select";
-
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.checked = selectedDocumentKeys.has(paper.documentKey);
-  checkbox.setAttribute("aria-label", `Select ${paper.title || "paper"}`);
-  checkbox.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-  checkbox.addEventListener("change", () => {
-    onSetPaperSelected(paper.documentKey, checkbox.checked);
-  });
-
-  label.append(checkbox);
-  label.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-  return label;
-}
-
-function createComparisonCheckbox(comparison, selectedComparisonIds, onSetComparisonSelected) {
-  const label = document.createElement("label");
-  label.className = "comparison-select";
-
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.checked = selectedComparisonIds.has(comparison.comparisonId);
-  checkbox.setAttribute("aria-label", `Select ${comparison.title || "comparison"}`);
-  checkbox.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-  checkbox.addEventListener("change", () => {
-    onSetComparisonSelected(comparison.comparisonId, checkbox.checked);
-  });
-
-  label.append(checkbox);
-  label.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-  return label;
-}
-
-function createMessageRing(messageCount, maxMessageCount) {
+function createMessageRing(messageCount) {
   const ring = document.createElement("span");
   const count = Number(messageCount) || 0;
-  const ratio = maxMessageCount > 0 ? count / maxMessageCount : 0;
+  const ratio = Math.min(count / FULL_MESSAGE_RING_COUNT, 1);
   ring.className = "message-ring";
   ring.classList.toggle("empty", count === 0);
   ring.style.setProperty("--message-ratio", ratio.toFixed(3));
@@ -366,21 +454,6 @@ function createTitleText(paper) {
   text.className = "paper-title-text";
   text.textContent = paper.title;
   return text;
-}
-
-function createPaperTimeLine(paper) {
-  if (!paper.threadCount) {
-    return null;
-  }
-
-  const line = document.createElement("div");
-  line.className = "paper-time-line";
-  if (paper.threadCount > 1) {
-    line.textContent = `First ${formatTime(paper.firstThreadStartedAt)} · Last ${formatTime(paper.lastThreadStartedAt)}`;
-  } else {
-    line.textContent = `Started ${formatTime(paper.firstThreadStartedAt)}`;
-  }
-  return line;
 }
 
 function createStarButton(paper, onTogglePaperStarred, options = {}) {
@@ -409,34 +482,23 @@ function normalizeTitleForDisplay(title) {
 }
 
 function isCardActionIgnored(target) {
-  return Boolean(target?.closest?.(".paper-star, .paper-select, .paper-compare-add"));
+  return Boolean(target?.closest?.(
+    ".paper-star, .paper-group-control"
+  ));
 }
 
 function isComparisonCardActionIgnored(target) {
-  return Boolean(target?.closest?.(".paper-star, .comparison-select"));
+  return Boolean(target?.closest?.(".paper-star"));
 }
 
 function isPlaceholderTitle(title) {
   return title === "untitled paper" || title === "title not found";
 }
 
-function getMaxRecordMessageCount(records) {
-  return records.reduce((max, record) => Math.max(max, getRecordMessageCount(record)), 0);
-}
-
 function sortDashboardRecords(records, sortId) {
   return [...records].sort((left, right) => {
-    if (sortId === "type") {
-      return compareRecordType(left, right) || compareRecordTime(right, left) || compareRecordTitle(left, right);
-    }
-
-    if (sortId === "messageCount") {
-      return compareNumber(getRecordMessageCount(right), getRecordMessageCount(left)) || compareRecordTitle(left, right);
-    }
-
-    if (sortId === "firstConversation") {
-      return compareNumber(getRecordFirstTime(left) || Number.MAX_SAFE_INTEGER, getRecordFirstTime(right) || Number.MAX_SAFE_INTEGER) ||
-        compareRecordTitle(left, right);
+    if (sortId === "label" && left.type === "single-paper" && right.type === "single-paper") {
+      return compareRecordLabels(left, right) || compareRecordTitle(left, right);
     }
 
     if (sortId === "starred") {
@@ -447,12 +509,16 @@ function sortDashboardRecords(records, sortId) {
   });
 }
 
-function compareRecordType(left, right) {
-  return getRecordTypeRank(left) - getRecordTypeRank(right);
-}
-
-function getRecordTypeRank(record) {
-  return record.type === "single-paper" ? 0 : 1;
+function compareRecordLabels(left, right) {
+  const leftLabel = normalizePaperLabel(left.paper.group);
+  const rightLabel = normalizePaperLabel(right.paper.group);
+  if (!leftLabel && rightLabel) {
+    return 1;
+  }
+  if (leftLabel && !rightLabel) {
+    return -1;
+  }
+  return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
 }
 
 function compareRecordTime(left, right) {
@@ -473,20 +539,6 @@ function getRecordLatestTime(record) {
   }
 
   return Number(record.paper.lastThreadStartedAt || record.paper.updatedAt) || 0;
-}
-
-function getRecordFirstTime(record) {
-  if (record.type === "comparative-reading") {
-    return Number(record.comparison.firstMessageCreatedAt) || 0;
-  }
-
-  return Number(record.paper.firstConversationAt) || 0;
-}
-
-function getRecordMessageCount(record) {
-  return record.type === "comparative-reading"
-    ? Number(record.comparison.messageCount) || 0
-    : Number(record.paper.messageCount) || 0;
 }
 
 function getRecordStarred(record) {

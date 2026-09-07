@@ -1,4 +1,5 @@
 import { MessageType } from "../shared/messages.js";
+import { MAX_COMPARISON_PAPERS } from "../storage/comparison-store.js";
 
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
 const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
@@ -98,11 +99,8 @@ async function handleMessage(message, sender) {
     case MessageType.CLEAR_DASHBOARD_CONTEXT:
       return clearDashboardContext(message, sender);
 
-    case MessageType.ADD_PAPER_TO_ACTIVE_COMPARISON:
-      return addPaperToActiveComparison(message, sender);
-
     case MessageType.UPDATE_COMPARISON_DRAFT:
-      return updateComparisonDraft(message);
+      return updateComparisonDraft(message, sender);
 
     case MessageType.GET_LIBRARY_PAPER_CONTEXT:
       return {
@@ -181,47 +179,24 @@ async function clearDashboardContext(message, sender) {
   return { ok: true, context };
 }
 
-async function addPaperToActiveComparison(message, sender) {
-  const documentKey = String(message.documentKey || "").trim();
-  if (!documentKey) {
-    throw new Error("No document key was provided.");
-  }
-
-  const existing = await getLibraryPaperContext();
-  const isOpenDraft = existing?.mode === "comparative-reading" && !String(existing.comparisonId || "").trim();
-  const draftDocumentKeys = isOpenDraft && Array.isArray(existing?.draftDocumentKeys)
-    ? existing.draftDocumentKeys
-    : [];
-  const context = {
-    comparisonId: "",
-    mode: "comparative-reading",
-    source: "dashboard",
-    draftDocumentKeys: [...new Set([...draftDocumentKeys, documentKey])].slice(0, 5),
-    addedDocumentKey: documentKey,
-    selectedAt: Date.now()
-  };
-  await setLibraryPaperContext(context);
-
-  if (sender.tab) {
-    await openPanelForTab(sender.tab);
-  }
-
-  notifyLibraryPaperContextChanged(context);
-  return { ok: true, context };
-}
-
-async function updateComparisonDraft(message) {
+async function updateComparisonDraft(message, sender) {
   const documentKeys = Array.isArray(message.documentKeys)
     ? message.documentKeys.map((key) => String(key || "").trim()).filter(Boolean)
     : [];
+  const uniqueDocumentKeys = [...new Set(documentKeys)];
+  const hasOverflow = Boolean(message.rejectOverflow) && uniqueDocumentKeys.length > MAX_COMPARISON_PAPERS;
   const context = {
     comparisonId: "",
     mode: "comparative-reading",
     source: "dashboard",
-    draftDocumentKeys: [...new Set(documentKeys)].slice(0, 5),
+    draftDocumentKeys: hasOverflow ? [] : uniqueDocumentKeys.slice(0, MAX_COMPARISON_PAPERS),
+    draftIssue: hasOverflow ? "too-many-papers" : "",
     selectedAt: Date.now()
   };
   await setLibraryPaperContext(context);
+  if (sender?.tab && message.openPanel) {
+    await openPanelForTab(sender.tab);
+  }
   notifyLibraryPaperContextChanged(context);
   return { ok: true, context };
 }

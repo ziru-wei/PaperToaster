@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Paper Toaster</title>
+    <link rel="stylesheet" href="../components/paper-label-control.css">
     <link rel="stylesheet" href="./dashboard.css">
   </head>
   <body>
@@ -17,7 +18,10 @@
         </div>
         <div class="dashboard-controls">
           <input id="paperSearch" type="search" placeholder="Search papers and URLs" aria-label="Search papers">
-          <button id="paperManageButton" class="dashboard-icon-button" type="button" aria-label="Manage papers" aria-pressed="false">
+          <button id="paperImportButton" class="dashboard-icon-button" type="button" aria-label="Import archive">
+            <span class="icon-mask import-icon" aria-hidden="true"></span>
+          </button>
+          <button id="paperManageButton" class="dashboard-icon-button" type="button" aria-label="Select papers" aria-pressed="false">
             <span class="icon-mask manage-icon" aria-hidden="true"></span>
           </button>
           <div class="sort-control">
@@ -26,15 +30,16 @@
             </button>
             <div id="paperSortMenu" class="sort-menu" role="menu" hidden></div>
           </div>
+          <button id="paperGroupLayoutButton" class="dashboard-icon-button" type="button" aria-label="Group papers by latest conversation" aria-pressed="false">
+            <span class="icon-mask group-layout-icon" aria-hidden="true"></span>
+          </button>
         </div>
       </header>
 
       <input id="paperImportFile" type="file" accept="application/json,.json" hidden>
       <section id="bulkActions" class="bulk-actions" aria-live="polite" hidden>
         <span id="selectionSummary" class="selection-summary">0 selected</span>
-        <button id="paperImportButton" class="bulk-button" type="button">Import</button>
         <button id="selectAllButton" class="bulk-button" type="button">Select all</button>
-        <button id="clearUnaskedButton" class="bulk-button danger" type="button">Clear unasked</button>
         <button id="backupSelectedButton" class="bulk-button" type="button" disabled>Backup</button>
         <button id="archiveSelectedButton" class="bulk-button" type="button" disabled>Archive</button>
         <button id="deleteSelectedButton" class="bulk-button danger" type="button" disabled>Delete</button>
@@ -45,6 +50,9 @@
         <p>Open a PDF with the side panel once, then it will appear here.</p>
       </div>
     </main>
+    <button id="sendToMachineButton" class="dashboard-send-machine" type="button" aria-label="Send selected papers to Comparative Reading" hidden>
+      <span class="icon-mask send-to-machine-icon" aria-hidden="true"></span>
+    </button>
     <script type="module" src="./dashboard.js"></script>
   </body>
 </html>

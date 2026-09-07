@@ -105,6 +105,14 @@ export function createPromptPresetMenuController({ textarea, menuElement, onErro
     });
 
     menuElement.hidden = false;
+    scrollActiveOptionIntoView();
+  }
+
+  function scrollActiveOptionIntoView() {
+    const activeOption = menuElement.querySelector(".prompt-preset-option.active");
+    activeOption?.scrollIntoView({
+      block: "nearest"
+    });
   }
 
   function filterPresets(query) {

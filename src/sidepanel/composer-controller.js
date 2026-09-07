@@ -5,7 +5,9 @@ export function createComposerController({
   textarea,
   newThreadHintElement,
   promptPresetMenu,
+  paperMentionMenu,
   promptPresetMenuElement,
+  usePaperMentionMenu = () => false,
   routeSuggestion,
   shouldSuggestRoute = () => true,
   canSubmit,
@@ -15,11 +17,13 @@ export function createComposerController({
   form.addEventListener("submit", handleSubmit);
   textarea.addEventListener("input", handleInput);
   textarea.addEventListener("keydown", handleKeydown);
-  textarea.addEventListener("focus", promptPresetMenu.update);
+  textarea.addEventListener("focus", () => getActiveMenu().update());
   textarea.addEventListener("blur", () => {
-    window.setTimeout(promptPresetMenu.hide, 120);
+    window.setTimeout(hideMenus, 120);
   });
-  promptPresetMenuElement.addEventListener("mousedown", promptPresetMenu.preventBlurDismissal);
+  promptPresetMenuElement.addEventListener("mousedown", (event) => {
+    getActiveMenu().preventBlurDismissal(event);
+  });
 
   function getText() {
     return textarea.value.trim();
@@ -52,7 +56,8 @@ export function createComposerController({
 
   function handleInput() {
     routeSuggestion?.reset();
-    promptPresetMenu.update();
+    getInactiveMenu()?.hide();
+    getActiveMenu().update();
     updateNewThreadPromptHint();
   }
 
@@ -76,7 +81,7 @@ export function createComposerController({
       return;
     }
 
-    if (promptPresetMenu.handleKeydown(event)) {
+    if (getActiveMenu().handleKeydown(event)) {
       return;
     }
 
@@ -90,7 +95,7 @@ export function createComposerController({
     }
 
     if (shouldSuggestRoute() && routeSuggestion && !routeSuggestion.hasPendingSuggestionFor(getText())) {
-      promptPresetMenu.hide();
+      hideMenus();
       routeSuggestion.prepare(getText());
       return;
     }
@@ -107,7 +112,7 @@ export function createComposerController({
     newThreadHintElement.hidden = !active;
     textarea.classList.toggle("new-thread-command", active);
     if (active) {
-      promptPresetMenu.hide();
+      hideMenus();
     }
   }
 
@@ -116,9 +121,25 @@ export function createComposerController({
     await onNewThread();
   }
 
+  function getActiveMenu() {
+    return usePaperMentionMenu() && paperMentionMenu
+      ? paperMentionMenu
+      : promptPresetMenu;
+  }
+
+  function getInactiveMenu() {
+    return getActiveMenu() === promptPresetMenu ? paperMentionMenu : promptPresetMenu;
+  }
+
+  function hideMenus() {
+    promptPresetMenu.hide();
+    paperMentionMenu?.hide();
+  }
+
   return {
     getText,
     clear,
-    focus
+    focus,
+    hideMenus
   };
 }
