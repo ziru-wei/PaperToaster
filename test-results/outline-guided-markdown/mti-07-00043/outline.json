@@ -1,0 +1,354 @@
+[
+  {
+    "order": 0,
+    "title": "Introduction",
+    "depth": 0,
+    "destination": "section.1",
+    "resolvedPageIndex": 0,
+    "resolvedPage": 1
+  },
+  {
+    "order": 1,
+    "title": "Related Work",
+    "depth": 0,
+    "destination": "section.2",
+    "resolvedPageIndex": 2,
+    "resolvedPage": 3
+  },
+  {
+    "order": 2,
+    "title": "Community Engagement and Climate Change",
+    "depth": 1,
+    "destination": "subsection.2.1",
+    "resolvedPageIndex": 2,
+    "resolvedPage": 3
+  },
+  {
+    "order": 3,
+    "title": "VR for Climate Change Community Engagement",
+    "depth": 1,
+    "destination": "subsection.2.2",
+    "resolvedPageIndex": 3,
+    "resolvedPage": 4
+  },
+  {
+    "order": 4,
+    "title": "Challenges in Using VR for Community Engagement",
+    "depth": 1,
+    "destination": "subsection.2.3",
+    "resolvedPageIndex": 3,
+    "resolvedPage": 4
+  },
+  {
+    "order": 5,
+    "title": "Community Engagement Process and Timeline",
+    "depth": 0,
+    "destination": "section.3",
+    "resolvedPageIndex": 4,
+    "resolvedPage": 5
+  },
+  {
+    "order": 6,
+    "title": "Case Study on Roosevelt Island Community",
+    "depth": 1,
+    "destination": "subsection.3.1",
+    "resolvedPageIndex": 4,
+    "resolvedPage": 5
+  },
+  {
+    "order": 7,
+    "title": "Focus Group Activity Design",
+    "depth": 1,
+    "destination": "subsection.3.2",
+    "resolvedPageIndex": 5,
+    "resolvedPage": 6
+  },
+  {
+    "order": 8,
+    "title": "Experience Design",
+    "depth": 1,
+    "destination": "subsection.3.3",
+    "resolvedPageIndex": 5,
+    "resolvedPage": 6
+  },
+  {
+    "order": 9,
+    "title": "Method",
+    "depth": 0,
+    "destination": "section.4",
+    "resolvedPageIndex": 6,
+    "resolvedPage": 7
+  },
+  {
+    "order": 10,
+    "title": "Three-Part Group Activity",
+    "depth": 1,
+    "destination": "subsection.4.1",
+    "resolvedPageIndex": 6,
+    "resolvedPage": 7
+  },
+  {
+    "order": 11,
+    "title": "The CXR System",
+    "depth": 1,
+    "destination": "subsection.4.2",
+    "resolvedPageIndex": 7,
+    "resolvedPage": 8
+  },
+  {
+    "order": 12,
+    "title": "Participants",
+    "depth": 1,
+    "destination": "subsection.4.3",
+    "resolvedPageIndex": 7,
+    "resolvedPage": 8
+  },
+  {
+    "order": 13,
+    "title": "Experience",
+    "depth": 1,
+    "destination": "subsection.4.4",
+    "resolvedPageIndex": 7,
+    "resolvedPage": 8
+  },
+  {
+    "order": 14,
+    "title": "Data Analysis",
+    "depth": 0,
+    "destination": "section.5",
+    "resolvedPageIndex": 8,
+    "resolvedPage": 9
+  },
+  {
+    "order": 15,
+    "title": "Thematic Coding of the Focus Groups Transcripts",
+    "depth": 1,
+    "destination": "subsection.5.1",
+    "resolvedPageIndex": 8,
+    "resolvedPage": 9
+  },
+  {
+    "order": 16,
+    "title": "Behavioral Observations of the Bus Ride Videos",
+    "depth": 2,
+    "destination": "subsubsection.5.1.1",
+    "resolvedPageIndex": 9,
+    "resolvedPage": 10
+  },
+  {
+    "order": 17,
+    "title": "Quantitative Analysis of Survey Data",
+    "depth": 2,
+    "destination": "subsubsection.5.1.2",
+    "resolvedPageIndex": 9,
+    "resolvedPage": 10
+  },
+  {
+    "order": 18,
+    "title": "Results",
+    "depth": 0,
+    "destination": "section.6",
+    "resolvedPageIndex": 9,
+    "resolvedPage": 10
+  },
+  {
+    "order": 19,
+    "title": "Impacts of CXR on the Community",
+    "depth": 1,
+    "destination": "subsection.6.1",
+    "resolvedPageIndex": 9,
+    "resolvedPage": 10
+  },
+  {
+    "order": 20,
+    "title": "Education and Awareness",
+    "depth": 2,
+    "destination": "subsubsection.6.1.1",
+    "resolvedPageIndex": 9,
+    "resolvedPage": 10
+  },
+  {
+    "order": 21,
+    "title": "Bringing Community Members Together",
+    "depth": 2,
+    "destination": "subsubsection.6.1.2",
+    "resolvedPageIndex": 10,
+    "resolvedPage": 11
+  },
+  {
+    "order": 22,
+    "title": "Identifying Local Priorities",
+    "depth": 2,
+    "destination": "subsubsection.6.1.3",
+    "resolvedPageIndex": 11,
+    "resolvedPage": 12
+  },
+  {
+    "order": 23,
+    "title": "Enhance Ownership and Accountability",
+    "depth": 2,
+    "destination": "subsubsection.6.1.4",
+    "resolvedPageIndex": 11,
+    "resolvedPage": 12
+  },
+  {
+    "order": 24,
+    "title": "The Advantages of CXR for Climate Change Community Engagement",
+    "depth": 1,
+    "destination": "subsection.6.2",
+    "resolvedPageIndex": 12,
+    "resolvedPage": 13
+  },
+  {
+    "order": 25,
+    "title": "The Immersive, Embodied Aspects—Making Climate Change Feel Real",
+    "depth": 2,
+    "destination": "subsubsection.6.2.1",
+    "resolvedPageIndex": 13,
+    "resolvedPage": 14
+  },
+  {
+    "order": 26,
+    "title": "The Situational Qualities—Bringing Climate Change Closer to Home",
+    "depth": 2,
+    "destination": "subsubsection.6.2.2",
+    "resolvedPageIndex": 13,
+    "resolvedPage": 14
+  },
+  {
+    "order": 27,
+    "title": "The Communal Aspects—Turning the Spotlight to the Community Resources",
+    "depth": 2,
+    "destination": "subsubsection.6.2.3",
+    "resolvedPageIndex": 14,
+    "resolvedPage": 15
+  },
+  {
+    "order": 28,
+    "title": "Discussion",
+    "depth": 0,
+    "destination": "section.7",
+    "resolvedPageIndex": 15,
+    "resolvedPage": 16
+  },
+  {
+    "order": 29,
+    "title": "Immersiveness Makes Climate Change Feel Real",
+    "depth": 1,
+    "destination": "subsection.7.1",
+    "resolvedPageIndex": 16,
+    "resolvedPage": 17
+  },
+  {
+    "order": 30,
+    "title": "Situational Qualities and Geo-Location Brings Climate Change Closer to Home",
+    "depth": 1,
+    "destination": "subsection.7.2",
+    "resolvedPageIndex": 16,
+    "resolvedPage": 17
+  },
+  {
+    "order": 31,
+    "title": "Communal Experience Highlights Existing Community Resources",
+    "depth": 1,
+    "destination": "subsection.7.3",
+    "resolvedPageIndex": 17,
+    "resolvedPage": 18
+  },
+  {
+    "order": 32,
+    "title": "Toward a Community Resiliency Plan",
+    "depth": 1,
+    "destination": "subsection.7.4",
+    "resolvedPageIndex": 17,
+    "resolvedPage": 18
+  },
+  {
+    "order": 33,
+    "title": "Limitations",
+    "depth": 1,
+    "destination": "subsection.7.5",
+    "resolvedPageIndex": 17,
+    "resolvedPage": 18
+  },
+  {
+    "order": 34,
+    "title": "Future Applications to Promote Community Awareness and Engagement",
+    "depth": 1,
+    "destination": "subsection.7.6",
+    "resolvedPageIndex": 18,
+    "resolvedPage": 19
+  },
+  {
+    "order": 35,
+    "title": "Conclusions",
+    "depth": 0,
+    "destination": "section.8",
+    "resolvedPageIndex": 18,
+    "resolvedPage": 19
+  },
+  {
+    "order": 36,
+    "title": "Appendix A",
+    "depth": 0,
+    "destination": "section.A.",
+    "resolvedPageIndex": 19,
+    "resolvedPage": 20
+  },
+  {
+    "order": 37,
+    "title": "Appendix A.1",
+    "depth": 1,
+    "destination": "subsection.A.1",
+    "resolvedPageIndex": 20,
+    "resolvedPage": 21
+  },
+  {
+    "order": 38,
+    "title": "Appendix A.1",
+    "depth": 2,
+    "destination": "subsubsection.A.1.1",
+    "resolvedPageIndex": 20,
+    "resolvedPage": 21
+  },
+  {
+    "order": 39,
+    "title": "Building Circle",
+    "depth": 2,
+    "destination": "subsubsection.A.1.2",
+    "resolvedPageIndex": 20,
+    "resolvedPage": 21
+  },
+  {
+    "order": 40,
+    "title": "Community Circle",
+    "depth": 2,
+    "destination": "subsubsection.A.1.3",
+    "resolvedPageIndex": 20,
+    "resolvedPage": 21
+  },
+  {
+    "order": 41,
+    "title": "Governance Circle",
+    "depth": 2,
+    "destination": "subsubsection.A.1.4",
+    "resolvedPageIndex": 21,
+    "resolvedPage": 22
+  },
+  {
+    "order": 42,
+    "title": "Creative Ideas to Be Further Explored",
+    "depth": 2,
+    "destination": "subsubsection.A.1.5",
+    "resolvedPageIndex": 21,
+    "resolvedPage": 22
+  },
+  {
+    "order": 43,
+    "title": "References",
+    "depth": 0,
+    "destination": "subsubsection.A.1.5",
+    "resolvedPageIndex": 21,
+    "resolvedPage": 22
+  }
+]

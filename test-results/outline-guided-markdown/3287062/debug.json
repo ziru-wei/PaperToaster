@@ -1,0 +1,392 @@
+{
+  "pdf": "3287062.pdf",
+  "outlineAvailable": true,
+  "note": null,
+  "matches": [
+    {
+      "outlineTitle": "Abstract",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": null,
+      "matchedBlockPage": null,
+      "matchedBlockBbox": null,
+      "matchType": "unresolved",
+      "finalMarkdownHeadingLevel": null
+    },
+    {
+      "outlineTitle": "1 Introduction",
+      "outlineDepth": 0,
+      "resolvedPage": 2,
+      "matchedBlockText": "1 INTRODUCTION",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 107.39190673828125,
+        "width": 95.98168182373047,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "2 Related Work",
+      "outlineDepth": 0,
+      "resolvedPage": 2,
+      "matchedBlockText": "2 RELATED WORK",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 493.7438659667969,
+        "width": 93.98168182373047,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "2.1 Immersion, Presence, and Mindfulness in the Context of VR",
+      "outlineDepth": 1,
+      "resolvedPage": 2,
+      "matchedBlockText": "2.1 Immersion, Presence, and Mindfulness in the Context of VR",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 556.8685302734375,
+        "width": 291.4543762207031,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "2.2 Augmented Virtuality, VR Illusions, & Motion Sickness",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "2.2 Augmented Virtuality, VR Illusions, & Motion Sickness",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 324.1415100097656,
+        "width": 268.4543762207031,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "2.3 In-Car Virtual Reality",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "2.3 In-Car Virtual Reality",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 544.3155517578125,
+        "width": 120.45435333251953,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "3 System and User Experience Design Process",
+      "outlineDepth": 0,
+      "resolvedPage": 4,
+      "matchedBlockText": "3 SYSTEM AND USER EXPERIENCE DESIGN PROCESS",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 334.95025634765625,
+        "width": 259.981689453125,
+        "height": 10.04364013671875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "3.1 Piloting VR Environments and System Setup",
+      "outlineDepth": 1,
+      "resolvedPage": 4,
+      "matchedBlockText": "3.1 Piloting VR Environments and System Setup",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 409.73052978515625,
+        "width": 223.45437622070312,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "3.2 System Enhancements",
+      "outlineDepth": 1,
+      "resolvedPage": 6,
+      "matchedBlockText": "3.2 System Enhancements",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 403.362548828125,
+        "width": 125.45435333251953,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "3.3 Research Questions",
+      "outlineDepth": 1,
+      "resolvedPage": 7,
+      "matchedBlockText": "3.3 Research Questions",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 142.4835205078125,
+        "width": 111.45435333251953,
+        "height": 10.4364013671875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4 Methodology",
+      "outlineDepth": 0,
+      "resolvedPage": 7,
+      "matchedBlockText": "4 METHODOLOGY",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 308.6042175292969,
+        "width": 96.98168182373047,
+        "height": 10.04364013671875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "4.1 Experiment Design",
+      "outlineDepth": 1,
+      "resolvedPage": 7,
+      "matchedBlockText": "4.1 Experiment Design",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 371.0748596191406,
+        "width": 108.45435333251953,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.2 Data Collection",
+      "outlineDepth": 1,
+      "resolvedPage": 9,
+      "matchedBlockText": "4.2 Data Collection",
+      "matchedBlockPage": 9,
+      "matchedBlockBbox": {
+        "x": 80.697021484375,
+        "y": 106.95550537109375,
+        "width": 94.454345703125,
+        "height": 10.4364013671875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.3 Apparatus",
+      "outlineDepth": 1,
+      "resolvedPage": 10,
+      "matchedBlockText": "4.3 Apparatus",
+      "matchedBlockPage": 10,
+      "matchedBlockBbox": {
+        "x": 80.69700622558594,
+        "y": 324.5798645019531,
+        "width": 70.45436096191406,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.4 Procedure",
+      "outlineDepth": 1,
+      "resolvedPage": 11,
+      "matchedBlockText": "4.4 Procedure",
+      "matchedBlockPage": 11,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 377.9485168457031,
+        "width": 68.45435333251953,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.5 Participants",
+      "outlineDepth": 1,
+      "resolvedPage": 11,
+      "matchedBlockText": "4.5 Participants",
+      "matchedBlockPage": 11,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 558.6998901367188,
+        "width": 77.45435333251953,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "5 Results",
+      "outlineDepth": 0,
+      "resolvedPage": 12,
+      "matchedBlockText": "5 RESULTS",
+      "matchedBlockPage": 12,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 334.2208557128906,
+        "width": 58.98168182373047,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "5.1 Quantitative Results",
+      "outlineDepth": 1,
+      "resolvedPage": 12,
+      "matchedBlockText": "5.1 Quantitative Results",
+      "matchedBlockPage": 12,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 395.48150634765625,
+        "width": 115.45435333251953,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "5.2 Qualitative and User Experience Analysis",
+      "outlineDepth": 1,
+      "resolvedPage": 14,
+      "matchedBlockText": "5.2 Qualitative and User Experience Analysis",
+      "matchedBlockPage": 14,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 286.28350830078125,
+        "width": 208.45437622070312,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "6 Discussion and Future Work",
+      "outlineDepth": 0,
+      "resolvedPage": 15,
+      "matchedBlockText": "6 DISCUSSION AND FUTURE WORK",
+      "matchedBlockPage": 15,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 301.2808532714844,
+        "width": 179.981689453125,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "6.1 Key Findings",
+      "outlineDepth": 1,
+      "resolvedPage": 15,
+      "matchedBlockText": "6.1 Key Findings",
+      "matchedBlockPage": 15,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 351.19354248046875,
+        "width": 81.45435333251953,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "6.2 Challenges and Opportunities",
+      "outlineDepth": 1,
+      "resolvedPage": 16,
+      "matchedBlockText": "6.2 Challenges and Opportunities",
+      "matchedBlockPage": 16,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 172.04547119140625,
+        "width": 158.454345703125,
+        "height": 10.4364013671875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "6.3 Design Recommendations",
+      "outlineDepth": 1,
+      "resolvedPage": 17,
+      "matchedBlockText": "6.3 Design Recommendations",
+      "matchedBlockPage": 17,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 392.7015380859375,
+        "width": 140.454345703125,
+        "height": 10.43634033203125
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "7 Conclusion",
+      "outlineDepth": 0,
+      "resolvedPage": 18,
+      "matchedBlockText": "7 CONCLUSION",
+      "matchedBlockPage": 18,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 605.8438720703125,
+        "width": 83.98168182373047,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Acknowledgments",
+      "outlineDepth": 0,
+      "resolvedPage": 19,
+      "matchedBlockText": "ACKNOWLEDGMENTS",
+      "matchedBlockPage": 19,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 167.52325439453125,
+        "width": 109.99999237060547,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "References",
+      "outlineDepth": 0,
+      "resolvedPage": 19,
+      "matchedBlockText": "REFERENCES",
+      "matchedBlockPage": 19,
+      "matchedBlockBbox": {
+        "x": 80.6969985961914,
+        "y": 242.6849365234375,
+        "width": 62.99999237060547,
+        "height": 10
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    }
+  ]
+}

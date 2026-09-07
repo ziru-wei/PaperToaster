@@ -1,0 +1,487 @@
+{
+  "pdf": "2702123.2702180.pdf",
+  "outlineAvailable": true,
+  "note": null,
+  "matches": [
+    {
+      "outlineTitle": "Introduction",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "INTRODUCTION",
+      "matchedBlockPage": 1,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 572.9161987304688,
+        "width": 69,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "What Are Data Physicalizations?",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "WHAT ARE DATA PHYSICALIZATIONS?",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 65.654296875,
+        "width": 167,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Other Examples of Physicalizations",
+      "outlineDepth": 1,
+      "resolvedPage": 2,
+      "matchedBlockText": "Other Examples of Physicalizations",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 378.4642028808594,
+        "width": 151,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Future Usage Scenarios For Physicalizations",
+      "outlineDepth": 1,
+      "resolvedPage": 2,
+      "matchedBlockText": "Future Usage Scenarios For Physicalizations",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 674.4021606445312,
+        "width": 192,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Science Museum",
+      "outlineDepth": 2,
+      "resolvedPage": 2,
+      "matchedBlockText": "Science Museum",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 214.03216552734375,
+        "width": 69,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Explaining Complex Systems",
+      "outlineDepth": 2,
+      "resolvedPage": 2,
+      "matchedBlockText": "Explaining Complex Systems",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 384.39520263671875,
+        "width": 116,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Neurosurgical Planning",
+      "outlineDepth": 2,
+      "resolvedPage": 2,
+      "matchedBlockText": "Neurosurgical Planning",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 532.9487915039062,
+        "width": 93,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "The Benefits of Data Physicalization",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "THE BENEFITS OF DATA PHYSICALIZATION",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 65.68121337890625,
+        "width": 188,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Leveraging our Perceptual Exploration Skills",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "Leveraging our Perceptual Exploration Skills",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 197.9461669921875,
+        "width": 190,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Making Data Accessible",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "Making Data Accessible",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 195.61578369140625,
+        "width": 102,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Cognitive Benefits",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "Cognitive Benefits",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 413.1632080078125,
+        "width": 79,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Bringing Data into the Real World",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "Bringing Data into the Real World",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 609.0078125,
+        "width": 142,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Engaging People",
+      "outlineDepth": 1,
+      "resolvedPage": 4,
+      "matchedBlockText": "Engaging People",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 173.601806640625,
+        "width": 72,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Summary",
+      "outlineDepth": 1,
+      "resolvedPage": 4,
+      "matchedBlockText": "Summary",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 336.210205078125,
+        "width": 41,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Data Physicalization as a Research Area",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "DATA PHYSICALIZATION AS A RESEARCH AREA",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 509.88519287109375,
+        "width": 210,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Data Physicalization and Visualization",
+      "outlineDepth": 1,
+      "resolvedPage": 4,
+      "matchedBlockText": "Data Physicalization and Visualization",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 65.788818359375,
+        "width": 162,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Data Physicalization and TUI",
+      "outlineDepth": 1,
+      "resolvedPage": 4,
+      "matchedBlockText": "Data Physicalization and TUI",
+      "matchedBlockPage": 4,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 460.3897705078125,
+        "width": 122,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Examples of Data Physicalization Research",
+      "outlineDepth": 1,
+      "resolvedPage": 5,
+      "matchedBlockText": "Examples of Data Physicalization Research",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 140.76483154296875,
+        "width": 184,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Enabling Technologies",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "ENABLING TECHNOLOGIES",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 292.47320556640625,
+        "width": 121,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Research Agenda",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "RESEARCH AGENDA",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 641.80517578125,
+        "width": 91,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Designing Physical Data Representations",
+      "outlineDepth": 1,
+      "resolvedPage": 5,
+      "matchedBlockText": "Designing Physical Data Representations",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 321.0229797363281,
+        "y": 65.788818359375,
+        "width": 177,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Charting the Design Space – Physical Variables",
+      "outlineDepth": 2,
+      "resolvedPage": 5,
+      "matchedBlockText": "Charting the Design Space - Physical Variables",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 137.8201904296875,
+        "width": 190,
+        "height": 9
+      },
+      "matchType": "fuzzy",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Understanding what is Effective",
+      "outlineDepth": 2,
+      "resolvedPage": 5,
+      "matchedBlockText": "Understanding what is Effective",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 527.3969116210938,
+        "width": 125,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Implementation Challenges",
+      "outlineDepth": 2,
+      "resolvedPage": 6,
+      "matchedBlockText": "Implementation Challenges",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 526.9871826171875,
+        "width": 109,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Supporting Animation and Interactivity",
+      "outlineDepth": 1,
+      "resolvedPage": 6,
+      "matchedBlockText": "Supporting Animation and Interactivity",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 338.44122314453125,
+        "width": 166,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Designing Dynamic Physicalizations",
+      "outlineDepth": 2,
+      "resolvedPage": 6,
+      "matchedBlockText": "Designing Dynamic Physicalizations",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 422.27777099609375,
+        "width": 143,
+        "height": 8
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Implementation Challenges",
+      "outlineDepth": 2,
+      "resolvedPage": 7,
+      "matchedBlockText": "Implementation Challenges",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 505.0692138671875,
+        "width": 109,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 4
+    },
+    {
+      "outlineTitle": "Application-Specific Challenges",
+      "outlineDepth": 1,
+      "resolvedPage": 7,
+      "matchedBlockText": "Application-Specific Challenges",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 537.750244140625,
+        "width": 137,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Evaluation-Specific Challenges",
+      "outlineDepth": 1,
+      "resolvedPage": 8,
+      "matchedBlockText": "Evaluation-Specific Challenges",
+      "matchedBlockPage": 8,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 232.44720458984375,
+        "width": 133,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "Conclusion",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "CONCLUSION",
+      "matchedBlockPage": 8,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 229.44122314453125,
+        "width": 60,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "Acknowledgments",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "ACKNOWLEDGMENTS",
+      "matchedBlockPage": 8,
+      "matchedBlockBbox": {
+        "x": 321.02301025390625,
+        "y": 652.105224609375,
+        "width": 97,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "REFERENCES",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "REFERENCES",
+      "matchedBlockPage": 9,
+      "matchedBlockBbox": {
+        "x": 53.858001708984375,
+        "y": 65.68121337890625,
+        "width": 61,
+        "height": 9
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    }
+  ]
+}

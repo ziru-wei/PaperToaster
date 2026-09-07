@@ -156,14 +156,17 @@ function createPaperUserNoteElement(options) {
   textarea.className = "saved-paper-user-note-input";
   textarea.rows = 1;
   textarea.maxLength = 50000;
-  textarea.placeholder = "Add a note about this paper...";
+  textarea.placeholder = "jot down your thoughts, chief.";
   textarea.value = String(options.userNote || "");
   textarea.setAttribute("aria-label", "User note for this paper");
   textarea.addEventListener("input", () => {
     resizePaperUserNoteInput(textarea);
     options.onUserNoteChange?.(textarea.value);
   });
-  textarea.addEventListener("blur", () => options.onUserNoteCommit?.(textarea.value));
+  textarea.addEventListener("blur", () => {
+    textarea.scrollTop = 0;
+    options.onUserNoteCommit?.(textarea.value);
+  });
 
   note.append(textarea);
   window.requestAnimationFrame(() => resizePaperUserNoteInput(textarea));

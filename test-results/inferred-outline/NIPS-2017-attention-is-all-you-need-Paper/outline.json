@@ -1,0 +1,189 @@
+{
+  "outlineType": "inferred",
+  "outline": [
+    {
+      "order": 0,
+      "title": "Abstract",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 0,
+      "resolvedPage": 1
+    },
+    {
+      "order": 1,
+      "title": "Introduction",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 0,
+      "resolvedPage": 1
+    },
+    {
+      "order": 2,
+      "title": "Background",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 1,
+      "resolvedPage": 2
+    },
+    {
+      "order": 3,
+      "title": "Model Architecture",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 1,
+      "resolvedPage": 2
+    },
+    {
+      "order": 4,
+      "title": "Encoder and Decoder Stacks",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 1,
+      "resolvedPage": 2
+    },
+    {
+      "order": 5,
+      "title": "Attention",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 2,
+      "resolvedPage": 3
+    },
+    {
+      "order": 6,
+      "title": "Scaled Dot-Product Attention",
+      "depth": 2,
+      "destination": null,
+      "resolvedPageIndex": 2,
+      "resolvedPage": 3
+    },
+    {
+      "order": 7,
+      "title": "Multi-Head Attention",
+      "depth": 2,
+      "destination": null,
+      "resolvedPageIndex": 3,
+      "resolvedPage": 4
+    },
+    {
+      "order": 8,
+      "title": "Applications of Attention in our Model",
+      "depth": 2,
+      "destination": null,
+      "resolvedPageIndex": 4,
+      "resolvedPage": 5
+    },
+    {
+      "order": 9,
+      "title": "Position-wise Feed-Forward Networks",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 4,
+      "resolvedPage": 5
+    },
+    {
+      "order": 10,
+      "title": "Embeddings and Softmax",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 4,
+      "resolvedPage": 5
+    },
+    {
+      "order": 11,
+      "title": "Positional Encoding",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 4,
+      "resolvedPage": 5
+    },
+    {
+      "order": 12,
+      "title": "Why Self-Attention",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 5,
+      "resolvedPage": 6
+    },
+    {
+      "order": 13,
+      "title": "Training",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 6,
+      "resolvedPage": 7
+    },
+    {
+      "order": 14,
+      "title": "Training Data and Batching",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 6,
+      "resolvedPage": 7
+    },
+    {
+      "order": 15,
+      "title": "Hardware and Schedule",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 6,
+      "resolvedPage": 7
+    },
+    {
+      "order": 16,
+      "title": "Optimizer",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 6,
+      "resolvedPage": 7
+    },
+    {
+      "order": 17,
+      "title": "Regularization",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 6,
+      "resolvedPage": 7
+    },
+    {
+      "order": 18,
+      "title": "Results",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 7,
+      "resolvedPage": 8
+    },
+    {
+      "order": 19,
+      "title": "Machine Translation",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 7,
+      "resolvedPage": 8
+    },
+    {
+      "order": 20,
+      "title": "Model Variations",
+      "depth": 1,
+      "destination": null,
+      "resolvedPageIndex": 7,
+      "resolvedPage": 8
+    },
+    {
+      "order": 21,
+      "title": "Conclusion",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 8,
+      "resolvedPage": 9
+    },
+    {
+      "order": 22,
+      "title": "References",
+      "depth": 0,
+      "destination": null,
+      "resolvedPageIndex": 9,
+      "resolvedPage": 10
+    }
+  ]
+}

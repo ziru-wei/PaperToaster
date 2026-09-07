@@ -1,0 +1,187 @@
+{
+  "pdf": "INTERACT2003-p383.pdf",
+  "outlineAvailable": true,
+  "note": null,
+  "matches": [
+    {
+      "outlineTitle": "1  Introduction",
+      "outlineDepth": 0,
+      "resolvedPage": 1,
+      "matchedBlockText": "1 Introduction",
+      "matchedBlockPage": 1,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 434.0635681152344,
+        "width": 89.96461486816406,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "2  Related Work",
+      "outlineDepth": 0,
+      "resolvedPage": 2,
+      "matchedBlockText": "2 Related Work",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 516.1435546875,
+        "width": 98.28605651855469,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "3  Experiment",
+      "outlineDepth": 0,
+      "resolvedPage": 2,
+      "matchedBlockText": "3 Experiment",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 311.5199890136719,
+        "y": 583.7034912109375,
+        "width": 84.954833984375,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "3.1  Overview",
+      "outlineDepth": 1,
+      "resolvedPage": 2,
+      "matchedBlockText": "3.1 Overview",
+      "matchedBlockPage": 2,
+      "matchedBlockBbox": {
+        "x": 311.5199890136719,
+        "y": 611.9276733398438,
+        "width": 70.02523803710938,
+        "height": 13
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "3.2  Goals",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "3.2 Goals",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 285.04766845703125,
+        "width": 50.01800537109375,
+        "height": 13
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "3.3  Method",
+      "outlineDepth": 1,
+      "resolvedPage": 3,
+      "matchedBlockText": "3.3 Method",
+      "matchedBlockPage": 3,
+      "matchedBlockBbox": {
+        "x": 311.5199890136719,
+        "y": 296.7476806640625,
+        "width": 61.003631591796875,
+        "height": 13
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4  Results",
+      "outlineDepth": 0,
+      "resolvedPage": 5,
+      "matchedBlockText": "4 Results",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 311.5199890136719,
+        "y": 361.4035339355469,
+        "width": 57.96038818359375,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "4.1  Performance Measures",
+      "outlineDepth": 1,
+      "resolvedPage": 5,
+      "matchedBlockText": "4.1 Performance Measures",
+      "matchedBlockPage": 5,
+      "matchedBlockBbox": {
+        "x": 311.5199890136719,
+        "y": 389.6276550292969,
+        "width": 139.73681640625,
+        "height": 13
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.2  Subjective Assessment",
+      "outlineDepth": 1,
+      "resolvedPage": 6,
+      "matchedBlockText": "4.2 Subjective Assessment",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 504.1076965332031,
+        "width": 136.4215850830078,
+        "height": 12.999969482421875
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "4.3  Interview Feedback",
+      "outlineDepth": 1,
+      "resolvedPage": 6,
+      "matchedBlockText": "4.3 Interview Feedback",
+      "matchedBlockPage": 6,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 687.9475708007812,
+        "width": 122.31040954589844,
+        "height": 13
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 3
+    },
+    {
+      "outlineTitle": "5  Discussion",
+      "outlineDepth": 0,
+      "resolvedPage": 7,
+      "matchedBlockText": "5 Discussion",
+      "matchedBlockPage": 7,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 231.56353759765625,
+        "width": 76.96182250976562,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    },
+    {
+      "outlineTitle": "6 Conclusion",
+      "outlineDepth": 0,
+      "resolvedPage": 8,
+      "matchedBlockText": "6 Conclusion",
+      "matchedBlockPage": 8,
+      "matchedBlockBbox": {
+        "x": 70.91999816894531,
+        "y": 209.30352783203125,
+        "width": 77.48640441894531,
+        "height": 15
+      },
+      "matchType": "exact",
+      "finalMarkdownHeadingLevel": 2
+    }
+  ]
+}
