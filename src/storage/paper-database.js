@@ -1,15 +1,15 @@
 export const DB_NAME = "pdf-ai-inspector";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export const PAPER_STORE = "papers";
 export const DOCUMENT_STORE = "documents";
 export const CONVERSATION_THREAD_STORE = "conversationThreads";
 export const CONVERSATION_MESSAGE_STORE = "conversationMessages";
 export const DOCUMENT_ALIAS_STORE = "documentAliases";
-export const LABEL_STORE = "labels";
-export const PAPER_LABEL_STORE = "paperLabels";
 export const COMPARISON_SESSION_STORE = "comparisonSessions";
 export const COMPARISON_MESSAGE_STORE = "comparisonMessages";
+
+const OBSOLETE_STORES = ["labels", "paperLabels"];
 
 let databasePromise = null;
 
@@ -47,13 +47,11 @@ export function openPaperDatabase() {
       const aliases = ensureStore(db, transaction, DOCUMENT_ALIAS_STORE, { keyPath: "aliasKey" });
       ensureIndex(aliases, "byDocumentKey", "documentKey", { unique: false });
 
-      const labels = ensureStore(db, transaction, LABEL_STORE, { keyPath: "labelId" });
-      ensureIndex(labels, "byName", "name", { unique: false });
-      ensureIndex(labels, "bySortOrder", "sortOrder", { unique: false });
-
-      const paperLabels = ensureStore(db, transaction, PAPER_LABEL_STORE, { keyPath: "paperLabelId" });
-      ensureIndex(paperLabels, "byDocumentKey", "documentKey", { unique: false });
-      ensureIndex(paperLabels, "byLabelId", "labelId", { unique: false });
+      for (const storeName of OBSOLETE_STORES) {
+        if (db.objectStoreNames.contains(storeName)) {
+          db.deleteObjectStore(storeName);
+        }
+      }
 
       const comparisonSessions = ensureStore(db, transaction, COMPARISON_SESSION_STORE, { keyPath: "comparisonId" });
       ensureIndex(comparisonSessions, "byUpdatedAt", "updatedAt", { unique: false });

@@ -9,7 +9,7 @@ Goal: keep the current extension lightweight while making paper questions more r
 ## Target Architecture
 
 ```text
-stored cleaned Markdown
+stored final Markdown
 -> section-aware chunks
 -> query intent router
 -> retrieval plan

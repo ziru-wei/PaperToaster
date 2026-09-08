@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const inputDir = path.resolve(
   process.argv[2] || path.join(os.homedir(), "Downloads", "test pdf parser")
 );
-const outputDir = path.resolve(process.argv[3] || "test-results/inferred-outline");
+const outputDir = path.resolve(process.argv[3] || "test-results/pdf-pipeline");
 
 await initializeLiteParse();
 await fs.rm(outputDir, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # Comparative Reading Plan
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Status: implemented as a side-panel workflow launched from Reading Dashboard. This file keeps the architecture and resolved design decisions; unfinished follow-ups are consolidated in `docs/unfinished-feature-plan.md`.
 
@@ -16,7 +16,7 @@ This is for cross-paper questions such as:
 - Which paper gives stronger evidence for the same claim?
 - How does paper A extend or contradict paper B?
 
-The feature should reuse local paper records, cleaned Markdown, existing RAG preparation, and the existing local agent provider. It should not create a second AI stack.
+The feature reuses local paper records, final Markdown, existing RAG preparation, and the existing local agent provider. It does not create a second AI stack.
 
 ## Product Shape
 
@@ -49,7 +49,7 @@ User flow:
 3. User adds multiple dashboard papers to the active comparison from the dashboard card affordance.
 4. The side panel shows selected papers as a compact vertical list near the lower composer area and uses the same chat layout as normal paper reading.
 5. User asks a comparative question in the side panel composer.
-6. Extension builds a multi-paper context pack from local cleaned Markdown and paper metadata.
+6. Extension builds a multi-paper context pack from local final Markdown and paper metadata.
 7. Existing AI provider answers using the same local agent / Gemini path.
 8. The comparison session and dialog persist as a dashboard comparison record.
 
@@ -82,7 +82,7 @@ Not included in MVP:
 - Graph visualization.
 - Dragging papers to a bottom dashboard tray.
 
-Important boundary: Comparative Reading can only use papers that already have local cleaned Markdown. A dashboard card with no cached document should be disabled for comparison or show a quiet "context unavailable" state.
+Important boundary: Comparative Reading can only use papers that already have local final Markdown. A dashboard card with no cached document should be disabled for comparison or show a quiet "context unavailable" state.
 
 ## Architecture
 
@@ -166,9 +166,9 @@ conversationThreads
 conversationMessages
 ```
 
-Comparative Reading must be durable. Each comparison session stores the selected paper keys and dialog, but it must not store duplicated RAG context. The context is rebuilt from each paper's cached cleaned Markdown whenever the user asks a new comparative question or reopens the session.
+Comparative Reading must be durable. Each comparison session stores the selected paper keys and dialog, but it must not store duplicated RAG context. The context is rebuilt from each paper's cached final Markdown whenever the user asks a new comparative question or reopens the session.
 
-Add IndexedDB version `4` stores:
+The comparison stores introduced in IndexedDB v4 remain part of the current v5 schema:
 
 ```text
 comparisonSessions
@@ -233,7 +233,7 @@ Explicitly do not store:
 - built comparative context packs
 - retrieved chunks
 - paper overviews copied into comparison records
-- cleaned Markdown duplicated into comparison records
+- final Markdown duplicated into comparison records
 
 The source of truth remains:
 
@@ -252,12 +252,10 @@ Primary methods:
 
 ```js
 createComparisonSession(documentKeys)
-updateComparisonSessionPapers(comparisonId, documentKeys)
 listComparisonSessions()
 getComparisonSession(comparisonId)
 appendComparisonMessage(comparisonId, message)
-listComparisonMessages(comparisonId)
-deleteComparisonSession(comparisonId)
+saveComparisonMessages(comparisonId, messages)
 ```
 
 The side panel can keep an in-memory draft comparison before the first question is sent, but once the first user question is submitted, a durable `comparisonSession` must exist.
@@ -320,7 +318,7 @@ Recommended MVP:
 
 ```text
 for each selected paper:
-  load newest cleaned Markdown
+  load newest final Markdown
   build or reuse weak section chunks
   get cached overview if available
   retrieve top N chunks for the comparative question
@@ -563,7 +561,7 @@ Implemented:
 - Click empty dashboard grid area -> clear selected record and return side panel to Comparative Reading.
 - Removed the deprecated lower dashboard tray and drag-to-tray flow.
 - Comparison records support Manage-mode selection, Backup, Archive, Delete, Import, and star/unstar.
-- Comparison records are stored by paper keys plus dialog only; they do not duplicate cleaned Markdown or retrieved context.
+- Comparison records are stored by paper keys plus dialog only; they do not duplicate final Markdown or retrieved context.
 - Saved comparison paper lists are vertical in the lower side-panel composer area and include per-paper open-URL buttons.
 - Comparative context readiness uses loading/ready/warning states.
 - Related paper cards are highlighted when a comparison is active; related comparisons are highlighted when a paper is active.

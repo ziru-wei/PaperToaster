@@ -33,29 +33,6 @@ export async function createComparisonSession(documentKeys = [], options = {}) {
   return normalizeComparisonSession(session);
 }
 
-export async function updateComparisonSessionPapers(comparisonId, documentKeys = []) {
-  const normalizedId = String(comparisonId || "").trim();
-  if (!normalizedId) {
-    throw new Error("Comparison session id is missing.");
-  }
-
-  const db = await openPaperDatabase();
-  const existing = await getComparisonSessionRecord(db, normalizedId);
-  if (!existing) {
-    throw new Error("Comparison session was not found.");
-  }
-
-  const next = {
-    ...existing,
-    documentKeys: normalizeDocumentKeys(documentKeys),
-    updatedAt: Date.now()
-  };
-  const transaction = db.transaction(COMPARISON_SESSION_STORE, "readwrite");
-  transaction.objectStore(COMPARISON_SESSION_STORE).put(next);
-  await transactionDone(transaction);
-  return normalizeComparisonSession(next);
-}
-
 export async function setComparisonSessionStarred(comparisonId, isStarred) {
   const normalizedId = String(comparisonId || "").trim();
   if (!normalizedId) {
@@ -189,16 +166,6 @@ export async function saveComparisonMessages(comparisonId, messages = []) {
 
   await transactionDone(transaction);
   return getComparisonSession(normalizedId);
-}
-
-export async function listComparisonMessages(comparisonId) {
-  const normalizedId = String(comparisonId || "").trim();
-  if (!normalizedId) {
-    return [];
-  }
-
-  const db = await openPaperDatabase();
-  return getComparisonMessages(db, normalizedId);
 }
 
 export async function listSavedComparisonQuestionAnswerUnitsForDocument(documentKey) {

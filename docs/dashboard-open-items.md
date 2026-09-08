@@ -128,7 +128,7 @@ Current search is metadata-level only: title, canonical URL, and domain.
 
 Possible future full-text search:
 
-- Add a lightweight `searchIndex` store derived from cleaned Markdown.
+- Add a lightweight `searchIndex` store derived from final Markdown.
 - Store normalized chunks with `documentKey`, `startLine`, `endLine`, and compact text.
 - Search against the index, not full Markdown records directly.
 - Clicking a result can select the paper in side panel and optionally highlight or navigate later.

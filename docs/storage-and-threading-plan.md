@@ -1,6 +1,6 @@
 # Storage And Threading Plan
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Status: current storage/threading MVP is implemented. Reserved or future storage work is called out explicitly and consolidated in `docs/unfinished-feature-plan.md`.
 
@@ -29,18 +29,18 @@ Title is not a storage key. Title is editable and can be missing, duplicated, or
 
 Database: `pdf-ai-inspector`
 
-Version: `4`
+Version: `5`
 
 Stores:
 
 - `papers`
   - Key: `documentKey`
   - Holds the paper-level record.
-  - Important fields: `documentKey`, `canonicalUrl`, `title`, `titleSource`, `metadata`, `activeThreadId`, `createdAt`, `updatedAt`.
+  - Important fields: `documentKey`, `canonicalUrl`, `title`, `titleSource`, `metadata`, `activeThreadId`, `isStarred`, `group`, `groupTone`, `createdAt`, `updatedAt`.
 - `documents`
   - Key: parser/cache-specific `key`.
-  - Holds cleaned Markdown and parse metadata.
-  - Important fields: `documentKey`, `parserId`, `cacheVersion`, `markdown`, `pageCount`, `byteLength`, `contentType`, `metadata`.
+  - Holds final Markdown, parse metadata, and outline/debug artifacts.
+  - Important fields: `documentKey`, `parserId`, `cacheVersion`, `markdown`, `artifacts`, `pageCount`, `byteLength`, `contentType`, `metadata`.
 - `conversationThreads`
   - Key: `threadId`.
   - Holds per-document conversation thread metadata.
@@ -53,14 +53,6 @@ Stores:
   - Key: `aliasKey`.
   - Reserved for future key promotion.
   - Intended shape: `aliasKey -> documentKey`.
-- `labels`
-  - Key: `labelId`.
-  - Holds dashboard/library labels.
-  - Important fields: `labelId`, `name`, `color`, `sortOrder`, `createdAt`, `updatedAt`.
-- `paperLabels`
-  - Key: `paperLabelId`.
-  - Joins papers to labels.
-  - Important fields: `paperLabelId`, `documentKey`, `labelId`, `assignedAt`.
 - `comparisonSessions`
   - Key: `comparisonId`.
   - Holds persistent Comparative Reading sessions.
@@ -82,11 +74,11 @@ Settings and prompt presets still use `chrome.storage.local`.
 - The side panel still displays only the active thread.
 - Empty thread accumulation is guarded in two places: the composer command does nothing when the active thread is already empty, and storage reuses one existing empty thread while pruning duplicate empty threads.
 - Existing legacy conversation data in `chrome.storage.local.paperChatThreadsV1` is read lazily and written into IndexedDB when that paper is opened.
-- Chunks are not stored. They are rebuilt from cleaned Markdown when cached content is hydrated.
+- Chunks are not stored. They are rebuilt from final Markdown when cached content is hydrated.
 - Raw Markdown is not stored.
 - Selected text is one-shot composer state. Once a prompt is sent, the quote belongs only to that user message through `conversationMessages.selectionText`.
-- Dashboard labels are paper-level metadata keyed by `documentKey`; they do not belong to a specific conversation thread.
-- Comparative Reading sessions persist only paper `documentKeys` and dialog messages. They do not duplicate cleaned Markdown, retrieved chunks, or context packs; those are rebuilt from `documents` when a comparative question is asked.
+- Dashboard Labels are the `group` and `groupTone` fields on each paper record; they do not belong to a conversation thread or a separate join store.
+- Comparative Reading sessions persist only paper `documentKeys` and dialog messages. They do not duplicate final Markdown, retrieved chunks, or context packs; those are rebuilt from `documents` when a comparative question is asked.
 - Saved Q&A is stored as `isSaved` on assistant messages. The Saved page is a derived view over the same conversation records, not a separate notes store.
 - Deleting a Q&A asks for browser confirmation. If a thread becomes empty after deletion, the empty thread cleanup path removes it.
 - Dashboard and side-panel paper stars share `papers.isStarred`; comparison stars live on `comparisonSessions.isStarred`.
@@ -162,7 +154,7 @@ Status: planned, not implemented.
 
 Problem: conversation messages currently store the full selected quote in `selectionText`. This is simple and reliable for the MVP, but it can make conversation memory heavy when users quote long passages repeatedly.
 
-Goal: store a compact reference into the cached cleaned Markdown, then resolve the quote dynamically when rendering the conversation or building an AI prompt.
+Goal: store a compact reference into the cached final Markdown, then resolve the quote dynamically when rendering the conversation or building an AI prompt.
 
 Proposed storage primitive:
 
@@ -188,9 +180,9 @@ Proposed storage primitive:
 
 Field roles:
 
-- `startOffset` and `endOffset`: primary exact span in the cached cleaned Markdown.
+- `startOffset` and `endOffset`: primary exact span in the cached final Markdown.
 - `startLine`, `startColumn`, `endLine`, `endColumn`: human-readable/debuggable position.
-- `markdownHash`: verifies that the stored span belongs to the same cleaned Markdown text.
+- `markdownHash`: verifies that the stored span belongs to the same final Markdown text.
 - `prefix` and `suffix`: short surrounding text used to relocate the span if offsets drift after parser or cleanup changes.
 - `preview`: short fallback display text, not the full quote.
 - `method` and `score`: confidence metadata for UI/debugging and prompt warnings.
@@ -232,7 +224,7 @@ Storage migration:
 
 Important constraints:
 
-- Do not rely only on line/column positions. Cleaner and parser changes can move line breaks.
+- Do not rely only on line/column positions. Parser changes can move line breaks.
 - Do not rely only on absolute offsets. Cache-version changes can move text.
 - The robust reference is the combination of `markdownHash`, offsets, line/column, and surrounding text.
 - Dynamic quote recovery should happen close to the side panel/document context, not inside the low-level chat store. The chat store should persist structured records; the side panel should hydrate them with the active document Markdown.

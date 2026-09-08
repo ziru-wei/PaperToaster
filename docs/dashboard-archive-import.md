@@ -1,6 +1,6 @@
 # Dashboard Archive And Import
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Status: implemented for single-paper and eligible Comparative Reading records.
 
@@ -10,11 +10,11 @@ Add a lightweight management mode to the Reading Dashboard so papers can be sele
 
 ## Current Implementation
 
-The dashboard now has a `Manage` mode:
+The dashboard has a selection-management mode:
 
-- `Manage` toggles card-level checkboxes and bulk management controls.
+- The selection button toggles card-level selection and bulk management controls.
 - Cards can be multi-selected.
-- `Import` lives inside `Manage` because it changes the local library, and it is only shown before any papers are selected.
+- `Import` is a separate dashboard action next to the selection button.
 - `Select all` selects all currently visible dashboard papers.
 - `Backup` exports selected dashboard papers and does not delete anything.
 - `Delete` removes selected papers from local IndexedDB.
@@ -31,7 +31,7 @@ The archive is a JSON object:
 ```json
 {
   "schema": "pdf-ai-inspector.library-archive",
-  "version": 2,
+  "version": 3,
   "exportedAt": "2026-09-05T00:00:00.000Z",
   "documentKeys": ["..."],
   "records": {
@@ -40,17 +40,15 @@ The archive is a JSON object:
     "conversationThreads": [],
     "conversationMessages": [],
     "documentAliases": [],
-    "labels": [],
-    "paperLabels": [],
     "comparisonSessions": [],
     "comparisonMessages": []
   }
 }
 ```
 
-The exported data includes cleaned Markdown stored in `documents`, conversation threads/messages, aliases, paper metadata, star state, label assignments, and Comparative Reading sessions/messages whose full paper set is included in the export. It does not include raw Markdown or derived chunks unless those are already part of a stored document record.
+The exported data includes final Markdown and parser artifacts stored in `documents`, conversation threads/messages, aliases, paper metadata, star state, `group`/`groupTone` Label state on paper records, and Comparative Reading sessions/messages whose full paper set is included in the export. It does not include raw LiteParse/PDF.js extraction data or derived RAG chunks.
 
-Version 2 archives include comparison records. Version 1 archives are still accepted on import for older backups.
+Only version 3 archives are accepted. Earlier experimental archive versions are intentionally unsupported.
 
 ## Delete Semantics
 
@@ -61,9 +59,6 @@ Deleting or archiving a paper removes records keyed by `documentKey` from:
 - `conversationThreads`
 - `conversationMessages`
 - `documentAliases`
-- `paperLabels`
-
-Labels themselves are not deleted, because a label can belong to other papers.
 
 Comparative Reading sessions are pruned when selected papers are deleted. If a comparison loses too many papers to remain meaningful, its session and messages are removed. If at least two papers remain, the deleted paper keys are removed from the session.
 
@@ -71,7 +66,7 @@ Comparative Reading sessions are pruned when selected papers are deleted. If a c
 
 Import defaults to `skip existing` at the paper level.
 
-If any local records already exist for an archived `documentKey`, the whole paper is skipped. This prevents an older backup from overwriting newer local Markdown or newer conversation messages. Newly added papers are imported with their document records, cleaned Markdown, conversation threads/messages, aliases, star state, label assignments, and eligible Comparative Reading sessions.
+If any local records already exist for an archived `documentKey`, the whole paper is skipped. This prevents an older backup from overwriting newer local Markdown or newer conversation messages. Newly added papers are imported with their document records, final Markdown and parser artifacts, conversation threads/messages, aliases, star and Label state, and eligible Comparative Reading sessions.
 
 After import, the dashboard shows a popup with:
 
@@ -83,7 +78,7 @@ Future conflict handling could add explicit advanced options:
 - Preview before import.
 - Overwrite existing records.
 - Import summary by paper title.
-- Archive compatibility migrations if the IndexedDB schema changes.
+- Explicit archive migrations if backward compatibility becomes a future requirement.
 
 ## Open Questions
 

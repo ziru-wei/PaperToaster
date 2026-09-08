@@ -6,15 +6,6 @@ const PARSERS = Object.freeze([
 
 export const DEFAULT_PARSER_ID = outlineGuidedMarkdownParser.id;
 
-export function listParsers() {
-  return PARSERS.map((parser) => ({
-    id: parser.id,
-    label: parser.label,
-    outputKind: parser.outputKind,
-    description: parser.description
-  }));
-}
-
 export function getParser(parserId = DEFAULT_PARSER_ID) {
   const parser = PARSERS.find((candidate) => candidate.id === parserId);
   if (!parser) {

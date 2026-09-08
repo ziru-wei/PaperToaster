@@ -2,10 +2,6 @@ export const COMPARISON_SETTINGS_KEY = "comparisonSettingsV1";
 export const MIN_COMPARISON_PAPERS = 5;
 export const DEFAULT_COMPARISON_PAPER_LIMIT = MIN_COMPARISON_PAPERS;
 
-export const DEFAULT_COMPARISON_SETTINGS = Object.freeze({
-  paperLimit: DEFAULT_COMPARISON_PAPER_LIMIT
-});
-
 export async function getComparisonSettings() {
   const data = await chrome.storage.local.get(COMPARISON_SETTINGS_KEY);
   return normalizeComparisonSettings(data[COMPARISON_SETTINGS_KEY]);

@@ -1,6 +1,6 @@
 # Unfinished Feature Plan
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 This document consolidates unfinished or deferred work that was previously spread across the design docs and conversation history. Completed baseline behavior is listed first so future planning does not reopen already-settled decisions.
 
@@ -17,7 +17,7 @@ This document consolidates unfinished or deferred work that was previously sprea
 - Reading Dashboard lists stored papers, hides placeholder untitled records, supports search/sort/star/manage/import/backup/archive/delete, and can open a paper's stored context in the side panel without refetching the PDF.
 - Comparative Reading lives in the side panel when the dashboard is open, persists sessions by paper keys plus dialog, supports at least 2 papers up to the user-configured limit (default and minimum 5), uses the same provider path, and appears in the dashboard as a separate record type.
 - Dashboard records support primary activation and secondary related-record highlighting across single-paper and comparative records.
-- Archive/import includes cleaned Markdown documents, paper records, stars, threads/messages, labels if present, and eligible comparative sessions/messages. Import defaults to skip existing records.
+- Archive/import v3 includes final Markdown/parser artifacts, paper records with star/Label fields, threads/messages, and eligible comparative sessions/messages. Import defaults to skip existing records.
 
 ## P0: Response Streaming And Busy Feedback
 
@@ -56,7 +56,7 @@ Conversation messages currently store full selected quote text. That is reliable
 Plan:
 
 1. Add `selectionRef` and `selectionPreview` to new user messages.
-2. Locate selected text in cleaned Markdown using normalized exact match, whitespace/hyphenation-insensitive match, then fuzzy token overlap constrained by nearby chunks.
+2. Locate selected text in final Markdown using normalized exact match, whitespace/hyphenation-insensitive match, then fuzzy token overlap constrained by nearby chunks.
 3. Store offsets, line/column, Markdown hash, prefix/suffix, preview, method, and confidence.
 4. Render and prompt from dynamically resolved quote text when the current document Markdown is available.
 5. Continue reading legacy `selectionText`; keep a capped fallback quote only when location confidence is low.
@@ -75,7 +75,7 @@ Status: reserved in storage, not wired.
 
 Plan:
 
-1. Parse stronger identifiers from URL, metadata, and cleaned Markdown after document creation.
+1. Parse stronger identifiers from URL, metadata, and final Markdown after document creation.
 2. If a fallback URL key later reveals DOI/arXiv/IEEE identity, write `aliasKey -> documentKey`.
 3. Migrate or merge paper, document, thread, message, star, and comparison references.
 4. Avoid duplicate dashboard cards for the same paper.
@@ -88,7 +88,7 @@ Current dashboard search is metadata-level: title, URL, and domain. Full Markdow
 
 Plan:
 
-1. Add a derived `documentSearchBlocks` store from cleaned Markdown.
+1. Add a derived `documentSearchBlocks` store from final Markdown.
 2. Store normalized section/paragraph blocks with document key, source document key, heading, snippet text, start/end lines, and order.
 3. Search the compact index after debounce.
 4. Show snippet matches and optionally select/open the paper context.
@@ -149,12 +149,11 @@ Add Playwright or Chrome screenshot smoke tests for:
 - Zotero/browser-history/Downloads scanning.
 - A second AI stack separate from the current provider boundary.
 - Storing raw Markdown, page chunks, or duplicated comparative context packs.
-- Dashboard labels UI. Label stores can remain dormant unless labels return as a deliberate feature.
 - Internal schema renaming from `pdf-ai-inspector` to `paper-toaster`. Product-facing UI is renamed, but the DB/schema/source ids can remain stable for compatibility unless a migration is worth the risk.
 
 ## Recommended Next Order
 
-1. Add fixture-based tests around cleanup, storage, RAG routing, and dashboard/comparative summaries.
+1. Add fixture-based tests around PDF reconstruction, storage, RAG routing, and dashboard/comparative summaries.
 2. Add streaming/pending answer feedback.
 3. Add selection references into Markdown.
 4. Implement key promotion and aliases.

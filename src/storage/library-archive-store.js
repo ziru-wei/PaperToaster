@@ -5,8 +5,6 @@ import {
   CONVERSATION_THREAD_STORE,
   DOCUMENT_ALIAS_STORE,
   DOCUMENT_STORE,
-  LABEL_STORE,
-  PAPER_LABEL_STORE,
   PAPER_STORE,
   openPaperDatabase,
   requestToPromise,
@@ -14,16 +12,14 @@ import {
 } from "./paper-database.js";
 
 export const LIBRARY_ARCHIVE_SCHEMA = "pdf-ai-inspector.library-archive";
-export const LIBRARY_ARCHIVE_VERSION = 2;
-const SUPPORTED_LIBRARY_ARCHIVE_VERSIONS = new Set([1, 2]);
+export const LIBRARY_ARCHIVE_VERSION = 3;
 
 const DOCUMENT_KEY_STORES = [
   PAPER_STORE,
   DOCUMENT_STORE,
   CONVERSATION_THREAD_STORE,
   CONVERSATION_MESSAGE_STORE,
-  DOCUMENT_ALIAS_STORE,
-  PAPER_LABEL_STORE
+  DOCUMENT_ALIAS_STORE
 ];
 
 const DELETE_TRANSACTION_STORES = [
@@ -38,15 +34,9 @@ const IMPORT_STORES = [
   CONVERSATION_THREAD_STORE,
   CONVERSATION_MESSAGE_STORE,
   DOCUMENT_ALIAS_STORE,
-  LABEL_STORE,
-  PAPER_LABEL_STORE,
   COMPARISON_SESSION_STORE,
   COMPARISON_MESSAGE_STORE
 ];
-
-export async function exportLibraryPapers(documentKeys) {
-  return exportLibraryRecords({ documentKeys });
-}
 
 export async function exportLibraryRecords({ documentKeys = [], comparisonIds = [] } = {}) {
   const keys = normalizeDocumentKeys(documentKeys);
@@ -57,12 +47,11 @@ export async function exportLibraryRecords({ documentKeys = [], comparisonIds = 
 
   const db = await openPaperDatabase();
   const records = createEmptyArchiveRecords();
-  const exportedLabelIds = new Set();
   const exportedComparisonIds = new Set();
   const exportedDocumentKeys = new Set();
 
   for (const documentKey of keys) {
-    await appendPaperRecords(db, records, documentKey, exportedLabelIds, exportedDocumentKeys);
+    await appendPaperRecords(db, records, documentKey, exportedDocumentKeys);
   }
 
   const comparisonSessions = await getComparisonSessionsForDocumentKeys(db, new Set(keys));
@@ -78,11 +67,10 @@ export async function exportLibraryRecords({ documentKeys = [], comparisonIds = 
 
     appendComparisonSessionRecord(records, session, exportedComparisonIds);
     for (const documentKey of normalizeDocumentKeys(session.documentKeys || [])) {
-      await appendPaperRecords(db, records, documentKey, exportedLabelIds, exportedDocumentKeys);
+      await appendPaperRecords(db, records, documentKey, exportedDocumentKeys);
     }
   }
   records.comparisonMessages.push(...await getComparisonMessagesByIds(db, exportedComparisonIds));
-  records.labels.push(...await getLabelsById(db, exportedLabelIds));
 
   return {
     schema: LIBRARY_ARCHIVE_SCHEMA,
@@ -92,11 +80,6 @@ export async function exportLibraryRecords({ documentKeys = [], comparisonIds = 
     comparisonIds: [...exportedComparisonIds],
     records
   };
-}
-
-export async function deleteLibraryPapers(documentKeys) {
-  const result = await deleteLibraryRecords({ documentKeys });
-  return result.paperCount;
 }
 
 export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = [] } = {}) {
@@ -125,7 +108,6 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
     deleteRecordsByDocumentKey(transaction.objectStore(CONVERSATION_THREAD_STORE), documentKey);
     deleteRecordsByDocumentKey(transaction.objectStore(CONVERSATION_MESSAGE_STORE), documentKey);
     deleteRecordsByDocumentKey(transaction.objectStore(DOCUMENT_ALIAS_STORE), documentKey);
-    deleteRecordsByDocumentKey(transaction.objectStore(PAPER_LABEL_STORE), documentKey);
   }
   pruneComparisonRecordsForDeletedPapers(transaction, new Set(keys));
 
@@ -153,7 +135,6 @@ export async function importLibraryArchive(archive) {
   const importedSet = new Set(importedDocumentKeys);
   const recordsToImport = filterRecordsByDocumentKeys(records, importedSet);
   const materializedImportedDocumentKeys = getRecordDocumentKeys(recordsToImport);
-  recordsToImport.labels = await filterMissingLabels(db, getLabelsForImportedPapers(records, recordsToImport.paperLabels));
   const availableDocumentKeys = new Set([
     ...skippedDocumentKeys,
     ...materializedImportedDocumentKeys
@@ -162,7 +143,7 @@ export async function importLibraryArchive(archive) {
   const importedComparisonIds = new Set(recordsToImport.comparisonSessions.map((session) => session.comparisonId).filter(Boolean));
   recordsToImport.comparisonMessages = records.comparisonMessages.filter((message) => importedComparisonIds.has(message.comparisonId));
 
-  if (!importedDocumentKeys.length && !recordsToImport.labels.length && !recordsToImport.comparisonSessions.length) {
+  if (!importedDocumentKeys.length && !recordsToImport.comparisonSessions.length) {
     return createImportSummary({
       importedDocumentKeys: materializedImportedDocumentKeys,
       skippedDocumentKeys,
@@ -172,13 +153,11 @@ export async function importLibraryArchive(archive) {
 
   const transaction = db.transaction(IMPORT_STORES, "readwrite");
 
-  putRecords(transaction.objectStore(LABEL_STORE), recordsToImport.labels);
   putRecords(transaction.objectStore(PAPER_STORE), recordsToImport.papers);
   putRecords(transaction.objectStore(DOCUMENT_STORE), recordsToImport.documents);
   putRecords(transaction.objectStore(CONVERSATION_THREAD_STORE), recordsToImport.conversationThreads);
   putRecords(transaction.objectStore(CONVERSATION_MESSAGE_STORE), recordsToImport.conversationMessages);
   putRecords(transaction.objectStore(DOCUMENT_ALIAS_STORE), recordsToImport.documentAliases);
-  putRecords(transaction.objectStore(PAPER_LABEL_STORE), recordsToImport.paperLabels);
   putRecords(transaction.objectStore(COMPARISON_SESSION_STORE), recordsToImport.comparisonSessions);
   putRecords(transaction.objectStore(COMPARISON_MESSAGE_STORE), recordsToImport.comparisonMessages);
 
@@ -197,8 +176,6 @@ function createEmptyArchiveRecords() {
     conversationThreads: [],
     conversationMessages: [],
     documentAliases: [],
-    labels: [],
-    paperLabels: [],
     comparisonSessions: [],
     comparisonMessages: []
   };
@@ -209,7 +186,7 @@ function normalizeArchiveRecords(archive) {
     throw new Error("Archive file is not valid JSON data.");
   }
 
-  if (archive.schema !== LIBRARY_ARCHIVE_SCHEMA || !SUPPORTED_LIBRARY_ARCHIVE_VERSIONS.has(Number(archive.version))) {
+  if (archive.schema !== LIBRARY_ARCHIVE_SCHEMA || Number(archive.version) !== LIBRARY_ARCHIVE_VERSION) {
     throw new Error("Archive file uses an unsupported format.");
   }
 
@@ -244,7 +221,6 @@ function getArchiveDocumentKeys(archive, records) {
     ...records.conversationThreads.map((record) => record.documentKey),
     ...records.conversationMessages.map((record) => record.documentKey),
     ...records.documentAliases.map((record) => record.documentKey),
-    ...records.paperLabels.map((record) => record.documentKey),
     ...records.comparisonSessions.flatMap((record) => Array.isArray(record.documentKeys) ? record.documentKeys : [])
   ]);
 }
@@ -272,7 +248,6 @@ function filterRecordsByDocumentKeys(records, documentKeys) {
   filtered.conversationThreads = records.conversationThreads.filter((record) => documentKeys.has(record.documentKey));
   filtered.conversationMessages = records.conversationMessages.filter((record) => documentKeys.has(record.documentKey));
   filtered.documentAliases = records.documentAliases.filter((record) => documentKeys.has(record.documentKey));
-  filtered.paperLabels = records.paperLabels.filter((record) => documentKeys.has(record.documentKey));
   filtered.comparisonSessions = records.comparisonSessions.filter((record) => {
     const keys = Array.isArray(record.documentKeys) ? record.documentKeys : [];
     return keys.length >= 2 && keys.every((documentKey) => documentKeys.has(documentKey));
@@ -286,8 +261,7 @@ function getRecordDocumentKeys(records) {
     ...records.documents.map((record) => record.documentKey),
     ...records.conversationThreads.map((record) => record.documentKey),
     ...records.conversationMessages.map((record) => record.documentKey),
-    ...records.documentAliases.map((record) => record.documentKey),
-    ...records.paperLabels.map((record) => record.documentKey)
+    ...records.documentAliases.map((record) => record.documentKey)
   ]);
 }
 
@@ -306,21 +280,6 @@ async function filterImportableComparisonSessions(db, sessions, availableDocumen
   }
 
   return importable;
-}
-
-function getLabelsForImportedPapers(records, paperLabels) {
-  const labelIds = new Set(paperLabels.map((paperLabel) => paperLabel.labelId).filter(Boolean));
-  return records.labels.filter((label) => labelIds.has(label.labelId));
-}
-
-async function filterMissingLabels(db, labels) {
-  const missingLabels = [];
-  for (const label of labels) {
-    if (label?.labelId && !(await getStoreRecord(db, LABEL_STORE, label.labelId))) {
-      missingLabels.push(label);
-    }
-  }
-  return missingLabels;
 }
 
 function createImportSummary({ importedDocumentKeys, skippedDocumentKeys, records }) {
@@ -363,7 +322,7 @@ async function getComparisonSessionsForDocumentKeys(db, documentKeys) {
   });
 }
 
-async function appendPaperRecords(db, records, documentKey, exportedLabelIds, exportedDocumentKeys) {
+async function appendPaperRecords(db, records, documentKey, exportedDocumentKeys) {
   if (!documentKey || exportedDocumentKeys.has(documentKey)) {
     return;
   }
@@ -374,24 +333,17 @@ async function appendPaperRecords(db, records, documentKey, exportedLabelIds, ex
     records.papers.push(cloneRecord(paper));
   }
 
-  const [documents, threads, messages, aliases, paperLabels] = await Promise.all([
+  const [documents, threads, messages, aliases] = await Promise.all([
     getRecordsByDocumentKey(db, DOCUMENT_STORE, documentKey),
     getRecordsByDocumentKey(db, CONVERSATION_THREAD_STORE, documentKey),
     getRecordsByDocumentKey(db, CONVERSATION_MESSAGE_STORE, documentKey),
-    getRecordsByDocumentKey(db, DOCUMENT_ALIAS_STORE, documentKey),
-    getRecordsByDocumentKey(db, PAPER_LABEL_STORE, documentKey)
+    getRecordsByDocumentKey(db, DOCUMENT_ALIAS_STORE, documentKey)
   ]);
 
   records.documents.push(...documents.map(cloneRecord));
   records.conversationThreads.push(...threads.map(cloneRecord));
   records.conversationMessages.push(...messages.map(cloneRecord));
   records.documentAliases.push(...aliases.map(cloneRecord));
-  records.paperLabels.push(...paperLabels.map((paperLabel) => {
-    if (paperLabel.labelId) {
-      exportedLabelIds.add(paperLabel.labelId);
-    }
-    return cloneRecord(paperLabel);
-  }));
 }
 
 function appendComparisonSessionRecord(records, session, exportedComparisonIds) {
@@ -457,17 +409,6 @@ function deleteComparisonMessages(store, comparisonId) {
     cursor.delete();
     cursor.continue();
   };
-}
-
-async function getLabelsById(db, labelIds) {
-  const labels = [];
-  for (const labelId of labelIds) {
-    const label = await getStoreRecord(db, LABEL_STORE, labelId);
-    if (label) {
-      labels.push(cloneRecord(label));
-    }
-  }
-  return labels;
 }
 
 function deleteRecordsByDocumentKey(store, documentKey) {

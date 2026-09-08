@@ -1,6 +1,7 @@
 {
   "type": "module",
   "scripts": {
+    "test:pdf": "node scripts/test-pdf-pipeline.js",
     "build:liteparse": "mkdir -p vendor/liteparse && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm.js vendor/liteparse/liteparse_wasm.js && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm_bg.wasm vendor/liteparse/liteparse_wasm_bg.wasm",
     "build:markdown": "esbuild src/vendor/markdown-renderer-entry.js --bundle --format=esm --platform=browser --outfile=vendor/markdown-renderer/markdown-renderer.mjs",
     "build:rough-notation": "esbuild node_modules/rough-notation/lib/rough-notation.esm.js --bundle --format=esm --platform=browser --outfile=vendor/rough-notation/rough-notation.mjs",

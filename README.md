@@ -14,7 +14,7 @@ Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from
 - Uses embedded PDF outlines when available and deterministic inferred outlines otherwise.
 - Reconstructs final Markdown with outline-constrained heading hierarchy for PDFs of any supported size.
 - Automatically loads the active PDF when the side panel opens or the active tab changes.
-- Stores each parsed document in extension IndexedDB by canonical paper key and parser version, keeping only the URL, editable title, cleaned Markdown, and small document metadata.
+- Stores each parsed document in extension IndexedDB by canonical paper key and parser version, keeping the URL, editable title, final Markdown, parser artifacts, and small document metadata.
 - Reuses stored Markdown when the same PDF URL is opened again, so it does not re-fetch or re-parse unless the reload icon is clicked.
 - Extracts the paper title from PDF metadata first, then the first usable raw Markdown H1; if there is no usable H1, it uses the earliest usable raw Markdown heading.
 - Lets the title be edited manually in the side panel.
@@ -44,8 +44,8 @@ Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the sto
 5. Open a PDF, for example an arXiv PDF or the ACM test URL from `guideline.md`.
 6. Click the extension icon to open the side panel.
 7. The active PDF loads automatically. Click the reload icon in the upper-right corner only when you want to force a fresh parse.
-8. Select text in the PDF viewer, then use the right-click `### Capture selection ###` menu item. Check the `Selected Text` section.
-9. Enter a question, or type `/` to choose a prompt preset, then click `Ask AI`.
+8. Select text in the PDF viewer, then use the right-click `### Capture selection ###` menu item.
+9. Enter a question, or type `/` to choose a prompt preset, then press Enter.
 
 ## Notes
 
@@ -58,7 +58,7 @@ Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the sto
 - Parsed-document cache keys prefer DOI, arXiv id, or IEEE `arnumber`; URL fallback removes fragments such as `#page=...` and common volatile query parameters.
 - The persistent document store saves final Markdown and parser outline/debug artifacts, but not raw LiteParse blocks, PDF.js text items, page chunks, or generated RAG packs.
 - Paper title extraction order is explicit: PDF metadata title, first usable raw Markdown H1, earliest usable raw Markdown heading, then manual editing. It does not read title from viewer DOM, tab title, or URL.
-- Selection context preparation is local and lightweight. It locates the selected text in cleaned Markdown, adds nearby context, then adds keyword-retrieved paper context.
+- Selection context preparation is local and lightweight. It locates the selected text in final Markdown, adds nearby context, then adds keyword-retrieved paper context.
 - Conversation history is stored by canonical paper key in IndexedDB. It reloads when that PDF link becomes active again.
 - Selection question presets are stored in `chrome.storage.local` and can be edited from the extension Options page.
 - AI provider settings are local to the installed browser profile. The API key is not rendered back into the Options page after saving; paste a new key to replace it, or clear it from Options. The system prompt is editable from the same page.
