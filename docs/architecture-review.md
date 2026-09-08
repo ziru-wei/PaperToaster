@@ -7,9 +7,8 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 ## Current Pipeline
 
 1. PDF acquisition: `src/pdf/acquire-pdf.js`, `src/pdf/fetch-pdf.js`
-2. PDF to Markdown: `src/parsers/parser-registry.js` plus parser adapters
-3. Markdown cleanup: `src/markdown/clean-markdown.js`
-4. Title extraction: `src/pdf/extract-metadata-title.js`, `src/pdf/extract-markdown-title.js`, `src/pdf/select-title.js`
+2. PDF to Markdown: `src/parsers/outline-guided-markdown-parser.js`, `src/pdf/structured-pdf-extraction.js`, `src/pdf/outline-guided-core.js`
+3. Title extraction: `src/pdf/extract-metadata-title.js`, `src/pdf/extract-markdown-title.js`, `src/pdf/select-title.js`
 5. Canonical document creation: `src/document/create-document.js`
 6. RAG preparation: `src/pdf/chunk-document.js`, `src/pdf/retrieve.js`, `src/pdf/selection-context.js`, `src/rag/query-intent-router.js`, `src/rag/evidence-context.js`, `src/rag/paper-overview.js`
 7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`, `src/ai/local-agent-client.js`
@@ -27,9 +26,8 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 - Chat memory has been moved toward the same IndexedDB database as document memory. Settings and prompt presets still use `chrome.storage.local`.
 - `formatSelectionContextForPrompt()` belongs in the AI prompt layer, not the PDF/RAG layer.
 - Local agent support should stay behind the AI provider boundary. The extension talks to a token-protected loopback HTTP bridge; it should not know whether the bridge invokes Codex, Claude Code, Ollama, LM Studio, or another local tool.
-- `src/markdown/clean-markdown.js` has the right profile idea, but it needs fixture-based tests before adding many more publisher rules.
 - Side panel cleanup should stay grouped by coarse responsibility. Avoid creating many tiny model/controller files unless a responsibility becomes independently reusable or difficult to test.
-- Markdown rendering for AI responses is intentionally separate from Markdown cleanup for PDF content. `clean-markdown.js` normalizes paper text for storage/RAG; `render-markdown.js` converts assistant responses into sanitized HTML for display.
+- Markdown rendering for AI responses remains separate from PDF reconstruction. `outline-guided-core.js` produces paper Markdown; `render-markdown.js` converts assistant responses into sanitized HTML for display.
 - Paper-reading RAG is now a lightweight middle layer. It uses rule-based intent routing, weak section-aware chunks, neighbor expansion, deterministic paper overview, and extractive evidence compression instead of a separate vector database or Python RAG service. Section metadata is a hint, not a hard dependency, because converted Markdown headings can be missing or wrong.
 - Comparative Reading has its own side-panel controller, renderer, storage store, and compare prompt/context modules. It reuses the provider boundary instead of creating a second AI stack.
 - Saved Q&A is conversation-message metadata (`isSaved`) plus a derived side-panel view. It should stay attached to message records, not become a separate notes system.
@@ -48,7 +46,7 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 9. Extract conversation rendering, thread wheel, and scroll-to-latest behavior into focused side panel modules. Done.
 10. Group side panel document context, paper actions, and ask flow into coarse modules. Done.
 11. Split Reading Dashboard rendering and bulk management into coarse modules. Done.
-12. Add markdown cleanup fixtures for ACM, IEEE, Springer, and generic PDFs.
+12. Extend outline-guided parser fixtures across ACM, IEEE, Springer, and generic PDFs.
 13. Add prompt/retrieval fixtures for paper overview, method, result, limitation, and selected-text questions.
 14. Add comparative reading fixtures for balanced per-paper retrieval and prompt shape.
 15. Add visual regression smoke tests for side panel and dashboard responsive states.

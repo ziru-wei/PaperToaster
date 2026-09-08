@@ -569,7 +569,8 @@ body.comparison-empty-mode header {
 .comparative-mode .header-paper-label,
 .comparative-mode .thread-archive-button,
 .comparative-mode #openPaperUrl,
-.comparative-mode #reloadPdf {
+.comparative-mode #reloadPdf,
+.comparative-mode #downloadPaperArtifacts {
   display: none;
 }
 

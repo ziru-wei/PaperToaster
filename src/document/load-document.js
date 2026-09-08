@@ -219,6 +219,7 @@ async function fetchParseAndTitleDocument({ tab, parserId, diagnose, onTitleInfo
     bytes: fetched.bytes
   }, {
     parserId,
+    documentTitle: metadataTitleInfo.title,
     onProgress: (progress) => diagnose(progress.detail || progress.stage)
   });
   diagnose(`${content.parserLabel} produced ${content.pageCount} pages as ${content.outputKind}.`);
@@ -249,11 +250,7 @@ function isUsableCachedDocument(document, parserId) {
 }
 
 function isCompatibleCachedParser(cachedParserId, requestedParserId) {
-  if (cachedParserId === requestedParserId) {
-    return true;
-  }
-
-  return requestedParserId === "pdf2md-markdown" && cachedParserId === "pdfjs-markdown";
+  return cachedParserId === requestedParserId;
 }
 
 function isPotentialPaperViewerUrl(url) {

@@ -7,9 +7,9 @@ This document consolidates unfinished or deferred work that was previously sprea
 ## Completed Baseline
 
 - Product/UI identity is now `Paper Toaster`; the extension icon uses the cropped image asset in `src/assets/extension/`.
-- PDF acquisition, parser selection, Markdown cleanup, metadata/Markdown title extraction, document creation, RAG preparation, and agent calls are separated into modules.
-- `pdf2md` remains the normal Markdown parser; PDF.js Markdown is the automatic large-file fallback instead of a user-facing parser choice.
-- Cleaned Markdown, paper metadata, stars, conversation threads/messages, comparison sessions/messages, and archive/import data persist in IndexedDB.
+- PDF acquisition, outline-guided Markdown reconstruction, metadata/Markdown title extraction, document creation, RAG preparation, and agent calls are separated into modules.
+- PDF.js metadata/outlines/text geometry plus LiteParse structured blocks form the single production PDF parser; the old pdf2md, plain PDF.js parser, and legacy cleaner have been removed.
+- Final Markdown, parser outline/debug artifacts, paper metadata, stars, conversation threads/messages, comparison sessions/messages, and archive/import data persist in IndexedDB.
 - Raw Markdown, page chunks, and generated RAG context packs are not stored.
 - Paper keys use DOI/arXiv/IEEE `arnumber`/cleaned URL priority. Title is not a key.
 - Single-paper chat supports multi-thread memory, route suggestion before send, local Codex bridge, debug mode, Markdown-rendered assistant output, answer copy, Q&A delete, and Saved Q&A.
@@ -41,7 +41,7 @@ This is the highest-value reliability work before adding more rules.
 
 Needed fixtures:
 
-- Markdown cleanup: ACM, IEEE, Springer, generic PDF.js large-file fallback, references removal, heading normalization, empty citation cleanup.
+- PDF reconstruction: ACM, IEEE, Springer, embedded/inferred outlines, degraded extraction, and heading placement.
 - RAG routing: selected-text, targeted Q&A, paper overview, method, findings, limitations, comparison.
 - Retrieval/prompt construction: route-confirmed prompt shape, evidence budget, overview usage, weak heading fallback.
 - Storage: key generation, duplicate empty thread pruning, Saved Q&A deletion cleanup, archive/import skip-existing behavior.

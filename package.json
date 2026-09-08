@@ -1,22 +1,17 @@
 {
   "type": "module",
   "scripts": {
-    "build:pdf2md": "esbuild node_modules/@pdf2md/core/dist/index.js --bundle --format=esm --platform=browser --outfile=vendor/pdf2md/pdf2md.mjs && mkdir -p vendor/pdf2md/pdfjs-dist/build && cp node_modules/@pdf2md/core/node_modules/pdfjs-dist/build/pdf.worker.min.mjs vendor/pdf2md/pdfjs-dist/build/pdf.worker.min.mjs && cp node_modules/@pdf2md/core/node_modules/pdfjs-dist/build/pdf.worker.min.mjs vendor/pdf2md/pdf.worker.mjs",
+    "build:liteparse": "mkdir -p vendor/liteparse && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm.js vendor/liteparse/liteparse_wasm.js && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm_bg.wasm vendor/liteparse/liteparse_wasm_bg.wasm",
     "build:markdown": "esbuild src/vendor/markdown-renderer-entry.js --bundle --format=esm --platform=browser --outfile=vendor/markdown-renderer/markdown-renderer.mjs",
     "build:rough-notation": "esbuild node_modules/rough-notation/lib/rough-notation.esm.js --bundle --format=esm --platform=browser --outfile=vendor/rough-notation/rough-notation.mjs",
-    "build:vendors": "npm run build:pdf2md && npm run build:markdown && npm run build:rough-notation"
+    "build:vendors": "npm run build:liteparse && npm run build:markdown && npm run build:rough-notation"
   },
   "dependencies": {
-    "@pdf2md/core": "^0.3.0",
+    "@llamaindex/liteparse-wasm": "^2.14.4",
     "dompurify": "^3.4.14",
     "esbuild": "^0.28.2",
     "markdown-it": "^15.0.1",
     "pdfjs-dist": "^6.3.289",
     "rough-notation": "^0.5.1"
-  },
-  "overrides": {
-    "@pdf2md/core": {
-      "pdfjs-dist": "5.5.207"
-    }
   }
 }

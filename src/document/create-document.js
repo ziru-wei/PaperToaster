@@ -22,6 +22,7 @@ export function createDocument({ url, fetched, content, titleInfo }) {
     chunks,
     sectionOutline: createSectionOutline(chunks),
     metadata: content.metadata || null,
+    artifacts: content.artifacts || null,
     warnings: content.warnings || [],
     stats: content.stats || null,
     byteLength: fetched.byteLength,

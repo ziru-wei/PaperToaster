@@ -1,6 +1,7 @@
 export function getSidePanelElements(root = document) {
   const elements = {
     reloadPdf: root.querySelector("#reloadPdf"),
+    downloadPaperArtifacts: root.querySelector("#downloadPaperArtifacts"),
     openDashboard: root.querySelector("#openDashboard"),
     openPaperUrl: root.querySelector("#openPaperUrl"),
     documentStar: root.querySelector("#documentStar"),

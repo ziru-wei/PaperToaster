@@ -1,5 +1,9 @@
 import { MessageType } from "../shared/messages.js";
 import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
+import {
+  canDownloadParserArtifacts,
+  downloadParserArtifacts
+} from "../document/download-parser-artifacts.js";
 import { DEFAULT_PARSER_ID } from "../parsers/parser-registry.js";
 import {
   canLoadDocumentFromTab,
@@ -10,7 +14,7 @@ import {
 import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
 
-const DOCUMENT_CACHE_VERSION = "v15";
+const DOCUMENT_CACHE_VERSION = "v16";
 
 export function createSidePanelDocumentContext({
   elements,
@@ -31,6 +35,7 @@ export function createSidePanelDocumentContext({
   elements.reloadPdf.addEventListener("click", () => {
     loadPdf({ bypassCache: true });
   });
+  elements.downloadPaperArtifacts.addEventListener("click", downloadCurrentParserArtifacts);
   elements.openPaperUrl.addEventListener("click", openCurrentPaperUrl);
   elements.documentTitle.addEventListener("input", updateManualDocumentTitle);
 
@@ -266,6 +271,7 @@ export function createSidePanelDocumentContext({
       renderDocumentTitle(null);
       await onDocumentChange?.(null);
       renderContextReady(false);
+      elements.downloadPaperArtifacts.disabled = true;
       elements.pdfStatus.textContent = "";
       onAskReadinessChange?.();
       return;
@@ -276,6 +282,7 @@ export function createSidePanelDocumentContext({
     renderDocumentTitle(document);
     renderPaperUrl(document.url || "");
     renderContextReady(true, document);
+    elements.downloadPaperArtifacts.disabled = !canDownloadParserArtifacts(document);
     elements.pdfStatus.textContent = "";
     await conversation.setDocumentUrl(document.url, {
       documentKey: document.documentKey
@@ -320,6 +327,14 @@ export function createSidePanelDocumentContext({
       await openPaperUrlInExistingTab(url);
     } catch (error) {
       showError(`Could not open paper URL.\n${error.message || String(error)}`);
+    }
+  }
+
+  function downloadCurrentParserArtifacts() {
+    try {
+      downloadParserArtifacts(currentDocument);
+    } catch (error) {
+      showError(`Could not download parser artifacts.\n${error.message || String(error)}`);
     }
   }
 
@@ -437,6 +452,7 @@ export function createSidePanelDocumentContext({
     elements.pdfStatus.classList.remove("error");
     renderPaperUrl("");
     elements.reloadPdf.disabled = true;
+    elements.downloadPaperArtifacts.disabled = true;
     elements.documentStar.disabled = true;
     elements.conversationThreadArchive.disabled = true;
     elements.conversationThread.hidden = true;
@@ -511,22 +527,6 @@ function clearDiagnostics() {
   // Diagnostics stay in the console now; the side panel UI stays minimal.
 }
 
-function summarizeFallbackReason(reason) {
-  const normalized = String(reason || "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const directCause = normalized
-    .replace(/^Failed to parse PDF:\s*/i, "")
-    .replace(/^pdf2md parser failed:\s*/i, "")
-    .trim();
-
-  if (directCause.length <= 150) {
-    return `pdf2md: ${directCause}`;
-  }
-
-  return `pdf2md: ${directCause.slice(0, 147)}...`;
-}
-
 function formatContextReadyLabel(document) {
   if (!document) {
     return "Context ready";
@@ -534,38 +534,8 @@ function formatContextReadyLabel(document) {
 
   const parserLabel = document.parser?.label || document.parser?.id || "unknown parser";
   const outputKind = document.parser?.outputKind ? `/${document.parser.outputKind}` : "";
-  const metadata = document.metadata || {};
-
-  if (metadata.pdf2mdFallback || metadata.largeFileFallback) {
-    const requested = formatParserId(metadata.requestedParserId) || "pdf2md";
-    const fallback = document.parser?.label || formatParserId(metadata.fallbackParserId) || "PDF.js Markdown";
-    const reason = metadata.largeFileFallback
-      ? "large file"
-      : summarizeFallbackReason(metadata.pdf2mdFallbackReason || metadata.largeFileFallbackReason || "").replace(/^pdf2md:\s*/i, "");
-
-    return `Context ready · ${fallback}${outputKind} fallback from ${requested}${reason ? ` · ${reason}` : ""}`;
-  }
-
-  return `Context ready · ${parserLabel}${outputKind}`;
-}
-
-function formatParserId(parserId) {
-  const normalized = String(parserId || "").trim();
-  if (!normalized) {
-    return "";
-  }
-
-  if (normalized === "pdf2md-markdown") {
-    return "pdf2md Markdown";
-  }
-
-  if (normalized === "pdfjs-markdown") {
-    return "PDF.js Markdown";
-  }
-
-  if (normalized === "pdfjs-text") {
-    return "PDF.js Text";
-  }
-
-  return normalized;
+  const outlineType = document.metadata?.outlineType;
+  const mode = outlineType ? ` · ${outlineType} outline` : "";
+  const degraded = document.metadata?.degradedMode ? " · degraded reconstruction" : "";
+  return `Context ready · ${parserLabel}${outputKind}${mode}${degraded}`;
 }

@@ -30,24 +30,19 @@ Each parser adapter must export an object with:
 }
 ```
 
-Only parser adapters should know about third-party parser libraries. The side
-panel calls `parsePdfToContent()` from `parser-registry.js`; retrieval and cache
-code work against the normalized document returned by `createDocument()`.
+Only the parser adapter knows about LiteParse. The side panel calls
+`parsePdfToContent()` from `parser-registry.js`; retrieval and cache code work
+against the normalized document returned by `createDocument()`.
 
-Parser adapters may apply parser-specific cleanup before returning content, but
-should preserve raw converter output in `rawMarkdown` when available. For
-example, `pdf2md-markdown-parser.js` keeps raw Markdown, then applies common and
-provider-specific cleanup profiles so ACM and IEEE heading rules can evolve
-independently.
+The production parser is `outline-guided-markdown`. PDF.js supplies metadata,
+embedded outlines, destinations, and positioned text. LiteParse supplies
+structured layout blocks. Embedded outlines are preferred; a deterministic
+inferred outline is used when no embedded outline exists. The parser produces
+the final Markdown directly and does not pass it through a legacy cleaner.
 
-Large files are handled through a separate adapter instead of changing
-third-party parser limits. `pdf2md-markdown-parser.js` reports
-`parser_file_too_large` when it hits the pdf2md 15 MB limit, and
-`parser-registry.js` marks that request as a large-file fallback before routing
-it directly to `pdfjs-markdown-parser.js`.
+Parser results also include test-compatible `artifacts.outline` and
+`artifacts.debug`. The canonical document stores those artifacts so the side
+panel can download them without reparsing the PDF.
 
-To add a parser:
-
-1. Add `src/parsers/my-parser.js`.
-2. Implement this contract.
-3. Register it in `src/parsers/parser-registry.js`.
+There is intentionally one production PDF parser. Add another adapter only if
+the product explicitly adopts a second parsing strategy.
