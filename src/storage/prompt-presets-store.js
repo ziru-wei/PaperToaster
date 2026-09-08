@@ -7,9 +7,9 @@ export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
     prompt: "Explain this selected passage. Use explicit examples from the original paper text to explain it."
   },
   {
-    id: "clarify-terms",
-    label: "Clarify terms",
-    prompt: "Clarify the key terms and assumptions in this selected passage, grounded in the paper's context."
+    id: "summarize",
+    label: "Summarize",
+    prompt: "Summarize this paper based on the abstract, introduction, findings and conclusions."
   }
 ]);
 
@@ -21,7 +21,28 @@ export async function getSelectionPromptPresets() {
   }
 
   const normalized = normalizePromptPresets(presets);
-  return normalized.length ? normalized : cloneDefaultPresets();
+  if (!normalized.length) {
+    return cloneDefaultPresets();
+  }
+  const migrated = replaceLegacyClarifyPreset(normalized);
+  if (migrated !== normalized) {
+    await saveSelectionPromptPresets(migrated);
+  }
+  return migrated;
+}
+
+function replaceLegacyClarifyPreset(presets) {
+  const legacyIndex = presets.findIndex((preset) => {
+    return preset.id === "clarify-terms"
+      && preset.label === "Clarify terms"
+      && preset.prompt === "Clarify the key terms and assumptions in this selected passage, grounded in the paper's context.";
+  });
+  if (legacyIndex < 0) {
+    return presets;
+  }
+  const next = [...presets];
+  next.splice(legacyIndex, 1, { ...DEFAULT_SELECTION_PROMPT_PRESETS[1] });
+  return next;
 }
 
 export async function saveSelectionPromptPresets(presets) {

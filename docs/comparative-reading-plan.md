@@ -50,7 +50,7 @@ User flow:
 4. The side panel shows selected papers as a compact vertical list near the lower composer area and uses the same chat layout as normal paper reading.
 5. User asks a comparative question in the side panel composer.
 6. Extension builds a multi-paper context pack from local final Markdown and paper metadata.
-7. Existing AI provider answers using the same local agent / Gemini path.
+7. Existing AI provider answers through the same local agent bridge.
 8. The comparison session and dialog persist as a dashboard comparison record.
 
 The previous bottom-dashboard tray design is deprecated. Comparative Reading belongs in the side panel when the left/main tab is the Reading Dashboard.
@@ -114,7 +114,7 @@ sidepanel.js
        -> library-store.js / document-store.js
        -> build-comparison-context.js
        -> comparison-answer.js
-            -> local-agent-client.js or gemini-client.js
+            -> local-agent-client.js
 ```
 
 Do not import side panel controllers into the dashboard. Dashboard owns gallery/record rendering. Side panel owns chat/composer/AI interaction. Shared logic should live in storage, RAG, AI, or compare modules.
@@ -398,7 +398,7 @@ The feature should use the same provider settings:
 
 - Debug mode.
 - Local Agent endpoint/token/model.
-- Gemini fallback if configured.
+- Codex CLI or Antigravity CLI profile through the local bridge.
 - Markdown response rendering.
 
 Add a provider wrapper similar to current selection answer flow, but do not reuse `answerSelectionQuestion()` directly if doing so would make it semantically confusing.
@@ -417,7 +417,6 @@ This can share low-level clients:
 
 ```text
 local-agent-client.js
-gemini-client.js
 ```
 
 ## Dashboard UI Details
@@ -530,7 +529,7 @@ Manual MVP tests:
 - Remove one paper from side-panel comparison chips before the first question is sent.
 - Try asking with zero or one paper and confirm validation.
 - Ask with debug mode and confirm no provider request is made.
-- Ask with local Codex bridge and confirm the answer references multiple paper labels.
+- Ask with each local CLI profile and confirm the answer references multiple paper labels.
 - Try adding a paper with no Markdown, if such a record exists, and confirm unavailable state.
 - Reload dashboard and confirm saved comparison sessions and dialog rehydrate from IndexedDB.
 - Confirm the dashboard shows comparison records as compact right-side records.

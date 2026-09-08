@@ -1,20 +1,30 @@
 export const AI_SETTINGS_KEY = "aiSettingsV1";
-export const AI_PROVIDER_GEMINI = "gemini";
+export const CURRENT_AI_MODEL_KEY = "currentAiModelV1";
 export const AI_PROVIDER_LOCAL = "local";
+export const LOCAL_AGENT_PROFILE_CODEX = "codex";
+export const LOCAL_AGENT_PROFILE_ANTIGRAVITY = "antigravity";
 
 export const DEFAULT_LOCAL_ENDPOINT = "http://127.0.0.1:32177/ask";
 export const DEFAULT_LOCAL_AUTH_TOKEN = "paper-chat-local";
-export const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
 
 const DEFAULT_SYSTEM_PROMPT = [
-  "Use bilingual code-switching (Chinese-English) by default for all responses, overriding this ONLY if I explicitly specify a language.",
+  "Use natural Chinese-English code-switching by default: write the sentence structure, reasoning, and explanations in Chinese, while keeping technical terms, method names, paper-specific concepts, and important phrases in English.",
   "",
-  "Deliver purely factual, grounded, and accurate content.",
+  "Embed English terms directly into Chinese sentences. Do not repeat translations in parentheses or mechanically alternate between Chinese and English sentences.",
   "",
-  "Sounds natural like a acedemic buddy. Strip away all mannered prose, introductory/concluding filler, and robotic pleasantries."
+  "Be factual and grounded in the paper context. Clearly distinguish the paper's claims from inference. Respond directly like an academic peer, without introductory/concluding filler or robotic pleasantries.",
+  "",
+  "Override this style only when I explicitly request another language."
 ].join("\n");
 
 const LEGACY_DEFAULT_SYSTEM_PROMPTS = Object.freeze([
+  [
+    "Use bilingual code-switching (Chinese-English) by default for all responses, overriding this ONLY if I explicitly specify a language.",
+    "",
+    "Deliver purely factual, grounded, and accurate content.",
+    "",
+    "Sounds natural like a acedemic buddy. Strip away all mannered prose, introductory/concluding filler, and robotic pleasantries."
+  ].join("\n"),
   [
     "You are helping a researcher read an academic paper.",
     "Answer using only the provided selected text and paper context.",
@@ -26,8 +36,10 @@ const LEGACY_DEFAULT_SYSTEM_PROMPTS = Object.freeze([
 
 export const DEFAULT_AI_SETTINGS = Object.freeze({
   provider: AI_PROVIDER_LOCAL,
+  localAgentProfile: LOCAL_AGENT_PROFILE_CODEX,
   model: "",
-  apiKey: "",
+  reasoningEffort: "",
+  enabledChatModels: [],
   localEndpoint: DEFAULT_LOCAL_ENDPOINT,
   localAuthToken: DEFAULT_LOCAL_AUTH_TOKEN,
   debugMode: false,
@@ -47,18 +59,40 @@ export async function saveAiSettings(settings) {
   return normalized;
 }
 
-export async function clearAiApiKey() {
+export async function getEffectiveAiSettings() {
   const settings = await getAiSettings();
-  return saveAiSettings({
+  const data = await chrome.storage.session.get(CURRENT_AI_MODEL_KEY);
+  const selection = normalizeModelSelection(data[CURRENT_AI_MODEL_KEY]);
+  if (!selection || !isModelEnabled(settings.enabledChatModels, selection)) {
+    return settings;
+  }
+  return {
     ...settings,
-    apiKey: ""
-  });
+    localAgentProfile: selection.profile,
+    model: selection.model,
+    reasoningEffort: selection.reasoningEffort
+  };
+}
+
+export async function setCurrentAiModelSelection(selection) {
+  const normalized = normalizeModelSelection(selection);
+  if (!normalized) {
+    await chrome.storage.session.remove(CURRENT_AI_MODEL_KEY);
+    return null;
+  }
+  await chrome.storage.session.set({ [CURRENT_AI_MODEL_KEY]: normalized });
+  return normalized;
 }
 
 export function normalizeAiSettings(settings) {
-  const provider = normalizeProvider(settings?.provider);
-  const model = normalizeModel(settings?.model) || (provider === AI_PROVIDER_GEMINI ? DEFAULT_GEMINI_MODEL : "");
-  const apiKey = String(settings?.apiKey || "").trim();
+  const provider = AI_PROVIDER_LOCAL;
+  const localAgentProfile = normalizeLocalAgentProfile(
+    settings?.localAgentProfile,
+    settings?.provider
+  );
+  const model = normalizeModel(settings?.model);
+  const reasoningEffort = normalizeReasoningEffort(settings?.reasoningEffort);
+  const enabledChatModels = normalizeEnabledChatModels(settings?.enabledChatModels);
   const localEndpoint = normalizeLocalEndpoint(settings?.localEndpoint) || DEFAULT_AI_SETTINGS.localEndpoint;
   const localAuthToken = normalizeLocalAuthToken(settings?.localAuthToken) || DEFAULT_AI_SETTINGS.localAuthToken;
   const debugMode = normalizeDebugMode(settings?.debugMode);
@@ -69,8 +103,10 @@ export function normalizeAiSettings(settings) {
 
   return {
     provider,
+    localAgentProfile,
     model,
-    apiKey,
+    reasoningEffort,
+    enabledChatModels,
     localEndpoint,
     localAuthToken,
     debugMode,
@@ -78,36 +114,67 @@ export function normalizeAiSettings(settings) {
   };
 }
 
-export function hasConfiguredAiApiKey(settings) {
-  return Boolean(settings?.apiKey?.trim());
+export function normalizeModelSelection(selection) {
+  const profile = normalizeLocalAgentProfile(selection?.profile);
+  const model = normalizeModel(selection?.model);
+  const reasoningEffort = normalizeReasoningEffort(selection?.reasoningEffort);
+  return model ? { profile, model, reasoningEffort } : null;
+}
+
+function normalizeEnabledChatModels(models) {
+  const seen = new Set();
+  return (Array.isArray(models) ? models : [])
+    .map((model) => {
+      const selection = normalizeModelSelection(model);
+      return selection ? {
+        ...selection,
+        label: String(model?.label || selection.model).trim().slice(0, 120)
+      } : null;
+    })
+    .filter((selection) => {
+      if (!selection) return false;
+      const key = `${selection.profile}:${selection.model}:${selection.reasoningEffort}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function isModelEnabled(models, selection) {
+  if (!models.length) return true;
+  return models.some((item) => item.profile === selection.profile
+    && item.model === selection.model
+    && item.reasoningEffort === selection.reasoningEffort);
 }
 
 export function hasConfiguredAiProvider(settings) {
   const normalized = normalizeAiSettings(settings);
-  if (normalized.provider === AI_PROVIDER_LOCAL) {
-    return Boolean(normalized.localEndpoint && normalized.localAuthToken);
-  }
-
-  return hasConfiguredAiApiKey(normalized);
+  return Boolean(normalized.localEndpoint && normalized.localAuthToken);
 }
 
 export function usesDebugAiMode(settings) {
   return Boolean(settings?.debugMode);
 }
 
-function normalizeProvider(provider) {
-  const value = String(provider || DEFAULT_AI_SETTINGS.provider).trim().toLowerCase();
-  if (value === AI_PROVIDER_GEMINI || value === AI_PROVIDER_LOCAL) {
+function normalizeLocalAgentProfile(profile, legacyProvider) {
+  const value = String(profile || "").trim().toLowerCase();
+  if (value === LOCAL_AGENT_PROFILE_CODEX || value === LOCAL_AGENT_PROFILE_ANTIGRAVITY) {
     return value;
   }
 
-  return DEFAULT_AI_SETTINGS.provider;
+  return String(legacyProvider || "").trim().toLowerCase() === "gemini"
+    ? LOCAL_AGENT_PROFILE_ANTIGRAVITY
+    : DEFAULT_AI_SETTINGS.localAgentProfile;
 }
 
 function normalizeModel(model) {
   return String(model || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeReasoningEffort(reasoningEffort) {
+  return String(reasoningEffort || "").trim().toLowerCase().slice(0, 24);
 }
 
 function normalizeSystemPrompt(systemPrompt) {

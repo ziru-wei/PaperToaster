@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Paper Chat Settings</title>
+    <title>Paper Toaster Settings</title>
     <link rel="stylesheet" href="./options.css">
   </head>
   <body>
     <main>
       <header>
         <div>
-          <h1>Paper Chat Settings</h1>
+          <h1>Paper Toaster Settings</h1>
           <p>Local settings for model access and selected-text prompts.</p>
         </div>
       </header>
@@ -18,31 +18,15 @@
       <section>
         <div class="section-header">
           <div>
-            <h2>AI Provider</h2>
-            <p>Local Agent uses a local token you choose; no API key is needed.</p>
+            <div class="section-title-row">
+              <h2>AI Provider</h2>
+              <span id="aiProviderStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>The local bridge can dispatch each request to Codex CLI or Antigravity CLI.</p>
           </div>
-          <div class="actions">
-            <button id="useLocalCodex" type="button">Use local Codex</button>
-            <button id="saveAiSettings" type="button">Save</button>
-            <button id="clearAiKey" type="button">Clear key</button>
-          </div>
+          <button id="testAiProvider" type="button">Test</button>
         </div>
         <div class="settings-grid">
-          <label>
-            <span>Provider</span>
-            <select id="aiProvider">
-              <option value="gemini">Gemini</option>
-              <option value="local">Local Agent</option>
-            </select>
-          </label>
-          <label>
-            <span>Model</span>
-            <input id="aiModel" type="text" placeholder="Leave blank for Codex default">
-          </label>
-          <label class="api-key-field">
-            <span>API Key</span>
-            <input id="aiApiKey" type="password" autocomplete="off" placeholder="Paste API key">
-          </label>
           <label class="local-endpoint-field">
             <span>Local Endpoint</span>
             <input id="aiLocalEndpoint" type="url" placeholder="http://127.0.0.1:32177/ask">
@@ -51,19 +35,67 @@
             <span>Local Token</span>
             <input id="aiLocalAuthToken" type="password" autocomplete="off" placeholder="paper-chat-local">
           </label>
-          <label class="debug-mode-field">
+          <label class="local-command-field">
+            <span>Terminal command</span>
+            <span class="command-row">
+              <input id="localAgentCommand" type="text" readonly>
+              <button id="copyLocalAgentCommand" type="button">Copy</button>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <div class="section-title-row">
+              <h2>Chat Models</h2>
+              <span id="chatModelsStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>Choose models shown by /model and mark the default used when a browser session starts.</p>
+          </div>
+          <button id="refreshChatModels" type="button">Refresh</button>
+        </div>
+        <div id="chatModelList" class="chat-model-list"></div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <div class="section-title-row">
+              <h2>Mode</h2>
+              <span id="aiModeStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>Debug mode generates placeholders without invoking a local CLI.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="full-width-field">
             <span>Mode</span>
             <span class="checkbox-row">
               <input id="aiDebugMode" type="checkbox">
               <span>Debug mode: use placeholder responses and skip API requests.</span>
             </span>
           </label>
-          <label class="system-prompt-field">
+        </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <div class="section-title-row">
+              <h2>System Prompt</h2>
+              <span id="aiSystemPromptStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>Applied to both single-paper and Comparative Reading requests.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="full-width-field">
             <span>System Prompt</span>
             <textarea id="aiSystemPrompt" rows="5"></textarea>
           </label>
         </div>
-        <div id="aiKeyStatus" class="status"></div>
       </section>
 
       <section>

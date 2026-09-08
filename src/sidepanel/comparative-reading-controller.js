@@ -14,7 +14,7 @@ import {
   getComparisonSettings,
   normalizeComparisonPaperLimit
 } from "../storage/comparison-settings-store.js";
-import { getAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
+import { getEffectiveAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
 import {
   applyMarkdownCircle,
@@ -293,7 +293,7 @@ export function createComparativeReadingController({
         question,
         maxPapers: state.paperLimit
       });
-      const aiSettings = await getAiSettings();
+      const aiSettings = await getEffectiveAiSettings();
       if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
         throw new Error("AI provider is not configured. Open extension Options to finish setup.");
       }
@@ -309,6 +309,7 @@ export function createComparativeReadingController({
       updatedSession = await appendComparisonMessage(session.comparisonId, {
         role: "assistant",
         text: answer.text,
+        model: answer.model,
         citedDocumentKeys: contextPack.papers.map((paper) => paper.documentKey),
         createdAt: Date.now()
       });
@@ -410,6 +411,7 @@ export function createComparativeReadingController({
       onRemovePaper: removePaper,
       onClearPapers: clearPapers,
       onOpenPaperUrl: openPaperUrl,
+      onEditUserMessage: editUserMessage,
       onToggleSaved: toggleMessageSaved,
       onDeleteUnit: deleteMessageUnit,
       onHighlightAssistantSelection: highlightAssistantSelection,
@@ -421,6 +423,32 @@ export function createComparativeReadingController({
       scrollToLatest,
       scrollToBottom
     });
+  }
+
+  async function editUserMessage(messageIndex, nextText) {
+    const index = Number(messageIndex);
+    const message = state.messages[index];
+    const text = String(nextText || "").trim();
+    if (!state.activeSessionId || !message || message.role !== "user" || message.pending || !text) {
+      return false;
+    }
+
+    const comparisonId = state.activeSessionId;
+    const nextMessages = state.messages.map((candidate, candidateIndex) => candidateIndex === index ? {
+      ...message,
+      text
+    } : { ...candidate });
+    const session = await saveComparisonMessages(comparisonId, nextMessages);
+    if (!state.active || state.activeSessionId !== comparisonId) {
+      return true;
+    }
+
+    state.messages = session?.messages || nextMessages;
+    state.sessions = await listComparisonSessions();
+    notifyComparisonActivityChanged();
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
   }
 
   function getContextReadiness() {

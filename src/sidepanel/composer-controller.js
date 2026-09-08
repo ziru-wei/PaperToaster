@@ -24,6 +24,7 @@ export function createComposerController({
   promptPresetMenuElement.addEventListener("mousedown", (event) => {
     getActiveMenu().preventBlurDismissal(event);
   });
+  syncContentState();
 
   function getText() {
     return textarea.value.trim();
@@ -33,6 +34,7 @@ export function createComposerController({
     textarea.value = "";
     routeSuggestion?.reset();
     updateNewThreadPromptHint();
+    syncContentState();
   }
 
   function focus() {
@@ -55,10 +57,15 @@ export function createComposerController({
   }
 
   function handleInput() {
+    syncContentState();
     routeSuggestion?.reset();
     getInactiveMenu()?.hide();
     getActiveMenu().update();
     updateNewThreadPromptHint();
+  }
+
+  function syncContentState() {
+    textarea.classList.toggle("has-content", textarea.value.length > 0);
   }
 
   function handleKeydown(event) {
@@ -122,9 +129,27 @@ export function createComposerController({
   }
 
   function getActiveMenu() {
+    if (isModelMenuCommand()) {
+      return promptPresetMenu;
+    }
     return usePaperMentionMenu() && paperMentionMenu
       ? paperMentionMenu
       : promptPresetMenu;
+  }
+
+  function isModelMenuCommand() {
+    const cursor = textarea.selectionStart;
+    if (cursor === null || cursor === undefined) {
+      return false;
+    }
+    const value = textarea.value;
+    const lineStart = value.lastIndexOf("\n", Math.max(0, cursor - 1)) + 1;
+    const linePrefix = value.slice(lineStart, cursor);
+    const normalizedPrefix = linePrefix.toLowerCase();
+    return /^\/model(?:\s|$)/i.test(linePrefix)
+      || (normalizedPrefix.length >= 2
+        && normalizedPrefix.length < "/model".length
+        && "/model".startsWith(normalizedPrefix));
   }
 
   function getInactiveMenu() {

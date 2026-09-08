@@ -29,6 +29,7 @@ const PAPER_GROUP_MODE = {
   LABEL: "label",
   RECENT_CONVERSATION: "recent-conversation"
 };
+const PAPER_GROUP_MODE_STORAGE_KEY = "dashboardPaperGroupMode";
 
 const state = {
   activeDocumentKey: "",
@@ -100,6 +101,11 @@ elements.groupLayoutButton.addEventListener("click", () => {
   state.paperGroupMode = state.paperGroupMode === PAPER_GROUP_MODE.LABEL
     ? PAPER_GROUP_MODE.RECENT_CONVERSATION
     : PAPER_GROUP_MODE.LABEL;
+  chrome.storage.local.set({
+    [PAPER_GROUP_MODE_STORAGE_KEY]: state.paperGroupMode
+  }).catch((error) => {
+    console.debug("[Paper Toaster] Could not save dashboard grouping mode", error);
+  });
   const groupingCriterion = getGroupingCriterion();
   if (state.sort === groupingCriterion) {
     state.sort = groupingCriterion === "label" ? "latestThread" : "label";
@@ -161,12 +167,27 @@ chrome.runtime.onMessage.addListener((message) => {
 initializeDashboard().catch((error) => {
   elements.summary.textContent = `Could not load dashboard: ${error.message || String(error)}`;
 });
-renderSortMenu();
-renderGroupLayoutButton();
 
 async function initializeDashboard() {
+  await restorePaperGroupMode().catch((error) => {
+    console.debug("[Paper Toaster] Could not restore dashboard grouping mode", error);
+  });
+  const groupingCriterion = getGroupingCriterion();
+  if (state.sort === groupingCriterion) {
+    state.sort = groupingCriterion === "label" ? "latestThread" : "label";
+  }
+  renderGroupLayoutButton();
+  renderSortMenu();
   await clearDashboardContext();
   await refreshAll();
+}
+
+async function restorePaperGroupMode() {
+  const stored = await chrome.storage.local.get(PAPER_GROUP_MODE_STORAGE_KEY);
+  const mode = stored[PAPER_GROUP_MODE_STORAGE_KEY];
+  if (Object.values(PAPER_GROUP_MODE).includes(mode)) {
+    state.paperGroupMode = mode;
+  }
 }
 
 async function refreshAll() {

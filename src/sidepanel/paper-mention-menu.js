@@ -237,6 +237,7 @@ export function createPaperMentionMenuController({
   function selectOption(option, request) {
     const value = textarea.value;
     textarea.value = `${value.slice(0, request.lineStart)}${value.slice(request.cursor)}`;
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
     textarea.focus();
     textarea.setSelectionRange(request.lineStart, request.lineStart);
     hide();

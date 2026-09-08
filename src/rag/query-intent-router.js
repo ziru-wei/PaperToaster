@@ -72,16 +72,16 @@ export function routePaperQuestion({ question = "", selectionText = "" } = {}) {
   const normalizedQuestion = normalizeQuery(question);
   const normalizedSelection = normalizeQuery(selectionText);
 
-  if (normalizedSelection) {
-    return createIntent(QUERY_INTENTS.SELECTION_EXPLAIN, "Selected text is present.");
-  }
-
   if (!normalizedQuestion) {
     return createIntent(QUERY_INTENTS.PAPER_OVERVIEW, "No focused question was provided.");
   }
 
   if (PAPER_OVERVIEW_PATTERNS.some((pattern) => pattern.test(normalizedQuestion))) {
     return createIntent(QUERY_INTENTS.PAPER_OVERVIEW, "Question asks for a whole-paper overview.");
+  }
+
+  if (normalizedSelection) {
+    return createIntent(QUERY_INTENTS.SELECTION_EXPLAIN, "Selected text is present.");
   }
 
   for (const candidate of INTENT_PATTERNS) {

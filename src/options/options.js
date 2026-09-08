@@ -6,16 +6,11 @@ import {
   saveSelectionPromptPresets
 } from "../storage/prompt-presets-store.js";
 import {
-  AI_PROVIDER_LOCAL,
-  DEFAULT_LOCAL_AUTH_TOKEN,
-  DEFAULT_LOCAL_ENDPOINT,
-  clearAiApiKey,
-  DEFAULT_AI_SETTINGS,
   getAiSettings,
-  hasConfiguredAiApiKey,
   hasConfiguredAiProvider,
   saveAiSettings
 } from "../storage/ai-settings-store.js";
+import { generateLocalAgentText, listLocalAgentModels } from "../ai/local-agent-client.js";
 import { stripStoredAssistantBoldMarkers } from "../storage/maintenance-store.js";
 import {
   MIN_COMPARISON_PAPERS,
@@ -24,17 +19,19 @@ import {
 } from "../storage/comparison-settings-store.js";
 
 const elements = {
-  aiProvider: document.querySelector("#aiProvider"),
-  aiModel: document.querySelector("#aiModel"),
-  aiApiKey: document.querySelector("#aiApiKey"),
   aiLocalEndpoint: document.querySelector("#aiLocalEndpoint"),
   aiLocalAuthToken: document.querySelector("#aiLocalAuthToken"),
   aiDebugMode: document.querySelector("#aiDebugMode"),
   aiSystemPrompt: document.querySelector("#aiSystemPrompt"),
-  saveAiSettings: document.querySelector("#saveAiSettings"),
-  useLocalCodex: document.querySelector("#useLocalCodex"),
-  clearAiKey: document.querySelector("#clearAiKey"),
-  aiKeyStatus: document.querySelector("#aiKeyStatus"),
+  aiProviderStatus: document.querySelector("#aiProviderStatus"),
+  aiModeStatus: document.querySelector("#aiModeStatus"),
+  aiSystemPromptStatus: document.querySelector("#aiSystemPromptStatus"),
+  testAiProvider: document.querySelector("#testAiProvider"),
+  localAgentCommand: document.querySelector("#localAgentCommand"),
+  copyLocalAgentCommand: document.querySelector("#copyLocalAgentCommand"),
+  chatModelsStatus: document.querySelector("#chatModelsStatus"),
+  refreshChatModels: document.querySelector("#refreshChatModels"),
+  chatModelList: document.querySelector("#chatModelList"),
   comparisonPaperLimit: document.querySelector("#comparisonPaperLimit"),
   saveComparisonSettings: document.querySelector("#saveComparisonSettings"),
   comparisonSettingsStatus: document.querySelector("#comparisonSettingsStatus"),
@@ -48,6 +45,9 @@ const elements = {
 };
 
 let savedAiSettings = null;
+let aiSettingsSaveQueue = Promise.resolve();
+let systemPromptSaveTimer = null;
+let availableChatModels = [];
 
 for (const [name, element] of Object.entries(elements)) {
   if (!element) {
@@ -59,23 +59,23 @@ elements.addPreset.addEventListener("click", () => {
   renderPresets([...readPresetsFromForm({ includeEmpty: true }), createBlankPromptPreset()]);
   setStatus("");
 });
-elements.aiProvider.addEventListener("change", () => {
-  renderAiProviderFields();
-  renderAiKeyStatus(readAiSettingsFromForm());
+elements.aiLocalEndpoint.addEventListener("change", () => {
+  queueAiSettingsSave({ localEndpoint: elements.aiLocalEndpoint.value }, "provider");
 });
-elements.aiApiKey.addEventListener("input", () => {
-  renderAiKeyStatus(readAiSettingsFromForm());
+elements.aiLocalAuthToken.addEventListener("change", () => {
+  const token = elements.aiLocalAuthToken.value.trim();
+  if (token) {
+    queueAiSettingsSave({ localAuthToken: token }, "provider", { clearTokenField: true });
+  }
 });
-elements.aiLocalEndpoint.addEventListener("input", () => {
-  renderAiKeyStatus(readAiSettingsFromForm());
+elements.aiDebugMode.addEventListener("change", () => {
+  queueAiSettingsSave({ debugMode: elements.aiDebugMode.checked }, "mode");
 });
-elements.aiLocalAuthToken.addEventListener("input", () => {
-  renderAiKeyStatus(readAiSettingsFromForm());
-});
-elements.useLocalCodex.addEventListener("click", useLocalCodexDefaults);
-elements.saveAiSettings.addEventListener("click", saveAiProviderSettings);
-elements.clearAiKey.addEventListener("click", clearAiProviderKey);
-elements.aiDebugMode.addEventListener("change", saveAiProviderSettings);
+elements.aiSystemPrompt.addEventListener("input", scheduleSystemPromptSave);
+elements.aiSystemPrompt.addEventListener("change", saveSystemPromptImmediately);
+elements.testAiProvider.addEventListener("click", testAiProvider);
+elements.copyLocalAgentCommand.addEventListener("click", copyLocalAgentCommand);
+elements.refreshChatModels.addEventListener("click", loadAvailableChatModels);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
 elements.stripStoredBoldMarkers.addEventListener("click", stripStoredBoldMarkers);
@@ -117,61 +117,7 @@ function setComparisonSettingsStatus(message, isError = false) {
 async function loadAiSettings() {
   try {
     renderAiSettings(await getAiSettings());
-  } catch (error) {
-    setStatus(error.message || String(error), true);
-  }
-}
-
-async function saveAiProviderSettings() {
-  try {
-    const existing = await getAiSettings();
-    const nextApiKey = elements.aiApiKey.value.trim() || existing.apiKey;
-    const nextLocalAuthToken = elements.aiLocalAuthToken.value.trim() || existing.localAuthToken;
-    const settings = await saveAiSettings({
-      provider: elements.aiProvider.value,
-      model: elements.aiModel.value,
-      apiKey: nextApiKey,
-      localEndpoint: elements.aiLocalEndpoint.value,
-      localAuthToken: nextLocalAuthToken,
-      debugMode: elements.aiDebugMode.checked,
-      systemPrompt: elements.aiSystemPrompt.value
-    });
-
-    savedAiSettings = settings;
-    elements.aiApiKey.value = "";
-    elements.aiLocalAuthToken.value = "";
-    renderAiKeyStatus(settings);
-    setStatus("AI settings saved.");
-  } catch (error) {
-    setStatus(error.message || String(error), true);
-  }
-}
-
-async function useLocalCodexDefaults() {
-  try {
-    const settings = await saveAiSettings({
-      ...DEFAULT_AI_SETTINGS,
-      provider: AI_PROVIDER_LOCAL,
-      model: "",
-      apiKey: "",
-      localEndpoint: DEFAULT_LOCAL_ENDPOINT,
-      localAuthToken: DEFAULT_LOCAL_AUTH_TOKEN,
-      debugMode: false
-    });
-    renderAiSettings(settings);
-    setStatus("Local Codex settings saved.");
-  } catch (error) {
-    setStatus(error.message || String(error), true);
-  }
-}
-
-async function clearAiProviderKey() {
-  try {
-    const settings = await clearAiApiKey();
-    savedAiSettings = settings;
-    elements.aiApiKey.value = "";
-    renderAiKeyStatus(settings);
-    setStatus("API key cleared.");
+    await loadAvailableChatModels();
   } catch (error) {
     setStatus(error.message || String(error), true);
   }
@@ -179,53 +125,246 @@ async function clearAiProviderKey() {
 
 function renderAiSettings(settings) {
   savedAiSettings = settings;
-  elements.aiProvider.value = settings.provider;
-  elements.aiModel.value = settings.model;
-  elements.aiApiKey.value = "";
   elements.aiLocalEndpoint.value = settings.localEndpoint || "";
   elements.aiLocalAuthToken.value = "";
   elements.aiDebugMode.checked = Boolean(settings.debugMode);
   elements.aiSystemPrompt.value = settings.systemPrompt;
-  renderAiProviderFields();
-  renderAiKeyStatus(settings);
+  elements.localAgentCommand.value = buildLocalAgentCommand();
+  renderAiSectionStatuses(settings);
 }
 
-function renderAiKeyStatus(settings) {
-  if (settings.debugMode) {
-    elements.aiKeyStatus.textContent = "Debug mode enabled. API requests are skipped.";
+function renderAiSectionStatuses(settings) {
+  setAiSectionStatus("provider", hasConfiguredAiProvider(settings) ? "✓ Auto saved" : "Configuration incomplete", !hasConfiguredAiProvider(settings));
+  setAiSectionStatus("mode", "✓ Auto saved");
+  setAiSectionStatus("systemPrompt", "✓ Auto saved");
+}
+
+function scheduleSystemPromptSave() {
+  clearTimeout(systemPromptSaveTimer);
+  elements.aiSystemPromptStatus.textContent = "Saving...";
+  systemPromptSaveTimer = setTimeout(saveSystemPromptImmediately, 400);
+}
+
+function saveSystemPromptImmediately() {
+  clearTimeout(systemPromptSaveTimer);
+  systemPromptSaveTimer = null;
+  queueAiSettingsSave({ systemPrompt: elements.aiSystemPrompt.value }, "systemPrompt");
+}
+
+function queueAiSettingsSave(patch, section, options = {}) {
+  setAiSectionStatus(section, "Saving...");
+  aiSettingsSaveQueue = aiSettingsSaveQueue
+    .catch(() => {})
+    .then(async () => {
+      const base = savedAiSettings || await getAiSettings();
+      savedAiSettings = await saveAiSettings({ ...base, ...patch });
+      if (options.clearTokenField) {
+        elements.aiLocalAuthToken.value = "";
+      }
+      renderAiSectionStatuses(savedAiSettings);
+      if (section === "models") {
+        setAiSectionStatus("models", "✓ Auto saved");
+      }
+    })
+    .catch((error) => {
+      setAiSectionStatus(section, error.message || String(error), true);
+    });
+  return aiSettingsSaveQueue;
+}
+
+function setAiSectionStatus(section, message, isError = false) {
+  const status = section === "mode"
+    ? elements.aiModeStatus
+    : section === "systemPrompt"
+      ? elements.aiSystemPromptStatus
+      : section === "models"
+        ? elements.chatModelsStatus
+      : elements.aiProviderStatus;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+  status.classList.toggle("saving", message === "Saving...");
+}
+
+async function loadAvailableChatModels() {
+  elements.refreshChatModels.disabled = true;
+  setAiSectionStatus("models", "Loading...");
+  try {
+    await aiSettingsSaveQueue.catch(() => {});
+    const settings = savedAiSettings || await getAiSettings();
+    availableChatModels = await listLocalAgentModels({
+      endpoint: settings.localEndpoint,
+      authToken: settings.localAuthToken
+    });
+    if (!availableChatModels.length) {
+      throw new Error("The local bridge returned no available models.");
+    }
+    if (!settings.enabledChatModels.length) {
+      const defaultModel = chooseInitialDefaultModel(availableChatModels, settings);
+      await queueAiSettingsSave({
+        enabledChatModels: availableChatModels.map(toModelSelection),
+        localAgentProfile: defaultModel.profile,
+        model: defaultModel.id,
+        reasoningEffort: defaultModel.reasoningEffort
+      }, "models");
+    }
+    renderChatModels();
+    setAiSectionStatus("models", "✓ Auto saved");
+  } catch (error) {
+    elements.chatModelList.textContent = error.message || String(error);
+    setAiSectionStatus("models", "Unavailable", true);
+  } finally {
+    elements.refreshChatModels.disabled = false;
+  }
+}
+
+function renderChatModels() {
+  elements.chatModelList.textContent = "";
+  for (const profile of ["codex", "antigravity"]) {
+    const models = availableChatModels.filter((model) => model.profile === profile);
+    if (!models.length) continue;
+    const group = document.createElement("div");
+    group.className = "model-profile-group";
+    const heading = document.createElement("h3");
+    heading.textContent = profile === "codex" ? "Codex" : "Antigravity / Gemini";
+    group.append(heading);
+    for (const model of models) group.append(createChatModelRow(model));
+    elements.chatModelList.append(group);
+  }
+}
+
+function createChatModelRow(model) {
+  const row = document.createElement("div");
+  row.className = "chat-model-row";
+  const enabled = document.createElement("input");
+  enabled.type = "checkbox";
+  enabled.checked = isChatModelEnabled(model);
+  enabled.setAttribute("aria-label", `Show ${model.label} in chat menu`);
+  const name = document.createElement("span");
+  name.className = "chat-model-name";
+  name.textContent = model.label;
+  const id = document.createElement("span");
+  id.className = "chat-model-id";
+  id.textContent = model.id;
+  name.append(id);
+  const defaultLabel = document.createElement("label");
+  defaultLabel.className = "default-model-label";
+  const defaultInput = document.createElement("input");
+  defaultInput.type = "radio";
+  defaultInput.name = "defaultChatModel";
+  defaultInput.checked = isDefaultChatModel(model);
+  defaultInput.disabled = !enabled.checked;
+  defaultLabel.append(defaultInput, "Default");
+  enabled.addEventListener("change", () => updateEnabledModel(model, enabled.checked));
+  defaultInput.addEventListener("change", () => setDefaultChatModel(model));
+  row.append(enabled, name, defaultLabel);
+  return row;
+}
+
+async function updateEnabledModel(model, enabled) {
+  const current = savedAiSettings.enabledChatModels;
+  const key = modelKey(model);
+  let next = enabled
+    ? [...current.filter((item) => modelKey(item) !== key), toModelSelection(model)]
+    : current.filter((item) => modelKey(item) !== key);
+  if (!next.length) {
+    window.alert("Keep at least one model in the chat menu.");
+    renderChatModels();
     return;
   }
-
-  if (settings.provider === AI_PROVIDER_LOCAL) {
-    elements.aiKeyStatus.textContent = hasConfiguredAiProvider(settings)
-      ? "Local agent endpoint and token configured."
-      : "Local agent endpoint or token missing.";
-    return;
+  const patch = { enabledChatModels: next };
+  if (!next.some((item) => item.profile === savedAiSettings.localAgentProfile
+    && item.model === savedAiSettings.model
+    && item.reasoningEffort === savedAiSettings.reasoningEffort)) {
+    patch.localAgentProfile = next[0].profile;
+    patch.model = next[0].model;
+    patch.reasoningEffort = next[0].reasoningEffort;
   }
-
-  elements.aiKeyStatus.textContent = hasConfiguredAiApiKey(settings)
-    ? "API key configured."
-    : "No API key configured.";
+  await queueAiSettingsSave(patch, "models");
+  renderChatModels();
 }
 
-function renderAiProviderFields() {
-  const usesLocalProvider = elements.aiProvider.value === AI_PROVIDER_LOCAL;
-  elements.aiApiKey.closest("label").hidden = usesLocalProvider;
-  elements.aiLocalEndpoint.closest("label").hidden = !usesLocalProvider;
-  elements.aiLocalAuthToken.closest("label").hidden = !usesLocalProvider;
-  elements.clearAiKey.hidden = usesLocalProvider;
+async function setDefaultChatModel(model) {
+  await queueAiSettingsSave({
+    localAgentProfile: model.profile,
+    model: model.id,
+    reasoningEffort: model.reasoningEffort
+  }, "models");
+  renderChatModels();
 }
 
-function readAiSettingsFromForm() {
+function isChatModelEnabled(model) {
+  return savedAiSettings.enabledChatModels.some((item) => modelKey(item) === modelKey(model));
+}
+
+function isDefaultChatModel(model) {
+  return savedAiSettings.localAgentProfile === model.profile
+    && savedAiSettings.model === model.id
+    && savedAiSettings.reasoningEffort === String(model.reasoningEffort || "");
+}
+
+function chooseInitialDefaultModel(models, settings) {
+  return models.find((model) => model.profile === settings.localAgentProfile && model.id === settings.model)
+    || models.find((model) => model.isProviderDefault)
+    || models[0];
+}
+
+function toModelSelection(model) {
   return {
-    provider: elements.aiProvider.value,
-    model: elements.aiModel.value,
-    apiKey: elements.aiApiKey.value.trim() || savedAiSettings?.apiKey || "",
-    localEndpoint: elements.aiLocalEndpoint.value,
-    localAuthToken: elements.aiLocalAuthToken.value.trim() || savedAiSettings?.localAuthToken || "",
-    debugMode: elements.aiDebugMode.checked,
-    systemPrompt: elements.aiSystemPrompt.value
+    profile: model.profile,
+    model: model.id,
+    reasoningEffort: model.reasoningEffort || "",
+    label: model.label || model.id
   };
+}
+
+function modelKey(model) {
+  return `${model.profile}:${model.model || model.id}:${model.reasoningEffort || ""}`;
+}
+
+async function testAiProvider() {
+  elements.testAiProvider.disabled = true;
+  elements.aiProviderStatus.title = "";
+  setAiSectionStatus("provider", "Testing...");
+  try {
+    await aiSettingsSaveQueue.catch(() => {});
+    const settings = savedAiSettings || await getAiSettings();
+    await generateLocalAgentText({
+      endpoint: settings.localEndpoint,
+      authToken: settings.localAuthToken,
+      localAgentProfile: settings.localAgentProfile,
+      model: settings.model,
+      reasoningEffort: settings.reasoningEffort,
+      prompt: "Reply with exactly: Paper Toaster connection ready.",
+      systemPrompt: "This is a connection test. Follow the requested response exactly.",
+      contextPack: null,
+      conversationMessages: []
+    });
+    elements.aiProviderStatus.title = "";
+    setAiSectionStatus("provider", "✓ Connection ready");
+  } catch (error) {
+    const message = error.message || String(error);
+    elements.aiProviderStatus.title = message;
+    setAiSectionStatus("provider", "Test failed", true);
+    window.alert(message);
+  } finally {
+    elements.testAiProvider.disabled = false;
+  }
+}
+
+async function copyLocalAgentCommand() {
+  try {
+    await navigator.clipboard.writeText(elements.localAgentCommand.value);
+    elements.copyLocalAgentCommand.textContent = "Copied";
+    setTimeout(() => {
+      elements.copyLocalAgentCommand.textContent = "Copy";
+    }, 1200);
+  } catch (error) {
+    setAiSectionStatus("provider", `Could not copy command: ${error.message || String(error)}`, true);
+  }
+}
+
+function buildLocalAgentCommand() {
+  return 'cd "/Users/ziru/Documents/GitHub/chromePaperChat" && PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js';
 }
 
 async function loadPresets() {

@@ -1,14 +1,9 @@
-import { generateGeminiText } from "./gemini-client.js";
 import { generateLocalAgentText } from "./local-agent-client.js";
 import { formatSelectionContextForPrompt, getPaperReadingPolicyPrompt } from "./selection-prompt.js";
-import {
-  AI_PROVIDER_GEMINI,
-  AI_PROVIDER_LOCAL,
-  DEFAULT_AI_SETTINGS
-} from "../storage/ai-settings-store.js";
+import { AI_PROVIDER_LOCAL, DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
 
 export async function answerSelectionQuestion({ aiSettings, contextPack, conversationMessages = [], signal }) {
-  const provider = aiSettings?.provider || AI_PROVIDER_GEMINI;
+  const provider = aiSettings?.provider || AI_PROVIDER_LOCAL;
   const prompt = buildSelectionQuestionPrompt({
     contextPack,
     systemPrompt: aiSettings?.systemPrompt,
@@ -24,20 +19,13 @@ export async function answerSelectionQuestion({ aiSettings, contextPack, convers
     };
   }
 
-  if (provider === AI_PROVIDER_GEMINI) {
-    return generateGeminiText({
-      apiKey: aiSettings.apiKey,
-      model: aiSettings.model,
-      prompt,
-      signal
-    });
-  }
-
   if (provider === AI_PROVIDER_LOCAL) {
     return generateLocalAgentText({
       endpoint: aiSettings.localEndpoint,
       authToken: aiSettings.localAuthToken,
+      localAgentProfile: aiSettings.localAgentProfile,
       model: aiSettings.model,
+      reasoningEffort: aiSettings.reasoningEffort,
       prompt,
       systemPrompt: aiSettings?.systemPrompt,
       contextPack,

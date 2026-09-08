@@ -441,6 +441,7 @@ function normalizeChatMessage(message, index = 0) {
   return {
     role,
     text,
+    model: role === "assistant" ? normalizeMessageModel(message?.model) : "",
     selectionText,
     createdAt: Number(message?.createdAt) || Date.now() + index,
     isSaved: isMessageSaved(message),
@@ -527,6 +528,7 @@ async function getThreadMessages(db, threadId) {
     .map((message) => ({
       role: message.role,
       text: message.text,
+      model: message.model || "",
       selectionText: message.selectionText || "",
       createdAt: message.createdAt || null,
       isSaved: isMessageSaved(message),
@@ -543,6 +545,7 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
       sequence: index,
       role: message.role,
       text: message.text,
+      model: message.model || "",
       selectionText: message.selectionText || "",
       isSaved: isMessageSaved(message),
       isPinned: isMessageSaved(message) && isMessagePinned(message),
@@ -558,6 +561,10 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
 
 function isMessageSaved(message) {
   return Boolean(message?.isSaved);
+}
+
+function normalizeMessageModel(model) {
+  return String(model || "").replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
 function isMessagePinned(message) {

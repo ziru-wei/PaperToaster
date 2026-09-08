@@ -27,12 +27,14 @@ const server = http.createServer(async (request, response) => {
     const title = body.contextPack?.paper?.title || "Untitled paper";
     const selection = body.contextPack?.selection?.text || "";
     const retrievedCount = body.contextPack?.context?.retrieved?.length || 0;
+    const profile = String(body.localAgentProfile || "codex");
 
     writeJson(response, request, 200, {
-      model: "local-agent-mock",
+      model: `local-agent-mock:${profile}`,
       text: [
         "Local agent mock response.",
         "",
+        `CLI profile: ${profile}`,
         `Paper: ${title}`,
         `Prompt characters: ${prompt.length}`,
         `Selection characters: ${String(selection).length}`,

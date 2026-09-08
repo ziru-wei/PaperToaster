@@ -1,4 +1,4 @@
-const PAPER_LABEL_TONE_COUNT = 8;
+const PAPER_LABEL_TONE_COUNT = 5;
 
 export function createPaperLabelControl({
   paper,

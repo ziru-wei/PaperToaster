@@ -15,6 +15,7 @@ export function renderComparativeReadingPanel({
   onRemovePaper,
   onClearPapers,
   onOpenPaperUrl,
+  onEditUserMessage,
   onToggleSaved,
   onDeleteUnit,
   onHighlightAssistantSelection,
@@ -62,6 +63,7 @@ export function renderComparativeReadingPanel({
   });
   elements.conversationThread.classList.remove("comparison-empty-thread");
   renderConversationMessages(elements.conversationThread, messages, {
+    onEditUserMessage,
     onToggleSaved,
     onDeleteUnit,
     onHighlightAssistantSelection,

@@ -10,7 +10,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   chrome.contextMenus.create({
     id: CAPTURE_SELECTION_MENU_ID,
-    title: "### Capture selection ###",
+    title: "------------------------------>",
     contexts: ["selection"]
   });
 });

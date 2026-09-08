@@ -1,7 +1,9 @@
 export async function generateLocalAgentText({
   endpoint,
   authToken,
+  localAgentProfile,
   model,
+  reasoningEffort,
   prompt,
   systemPrompt,
   contextPack,
@@ -32,8 +34,10 @@ export async function generateLocalAgentText({
     },
     body: JSON.stringify({
       version: 1,
-      source: "pdf-ai-inspector",
+      source: "paper-toaster",
+      localAgentProfile: String(localAgentProfile || "").trim(),
       model: String(model || "").trim(),
+      reasoningEffort: String(reasoningEffort || "").trim(),
       prompt: normalizedPrompt,
       systemPrompt: String(systemPrompt || "").trim(),
       contextPack,
@@ -57,6 +61,24 @@ export async function generateLocalAgentText({
     model: extractLocalAgentModel(data) || "local-agent",
     raw: data
   };
+}
+
+export async function listLocalAgentModels({ endpoint, authToken, signal }) {
+  const url = new URL(String(endpoint || "").trim());
+  url.pathname = url.pathname.replace(/\/ask\/?$/, "/models");
+  url.search = "";
+  url.hash = "";
+  const response = await fetch(url.href, {
+    headers: { "Authorization": `Bearer ${String(authToken || "").trim()}` },
+    signal
+  });
+  const data = await readLocalAgentResponse(response);
+  if (!response.ok) {
+    throw new Error(formatLocalAgentError(data, response));
+  }
+  return (Array.isArray(data?.models) ? data.models : []).filter((model) => {
+    return model?.id && (model.profile === "codex" || model.profile === "antigravity");
+  });
 }
 
 async function readLocalAgentResponse(response) {

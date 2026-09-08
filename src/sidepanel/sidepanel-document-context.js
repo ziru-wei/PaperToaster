@@ -331,6 +331,9 @@ export function createSidePanelDocumentContext({
   }
 
   function downloadCurrentParserArtifacts() {
+    if (!window.confirm("Download this paper's parser artifacts as a ZIP file?")) {
+      return;
+    }
     try {
       downloadParserArtifacts(currentDocument);
     } catch (error) {

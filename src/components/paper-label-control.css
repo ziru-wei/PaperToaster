@@ -25,14 +25,11 @@
 .paper-group-button.empty { width: 17px; padding: 0; color: #94a3b8; background: rgba(226, 232, 240, 0.42); text-align: center; }
 .paper-group-button.empty:hover { color: #475569; background: rgba(203, 213, 225, 0.72); }
 
-.paper-group-tone-0, .paper-group-option.paper-group-tone-0 { --paper-label-color: #6f5746; --paper-label-background: #e7d9cf; color: var(--paper-label-color); background: var(--paper-label-background); }
+.paper-group-tone-0, .paper-group-option.paper-group-tone-0 { --paper-label-color: #5a5487; --paper-label-background: #d4cef1; color: var(--paper-label-color); background: var(--paper-label-background); }
 .paper-group-tone-1, .paper-group-option.paper-group-tone-1 { --paper-label-color: #8a551d; --paper-label-background: #fad0a5; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-2, .paper-group-option.paper-group-tone-2 { --paper-label-color: #735f15; --paper-label-background: #f5df8e; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-3, .paper-group-option.paper-group-tone-3 { --paper-label-color: #3d6847; --paper-label-background: #c7e3cb; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-4, .paper-group-option.paper-group-tone-4 { --paper-label-color: #2f6278; --paper-label-background: #bddfec; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-5, .paper-group-option.paper-group-tone-5 { --paper-label-color: #5a5487; --paper-label-background: #d4cef1; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-6, .paper-group-option.paper-group-tone-6 { --paper-label-color: #854766; --paper-label-background: #efc7d8; color: var(--paper-label-color); background: var(--paper-label-background); }
-.paper-group-tone-7, .paper-group-option.paper-group-tone-7 { --paper-label-color: #914441; --paper-label-background: #f3c2be; color: var(--paper-label-color); background: var(--paper-label-background); }
+.paper-group-tone-2, .paper-group-option.paper-group-tone-2 { --paper-label-color: #3d6847; --paper-label-background: #c7e3cb; color: var(--paper-label-color); background: var(--paper-label-background); }
+.paper-group-tone-3, .paper-group-option.paper-group-tone-3 { --paper-label-color: #735f15; --paper-label-background: #f5df8e; color: var(--paper-label-color); background: var(--paper-label-background); }
+.paper-group-tone-4, .paper-group-option.paper-group-tone-4 { --paper-label-color: #854766; --paper-label-background: #efc7d8; color: var(--paper-label-color); background: var(--paper-label-background); }
 
 .paper-group-editor {
   position: absolute;

@@ -49,6 +49,15 @@ export function renderConversationMessages(threadElement, messages, options = {}
     }
 
     item.append(text);
+    if (message.role === "user" && !message.pending && typeof options.onEditUserMessage === "function") {
+      item.append(createUserMessageMetaRow({
+        item,
+        message,
+        messageIndex,
+        textElement: text,
+        onEditUserMessage: options.onEditUserMessage
+      }));
+    }
     if (message.role === "assistant" && !message.pending) {
       if (typeof options.onHighlightAssistantSelection === "function") {
         const editBar = createAssistantEditBar({
@@ -76,6 +85,153 @@ export function renderConversationMessages(threadElement, messages, options = {}
   });
 
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
+}
+
+function createUserMessageMetaRow({ item, message, messageIndex, textElement, onEditUserMessage }) {
+  const row = document.createElement("div");
+  row.className = "conversation-user-meta";
+
+  const time = document.createElement("time");
+  time.className = "conversation-user-time";
+  time.dateTime = new Date(Number(message.createdAt) || Date.now()).toISOString();
+  time.textContent = formatConversationMessageTime(message.createdAt);
+
+  const editButton = createConversationActionButton({
+    className: "conversation-user-edit-button",
+    iconClassName: "conversation-user-edit-icon",
+    title: "Edit question"
+  });
+  editButton.addEventListener("click", () => {
+    if (item.classList.contains("editing-user-message")) {
+      confirmUserMessageEdit({ item, messageIndex, onEditUserMessage });
+      return;
+    }
+    beginUserMessageEdit({
+      item,
+      message,
+      messageIndex,
+      textElement,
+      editButton,
+      onEditUserMessage
+    });
+  });
+
+  row.append(time, editButton);
+  return row;
+}
+
+function beginUserMessageEdit({
+  item,
+  message,
+  messageIndex,
+  textElement,
+  editButton,
+  onEditUserMessage
+}) {
+  const editor = document.createElement("textarea");
+  editor.className = "conversation-user-editor";
+  editor.value = String(message.text || "");
+  editor.rows = 1;
+  editor.setAttribute("aria-label", "Edit question");
+  const bubbleWidth = textElement.getBoundingClientRect().width;
+  if (bubbleWidth > 0) {
+    editor.style.width = `${Math.max(140, bubbleWidth)}px`;
+  }
+
+  item.classList.add("editing-user-message");
+  textElement.hidden = true;
+  textElement.after(editor);
+  editButton.classList.add("confirm");
+  editButton.setAttribute("aria-label", "Confirm question edit");
+  resizeUserMessageEditor(editor);
+  editor.focus();
+  editor.setSelectionRange(editor.value.length, editor.value.length);
+
+  editor.addEventListener("input", () => resizeUserMessageEditor(editor));
+  editor.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault();
+      confirmUserMessageEdit({
+        item,
+        messageIndex,
+        onEditUserMessage
+      });
+      return;
+    }
+    if (event.key !== "Escape") {
+      return;
+    }
+    event.preventDefault();
+    cancelUserMessageEdit({ item, textElement, editButton });
+  });
+}
+
+async function confirmUserMessageEdit({ item, messageIndex, onEditUserMessage }) {
+  const editor = item.querySelector(".conversation-user-editor");
+  const editButton = item.querySelector(".conversation-user-edit-button");
+  const nextText = String(editor?.value || "").trim();
+  if (!editor || !editButton || !nextText) {
+    editor?.focus();
+    return;
+  }
+
+  editor.disabled = true;
+  editButton.disabled = true;
+  try {
+    const saved = await onEditUserMessage(messageIndex, nextText);
+    if (saved === false) {
+      throw new Error("Question is no longer available for editing.");
+    }
+  } catch (error) {
+    editor.disabled = false;
+    editButton.disabled = false;
+    editor.focus();
+    console.debug("[Paper Toaster] Could not edit user question", error);
+  }
+}
+
+function cancelUserMessageEdit({ item, textElement, editButton }) {
+  item.querySelector(".conversation-user-editor")?.remove();
+  item.classList.remove("editing-user-message");
+  textElement.hidden = false;
+  editButton.classList.remove("confirm");
+  editButton.setAttribute("aria-label", "Edit question");
+  editButton.focus();
+}
+
+function resizeUserMessageEditor(editor) {
+  editor.style.height = "auto";
+  editor.style.height = `${editor.scrollHeight}px`;
+}
+
+function formatConversationMessageTime(value) {
+  const date = new Date(Number(value));
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
+
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const time = date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  if (date.toDateString() === now.toDateString()) {
+    return `Today ${time}`;
+  }
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday ${time}`;
+  }
+  return `${date.toLocaleDateString([], { month: "short", day: "2-digit" })} ${time}`;
 }
 
 function isQuestionInSavedUnit(messages, messageIndex) {
@@ -1116,7 +1272,8 @@ function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDele
   const copyButton = createConversationActionButton({
     className: "conversation-copy-button",
     iconClassName: "conversation-copy-icon",
-    title: "Copy response"
+    title: "Copy response",
+    tooltip: String(message.model || "Model unavailable")
   });
   copyButton.addEventListener("click", async () => {
     try {
@@ -1136,11 +1293,14 @@ function isMessageSaved(message) {
   return Boolean(message?.isSaved);
 }
 
-function createConversationActionButton({ className, iconClassName, title, pressed = null }) {
+function createConversationActionButton({ className, iconClassName, title, tooltip = "", pressed = null }) {
   const button = document.createElement("button");
   button.className = `conversation-action-button ${className}`;
   button.type = "button";
   button.setAttribute("aria-label", title);
+  if (tooltip) {
+    button.title = tooltip;
+  }
   if (pressed !== null) {
     button.setAttribute("aria-pressed", String(pressed));
   }

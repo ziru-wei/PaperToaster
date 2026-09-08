@@ -21,7 +21,7 @@ Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from
 - Stores test-compatible outline and parser diagnostics with the final Markdown.
 - Downloads `outline.json`, `debug.json`, and `output.md` as one local ZIP from the single-paper header.
 - Captures the latest selected text from the current PDF tab when available.
-- Adds a right-click `### Capture selection ###` menu item for selected text.
+- Adds a right-click `------------------------------>` menu item for selected text.
 - Answers selected-text questions through a lightweight selection-grounded context pack, using the configured AI provider.
 - Shows selected-text AI questions and answers as a conversation thread for the current selection.
 - Persists each active conversation thread by canonical paper key in IndexedDB, so switching tabs does not erase the paper's chat memory.
@@ -44,7 +44,7 @@ Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the sto
 5. Open a PDF, for example an arXiv PDF or the ACM test URL from `guideline.md`.
 6. Click the extension icon to open the side panel.
 7. The active PDF loads automatically. Click the reload icon in the upper-right corner only when you want to force a fresh parse.
-8. Select text in the PDF viewer, then use the right-click `### Capture selection ###` menu item.
+8. Select text in the PDF viewer, then use the right-click `------------------------------>` menu item.
 9. Enter a question, or type `/` to choose a prompt preset, then press Enter.
 
 ## Notes
@@ -61,9 +61,9 @@ Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the sto
 - Selection context preparation is local and lightweight. It locates the selected text in final Markdown, adds nearby context, then adds keyword-retrieved paper context.
 - Conversation history is stored by canonical paper key in IndexedDB. It reloads when that PDF link becomes active again.
 - Selection question presets are stored in `chrome.storage.local` and can be edited from the extension Options page.
-- AI provider settings are local to the installed browser profile. The API key is not rendered back into the Options page after saving; paste a new key to replace it, or clear it from Options. The system prompt is editable from the same page.
+- Local-agent settings are local to the installed browser profile and auto-save from Options. AI Provider, Mode, and System Prompt are independent sections; the saved bearer token is not rendered back into the token field.
 - Debug mode still appends user and placeholder assistant messages to the active conversation thread, so it can be used to test tab switching and multi-thread storage without spending model tokens.
-- The selected-text answer flow currently uses Gemini's `generateContent` REST API through a small provider adapter.
+- Single-paper and Comparative Reading answers use the token-protected local bridge with a selectable Codex CLI or Antigravity CLI profile.
 - The production parser adapter lives in `src/parsers/outline-guided-markdown-parser.js`; its deterministic reconstruction logic lives in `src/pdf/outline-guided-core.js`.
 - If automatic loading fails with a content-type or request error, test with a direct arXiv PDF URL first.
 - Selection capture is scoped to the current tab and resets when that tab navigates. The right-click menu uses the browser-provided selected text.

@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Paper Toaster</title>
+    <link rel="stylesheet" href="../../vendor/markdown-renderer/katex.min.css">
     <link rel="stylesheet" href="../components/paper-label-control.css">
     <link rel="stylesheet" href="./sidepanel.css">
   </head>
@@ -42,15 +43,15 @@
             <div id="conversationThreadWheel" class="thread-wheel" aria-label="Conversation history" hidden></div>
           </div>
           <div class="title-row">
+            <button id="openPaperUrl" class="mini-icon-button title-link-button" type="button" title="Open paper" aria-label="Open paper" disabled>
+              <span class="icon-mask open-paper-icon" aria-hidden="true"></span>
+            </button>
+            <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
             <span id="contextReadyIndicator" class="context-ready-indicator loading" title="Preparing context" aria-label="Preparing context">
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
             </span>
-            <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
-            <button id="openPaperUrl" class="mini-icon-button title-link-button" type="button" title="Open paper" aria-label="Open paper" disabled>
-              <span class="icon-mask open-paper-icon" aria-hidden="true"></span>
-            </button>
           </div>
           <div class="paper-meta-row">
             <button id="documentStar" class="document-star" type="button" title="Star paper" aria-label="Star paper" disabled>
@@ -72,7 +73,7 @@
 | Feed me a Paper, please. |
 '-------------v------------'</pre>
           </div>
-          <img class="idle-icon toaster-empty-icon" src="../assets/extension/icon-128.png" alt="">
+          <img id="idleOpenDashboard" class="idle-icon toaster-empty-icon" src="../assets/extension/icon-128.png" alt="" role="button" tabindex="0" aria-label="Open Paper Toaster dashboard">
         </div>
         <div id="conversationThread" class="conversation-thread" hidden></div>
         <div class="composer">
@@ -92,6 +93,8 @@
               <div class="prompt-field">
                 <div id="routeSuggestion" class="route-suggestion" aria-live="polite" hidden></div>
                 <textarea id="selectionQuestion" rows="4" placeholder="Type / for prompts"></textarea>
+                <span id="modelCommandCompletion" class="model-command-completion" aria-hidden="true" hidden></span>
+                <span id="currentModelIndicator" class="current-model-indicator" hidden></span>
                 <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden>Press ↵ to start a new thread</div>
                 <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
               </div>

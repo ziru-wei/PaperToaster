@@ -58,6 +58,8 @@ const selectionPanel = createSelectionPanelController({
 const promptPresetMenu = createPromptPresetMenuController({
   textarea: elements.selectionQuestion,
   menuElement: elements.promptPresetMenu,
+  commandCompletionElement: elements.modelCommandCompletion,
+  modelIndicator: elements.currentModelIndicator,
   onError: (error) => console.debug("[PDF AI] Prompt presets unavailable", error)
 });
 
@@ -156,6 +158,14 @@ composer = createComposerController({
 });
 
 elements.openDashboard.addEventListener("click", openDashboard);
+elements.idleOpenDashboard.addEventListener("click", openDashboard);
+elements.idleOpenDashboard.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  openDashboard();
+});
 const savedQaToggleDrag = createFloatingButtonPositionController({
   button: elements.savedQaControls,
   storageKey: SAVED_QA_TOGGLE_TOP_KEY

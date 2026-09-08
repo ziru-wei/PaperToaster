@@ -7,7 +7,7 @@ import {
   transactionDone
 } from "./paper-database.js";
 
-const PAPER_GROUP_TONE_COUNT = 8;
+const PAPER_GROUP_TONE_COUNT = 5;
 
 export async function listLibraryPapers(options = {}) {
   const db = await openPaperDatabase();

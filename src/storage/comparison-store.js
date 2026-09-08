@@ -274,6 +274,7 @@ function rewriteComparisonMessages(store, { comparisonId, messages, now, previou
       sequence: index,
       role: message.role,
       text: message.text,
+      model: message.model || "",
       citedDocumentKeys: message.citedDocumentKeys || [],
       isSaved: isComparisonMessageSaved(message),
       createdAt: message.createdAt || now + index,
@@ -313,6 +314,7 @@ function normalizeComparisonMessage(message) {
     comparisonId: String(message?.comparisonId || "").trim(),
     role,
     text,
+    model: role === "assistant" ? normalizeMessageModel(message?.model) : "",
     citedDocumentKeys: normalizeDocumentKeys(message?.citedDocumentKeys || []),
     isSaved: isComparisonMessageSaved(message),
     sequence: Number(message?.sequence) || 0,
@@ -322,6 +324,10 @@ function normalizeComparisonMessage(message) {
 
 function isComparisonMessageSaved(message) {
   return Boolean(message?.isSaved);
+}
+
+function normalizeMessageModel(model) {
+  return String(model || "").replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
 function normalizeDocumentKeys(documentKeys) {

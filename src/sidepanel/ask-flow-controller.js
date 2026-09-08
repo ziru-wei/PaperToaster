@@ -1,7 +1,7 @@
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
 import { formatSelectionContextForPrompt } from "../ai/selection-prompt.js";
 import { buildSelectionContextPack } from "../pdf/selection-context.js";
-import { getAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
+import { getEffectiveAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { createLoadingMessageRotator, getInitialLoadingMessage } from "./loading-messages.js";
 import { notifyLibraryPaperActivityChanged } from "./paper-actions-controller.js";
 
@@ -80,7 +80,7 @@ export function createAskFlowController({
       getComposer().clear();
       selectionPanel.clearComposerSelection();
 
-      const aiSettings = await getAiSettings();
+      const aiSettings = await getEffectiveAiSettings();
       if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
         throw new Error("AI provider is not configured. Open extension Options to finish setup.");
       }
@@ -102,7 +102,8 @@ export function createAskFlowController({
 
       const assistantMessage = {
         role: "assistant",
-        text: answer.text
+        text: answer.text,
+        model: answer.model
       };
       const persistedMessages = [...(askSnapshot?.messages || previousMessages), assistantMessage];
 

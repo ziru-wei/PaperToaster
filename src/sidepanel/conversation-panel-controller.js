@@ -906,6 +906,7 @@ export function createConversationPanelController({
     }
 
     renderConversationMessages(threadElement, messages, {
+      onEditUserMessage: editUserMessage,
       onToggleSaved: toggleMessageSaved,
       onDeleteUnit: deleteMessageUnit,
       onHighlightAssistantSelection: highlightAssistantSelection,
@@ -919,6 +920,37 @@ export function createConversationPanelController({
       scrollToLatest.scrollToBottom();
     }
     window.requestAnimationFrame(scrollToLatest.update);
+  }
+
+  async function editUserMessage(messageIndex, nextText) {
+    const index = Number(messageIndex);
+    const message = messages[index];
+    const text = String(nextText || "").trim();
+    if (!message || message.role !== "user" || message.pending || !text) {
+      return false;
+    }
+
+    const requestId = documentRequestId;
+    const scopedUrl = threadUrl;
+    const scopedThreadId = activeThreadId;
+    const nextMessages = messages.map((candidate, candidateIndex) => candidateIndex === index ? {
+      ...message,
+      text
+    } : { ...candidate });
+    const savedThread = await saveStoredChatThread(scopedUrl, {
+      threadId: scopedThreadId,
+      url: scopedUrl,
+      messages: nextMessages.filter((candidate) => !candidate.pending)
+    });
+    if (requestId !== documentRequestId || scopedUrl !== threadUrl || scopedThreadId !== activeThreadId) {
+      return true;
+    }
+
+    messages = savedThread.messages || nextMessages;
+    render({ scrollToBottom: false });
+    await refreshThreadList(requestId);
+    onChange?.();
+    return true;
   }
 
   function renderThreadList() {

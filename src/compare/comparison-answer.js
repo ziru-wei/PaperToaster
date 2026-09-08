@@ -1,10 +1,5 @@
-import { generateGeminiText } from "../ai/gemini-client.js";
 import { generateLocalAgentText } from "../ai/local-agent-client.js";
-import {
-  AI_PROVIDER_GEMINI,
-  AI_PROVIDER_LOCAL,
-  DEFAULT_AI_SETTINGS
-} from "../storage/ai-settings-store.js";
+import { AI_PROVIDER_LOCAL, DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
 import { buildComparisonPrompt } from "./comparison-prompt.js";
 
 export async function answerComparisonQuestion({
@@ -29,20 +24,13 @@ export async function answerComparisonQuestion({
     };
   }
 
-  if (provider === AI_PROVIDER_GEMINI) {
-    return generateGeminiText({
-      apiKey: aiSettings.apiKey,
-      model: aiSettings.model,
-      prompt,
-      signal
-    });
-  }
-
   if (provider === AI_PROVIDER_LOCAL) {
     return generateLocalAgentText({
       endpoint: aiSettings.localEndpoint,
       authToken: aiSettings.localAuthToken,
+      localAgentProfile: aiSettings.localAgentProfile,
       model: aiSettings.model,
+      reasoningEffort: aiSettings.reasoningEffort,
       prompt,
       systemPrompt: aiSettings?.systemPrompt,
       contextPack,

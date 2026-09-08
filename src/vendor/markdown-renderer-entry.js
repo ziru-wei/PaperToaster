@@ -1,5 +1,6 @@
 import markdownit from "markdown-it";
 import DOMPurify from "dompurify";
+import katex from "katex";
 
 let purifier = null;
 
@@ -9,6 +10,183 @@ const markdown = markdownit({
   breaks: false,
   typographer: false
 });
+
+installMathRules(markdown);
+installContextCitationRule(markdown);
+
+function installContextCitationRule(markdownInstance) {
+  markdownInstance.core.ruler.after("inline", "paper_context_citation", (state) => {
+    state.tokens.forEach((blockToken) => {
+      if (!Array.isArray(blockToken.children)) {
+        return;
+      }
+      blockToken.children = blockToken.children.flatMap((token) => (
+        token.type === "text" ? splitContextCitationToken(state.Token, token) : token
+      ));
+    });
+  });
+}
+
+function splitContextCitationToken(Token, token) {
+  const citationPattern = /\(\[p\d+-c\d+\](?:,\s*\[p\d+-c\d+\])*\)/gi;
+  const matches = [...token.content.matchAll(citationPattern)];
+  if (!matches.length) {
+    return [token];
+  }
+
+  const tokens = [];
+  let cursor = 0;
+  matches.forEach((match) => {
+    if (match.index > cursor) {
+      tokens.push(createTextToken(Token, token.content.slice(cursor, match.index), token.level));
+    }
+
+    const openToken = new Token("span_open", "span", 1);
+    openToken.level = token.level;
+    openToken.attrSet("class", "paper-context-citation");
+    tokens.push(openToken);
+    tokens.push(createTextToken(Token, match[0], token.level + 1));
+    const closeToken = new Token("span_close", "span", -1);
+    closeToken.level = token.level;
+    tokens.push(closeToken);
+    cursor = match.index + match[0].length;
+  });
+
+  if (cursor < token.content.length) {
+    tokens.push(createTextToken(Token, token.content.slice(cursor), token.level));
+  }
+  return tokens;
+}
+
+function createTextToken(Token, content, level) {
+  const token = new Token("text", "", 0);
+  token.content = content;
+  token.level = level;
+  return token;
+}
+
+function installMathRules(markdownInstance) {
+  markdownInstance.inline.ruler.before("escape", "paper_inline_math", (state, silent) => {
+    const start = state.pos;
+    if (state.src[start] !== "$" || state.src[start + 1] === "$" || isEscaped(state.src, start)) {
+      return false;
+    }
+
+    const contentStart = start + 1;
+    if (!state.src[contentStart] || /\s/.test(state.src[contentStart])) {
+      return false;
+    }
+
+    const contentEnd = findClosingMathDelimiter(state.src, contentStart);
+    if (contentEnd < 0 || contentEnd === contentStart || /\s/.test(state.src[contentEnd - 1])) {
+      return false;
+    }
+
+    if (!silent) {
+      const token = state.push("paper_inline_math", "math", 0);
+      token.content = state.src.slice(contentStart, contentEnd);
+      token.markup = "$";
+    }
+    state.pos = contentEnd + 1;
+    return true;
+  });
+
+  markdownInstance.block.ruler.before("fence", "paper_block_math", (state, startLine, endLine, silent) => {
+    const start = state.bMarks[startLine] + state.tShift[startLine];
+    const end = state.eMarks[startLine];
+    const firstLine = state.src.slice(start, end);
+    if (!firstLine.startsWith("$$")) {
+      return false;
+    }
+
+    let content = firstLine.slice(2);
+    let nextLine = startLine;
+    let closed = false;
+    const sameLineEnd = findUnescapedDoubleDollar(content);
+    if (sameLineEnd >= 0) {
+      content = content.slice(0, sameLineEnd);
+      closed = true;
+      nextLine = startLine + 1;
+    } else {
+      const lines = [content];
+      for (nextLine = startLine + 1; nextLine < endLine; nextLine += 1) {
+        const lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
+        const lineEnd = state.eMarks[nextLine];
+        const line = state.src.slice(lineStart, lineEnd);
+        const closingIndex = findUnescapedDoubleDollar(line);
+        if (closingIndex >= 0) {
+          lines.push(line.slice(0, closingIndex));
+          closed = true;
+          nextLine += 1;
+          break;
+        }
+        lines.push(line);
+      }
+      content = lines.join("\n");
+    }
+
+    if (!closed) {
+      return false;
+    }
+    if (silent) {
+      return true;
+    }
+
+    const token = state.push("paper_block_math", "math", 0);
+    token.block = true;
+    token.content = content.trim();
+    token.map = [startLine, nextLine];
+    token.markup = "$$";
+    state.line = nextLine;
+    return true;
+  });
+
+  markdownInstance.renderer.rules.paper_inline_math = (tokens, index) => (
+    renderMath(tokens[index].content, false)
+  );
+  markdownInstance.renderer.rules.paper_block_math = (tokens, index) => (
+    `<span class="paper-math-block">${renderMath(tokens[index].content, true)}</span>\n`
+  );
+}
+
+function renderMath(source, displayMode) {
+  return katex.renderToString(source, {
+    displayMode,
+    output: "html",
+    throwOnError: false,
+    trust: false,
+    strict: "ignore"
+  });
+}
+
+function findClosingMathDelimiter(source, start) {
+  for (let index = start; index < source.length; index += 1) {
+    if (source[index] === "\n") {
+      return -1;
+    }
+    if (source[index] === "$" && source[index + 1] !== "$" && !isEscaped(source, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findUnescapedDoubleDollar(source) {
+  for (let index = 0; index < source.length - 1; index += 1) {
+    if (source[index] === "$" && source[index + 1] === "$" && !isEscaped(source, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isEscaped(source, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
 
 markdown.inline.ruler.before("emphasis", "paper_hidden_text", (state, silent) => {
   const start = state.pos;
@@ -238,7 +416,16 @@ const SANITIZE_OPTIONS = Object.freeze({
     "tr",
     "ul"
   ],
-  ALLOWED_ATTR: ["class", "data-annotation-group", "href", "rel", "target", "title"]
+  ALLOWED_ATTR: [
+    "aria-hidden",
+    "class",
+    "data-annotation-group",
+    "href",
+    "rel",
+    "style",
+    "target",
+    "title"
+  ]
 });
 
 export function renderMarkdown(markdownText, options = {}) {

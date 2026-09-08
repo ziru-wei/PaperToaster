@@ -11,7 +11,7 @@ Status: MVP works, and the main pipeline is modular enough for continued iterati
 3. Title extraction: `src/pdf/extract-metadata-title.js`, `src/pdf/extract-markdown-title.js`, `src/pdf/select-title.js`
 5. Canonical document creation: `src/document/create-document.js`
 6. RAG preparation: `src/pdf/chunk-document.js`, `src/pdf/retrieve.js`, `src/pdf/selection-context.js`, `src/rag/query-intent-router.js`, `src/rag/evidence-context.js`, `src/rag/paper-overview.js`
-7. Agent call: `src/ai/selection-answer.js`, `src/ai/gemini-client.js`, `src/ai/local-agent-client.js`
+7. Agent call: `src/ai/selection-answer.js`, `src/ai/local-agent-client.js`, and the CLI-dispatching `scripts/local-agent-server.js`
 8. Side panel orchestration: `src/sidepanel/sidepanel.js`, `src/sidepanel/sidepanel-document-context.js`, `src/sidepanel/paper-actions-controller.js`, `src/sidepanel/ask-flow-controller.js`
 9. AI response rendering: `src/markdown/render-markdown.js` wraps the bundled `markdown-it` + `DOMPurify` renderer in `vendor/markdown-renderer/markdown-renderer.mjs`; DOMPurify returns a sanitized `DocumentFragment`, which is inserted with `replaceChildren()`
 10. Side panel UI controllers: `src/sidepanel/conversation-panel-controller.js`, `src/sidepanel/composer-controller.js`, `src/sidepanel/thread-wheel-controller.js`, `src/sidepanel/scroll-to-latest-controller.js`, `src/sidepanel/selection-panel-controller.js`, `src/sidepanel/comparative-reading-controller.js`
