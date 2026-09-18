@@ -6,7 +6,7 @@ import {
   transactionDone
 } from "./paper-database.js";
 
-export async function stripStoredAssistantBoldMarkers() {
+export async function stripStoredAssistantEmphasisMarkers() {
   const db = await openPaperDatabase();
   const transaction = db.transaction([CONVERSATION_MESSAGE_STORE, COMPARISON_MESSAGE_STORE], "readwrite");
   const stores = [

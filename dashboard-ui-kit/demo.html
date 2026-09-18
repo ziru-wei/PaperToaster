@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Paper Toaster Dashboard UI Kit</title>
+    <link rel="stylesheet" href="./tokens.css">
+    <link rel="stylesheet" href="./dashboard-ui-kit.css">
+    <style>
+      html, body { min-height: 100%; margin: 0; }
+      .demo-intro { max-width: 660px; margin: 4px 0 24px; color: #707070; font-size: 11px; }
+      .demo-intro h1 { margin: 0 0 4px; color: #303030; font-size: 15px; font-weight: 600; }
+      .demo-feedback { position: fixed; left: 50%; bottom: 18px; z-index: 100; min-width: 180px; border-radius: 999px; padding: 6px 12px; color: #fff; background: rgba(38, 38, 38, 0.88); font-size: 10px; text-align: center; transform: translateX(-50%); backdrop-filter: blur(12px); }
+    </style>
+  </head>
+  <body class="ptk-theme">
+    <main class="ptk-dashboard-shell">
+      <div class="demo-intro">
+        <h1>Dashboard UI Kit</h1>
+        <div>Framework-free components extracted from Paper Toaster. Every control below is interactive and independent from the extension.</div>
+      </div>
+      <div id="toolbar"></div>
+      <div id="bulk"></div>
+      <section id="records" class="ptk-record-layout has-comparisons">
+        <div id="paperGroups" class="ptk-paper-groups"></div>
+        <aside id="comparisons" class="ptk-comparison-grid" aria-label="Comparative readings"></aside>
+      </section>
+      <section class="ptk-catalog-section">
+        <h2 class="ptk-catalog-section__title">Buttons and label palette</h2>
+        <div id="controls" class="ptk-catalog-row"></div>
+        <div id="labels" class="ptk-catalog-row"></div>
+      </section>
+      <section class="ptk-catalog-section">
+        <h2 class="ptk-catalog-section__title">Label Management menu — click the label</h2>
+        <div id="labelManagement" class="ptk-catalog-row"></div>
+      </section>
+    </main>
+    <div id="floating"></div>
+    <div id="hint"></div>
+    <div id="feedback" class="demo-feedback" hidden></div>
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>

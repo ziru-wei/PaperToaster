@@ -1,7 +1,6 @@
 export function createSelectionPanelController({
   quoteElement,
-  clearButton,
-  contextStatusElement
+  clearButton
 }) {
   const selectionTextNode = document.createTextNode("");
   let lastRenderedSelectionText = "";
@@ -63,7 +62,6 @@ export function createSelectionPanelController({
       quoteElement.classList.remove("has-overflow");
       quoteElement.setAttribute("aria-expanded", "false");
       setClearButtonVisible(false);
-      contextStatusElement.textContent = "";
       updateReadiness();
       return;
     }
@@ -86,7 +84,6 @@ export function createSelectionPanelController({
     quoteElement.classList.remove("has-overflow");
     quoteElement.setAttribute("aria-expanded", "false");
     setClearButtonVisible(true);
-    contextStatusElement.textContent = "";
     updateReadiness();
     window.requestAnimationFrame(updateOverflow);
   }
@@ -108,14 +105,6 @@ export function createSelectionPanelController({
   function dismissComposerSelection() {
     dismissedSelectionText = getSelectionText();
     clearComposerSelection();
-  }
-
-  function setContextStatus(message) {
-    contextStatusElement.textContent = message || "";
-  }
-
-  function clearContextStatus() {
-    contextStatusElement.textContent = "";
   }
 
   function setAnswerBusy(busy) {
@@ -190,8 +179,6 @@ export function createSelectionPanelController({
     getVisibleText,
     clearComposerSelection,
     dismissComposerSelection,
-    setContextStatus,
-    clearContextStatus,
     setAnswerBusy,
     updateReadiness,
     canAsk

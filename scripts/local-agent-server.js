@@ -3,6 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { loadPaperReadingSkillPrompt } from "./paper-reading-skill.js";
+import {
+  cleanupStaleRequestDirectories,
+  deleteManagedDocument,
+  getManagedDocumentStatus,
+  materializeRequestDocuments,
+  putManagedDocument,
+  removeRequestDocuments
+} from "./local-agent-document-store.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PAPER_CHAT_LOCAL_AGENT_PORT) || 32177;
@@ -19,7 +28,8 @@ const AUTH_TOKEN = String(process.env.PAPER_CHAT_LOCAL_AGENT_TOKEN || "").trim()
 const REQUEST_TIMEOUT_MS = Number(process.env.PAPER_CHAT_LOCAL_AGENT_TIMEOUT_MS)
   || Number(process.env.PAPER_CHAT_CODEX_TIMEOUT_MS)
   || 180000;
-const MAX_REQUEST_BYTES = Number(process.env.PAPER_CHAT_MAX_REQUEST_BYTES) || 2_000_000;
+const MAX_REQUEST_BYTES = Number(process.env.PAPER_CHAT_MAX_REQUEST_BYTES) || 10_000_000;
+const MAX_DOCUMENT_BYTES = Number(process.env.PAPER_CHAT_MAX_DOCUMENT_BYTES) || 25_000_000;
 const PROFILE_CODEX = "codex";
 const PROFILE_ANTIGRAVITY = "antigravity";
 let modelCatalogCache = null;
@@ -50,7 +60,42 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.method !== "POST" || request.url !== "/ask") {
+  const documentRef = getDocumentRefFromRequest(request);
+  if (documentRef) {
+    if (!isAuthorized(request)) {
+      writeJson(response, request, 401, { error: "Unauthorized local agent request." });
+      return;
+    }
+    try {
+      if (request.method === "HEAD") {
+        const status = await getManagedDocumentStatus(AGENT_WORKDIR, documentRef, { touch: true });
+        writeEmpty(response, request, status.exists ? 204 : 404);
+        return;
+      }
+      if (request.method === "PUT") {
+        const body = JSON.parse(await readRequestBody(request, MAX_DOCUMENT_BYTES));
+        const result = await putManagedDocument({
+          agentWorkdir: AGENT_WORKDIR,
+          documentRef,
+          markdown: body?.markdown,
+          sourceSpans: body?.sourceSpans
+        });
+        writeEmpty(response, request, result.created ? 201 : 204);
+        return;
+      }
+      if (request.method === "DELETE") {
+        await deleteManagedDocument(AGENT_WORKDIR, documentRef);
+        writeEmpty(response, request, 204);
+        return;
+      }
+      writeJson(response, request, 405, { error: "Method not allowed." });
+    } catch (error) {
+      writeJson(response, request, error.status || 500, { error: error.message || String(error) });
+    }
+    return;
+  }
+
+  if (request.method !== "POST" || !["/ask", "/connection-test"].includes(request.url)) {
     writeJson(response, request, 404, { error: "Not found" });
     return;
   }
@@ -60,46 +105,95 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  const requestAbort = new AbortController();
+  response.on("close", () => {
+    if (!response.writableEnded) requestAbort.abort();
+  });
   try {
     const body = JSON.parse(await readRequestBody(request));
     const profile = normalizeProfile(body?.localAgentProfile);
-    const prompt = buildAgentPrompt(body);
-    const result = profile === PROFILE_ANTIGRAVITY
-      ? await runAntigravity(prompt, body)
-      : await runCodex(prompt, body);
-    writeJson(response, request, 200, {
-      profile,
-      model: result.model,
-      text: result.text
-    });
+    if (request.url === "/connection-test") {
+      const prompt = "Reply with exactly: Local agent connection OK.";
+      const result = profile === PROFILE_ANTIGRAVITY
+        ? await runAntigravity(prompt, body, requestAbort.signal)
+        : await runCodex(prompt, body, requestAbort.signal);
+      if (!response.destroyed) writeJson(response, request, 200, { profile, model: result.model, text: result.text });
+      return;
+    }
+    validateAskBody(body);
+    let materialized = null;
+    let result;
+    try {
+      materialized = await materializeRequestDocuments({
+        agentWorkdir: AGENT_WORKDIR,
+        papers: body.papers
+      });
+      requestAbort.signal.throwIfAborted();
+      const prompt = await buildFileReadingPrompt(body, materialized.files);
+      result = profile === PROFILE_ANTIGRAVITY
+        ? await runAntigravity(prompt, body, requestAbort.signal)
+        : await runCodex(prompt, body, requestAbort.signal);
+    } finally {
+      await removeRequestDocuments(materialized?.requestDirectory);
+    }
+    if (!response.destroyed) writeJson(response, request, 200, { profile, model: result.model, text: result.text });
   } catch (error) {
-    writeJson(response, request, error.status || 500, {
+    if (!response.destroyed) writeJson(response, request, error.status || 500, {
       error: error.message || String(error)
     });
   }
 });
+
+try {
+  const removed = await cleanupStaleRequestDirectories(AGENT_WORKDIR);
+  if (removed) console.log(`[Paper Toaster] Removed ${removed} stale request director${removed === 1 ? "y" : "ies"}.`);
+} catch (error) {
+  console.warn(`[Paper Toaster] Stale request cleanup failed: ${error.message || String(error)}`);
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`Paper Toaster local agent bridge listening at http://${HOST}:${PORT}/ask`);
   console.log(`Codex: ${CODEX_BIN}; Antigravity: ${ANTIGRAVITY_BIN}; workdir: ${AGENT_WORKDIR}`);
 });
 
-function buildAgentPrompt(body) {
-  const prompt = String(body?.prompt || "").trim();
-  if (!prompt) {
-    const error = new Error("Request body must include a non-empty prompt.");
-    error.status = 400;
-    throw error;
-  }
-
+async function buildFileReadingPrompt(body, files) {
+  const skillPrompt = await loadPaperReadingSkillPrompt({ mode: body.mode });
   return [
-    "You are serving as a local answer engine for a Chrome paper-reading extension.",
-    "Answer the paper-reading question using only the supplied paper prompt and context.",
-    "Do not edit files, run shell commands, inspect the current machine, inspect a repository, or mention this bridge.",
+    "You are serving as paper reading assistant.",
     "Return only the answer to the user's question.",
     "",
-    prompt
+    skillPrompt,
+    "",
+    ...(body.systemPrompt ? ["Additional answer instructions:", body.systemPrompt, ""] : []),
+    `Mode: ${body.mode}`,
+    ...files.flatMap((file) => [`Paper title: ${JSON.stringify(file.title)}`, `Paper file: ${file.relativePath}`]),
+    ...(body.selectionText ? [`Selected text: ${body.selectionText}`] : []),
+    `Current question: ${body.question}`
   ].join("\n");
+}
+
+function validateAskBody(body) {
+  const invalid = (message) => {
+    const error = new Error(message);
+    error.status = 400;
+    throw error;
+  };
+  if (!body || body.version !== 2 || body.source !== "paper-toaster") invalid("Unsupported /ask contract version.");
+  const allowed = new Set(["version", "source", "localAgentProfile", "model", "reasoningEffort", "systemPrompt", "mode", "question", "selectionText", "papers"]);
+  if (Object.keys(body).some((key) => !allowed.has(key))) invalid("Unexpected /ask field.");
+  if (!["single-paper", "comparative-reading"].includes(body.mode)) invalid("Invalid reading mode.");
+  if (typeof body.question !== "string" || !body.question.trim() || body.question.length > 12000) invalid("Question must be 1–12000 characters.");
+  if (body.selectionText !== undefined && (typeof body.selectionText !== "string" || body.selectionText.length > 8000)) invalid("Selected text is too long.");
+  if (body.systemPrompt !== undefined && (typeof body.systemPrompt !== "string" || body.systemPrompt.length > 20000)) invalid("System prompt is too long.");
+  if (!Array.isArray(body.papers) || body.papers.length < (body.mode === "single-paper" ? 1 : 2)
+    || body.papers.length > (body.mode === "single-paper" ? 1 : 20)) invalid("Invalid paper count.");
+  body.papers.forEach((paper, index) => {
+    if (!paper || Object.keys(paper).some((key) => !["title", "documentRef", "paperId", "sourceSpanCitations"].includes(key))) invalid("Unexpected paper field.");
+    if (typeof paper.title !== "string" || !paper.title.trim() || paper.title.length > 500) invalid("Invalid paper title.");
+    if (paper.paperId !== `p${index + 1}`) invalid("Paper IDs must follow selected-paper order.");
+    if (!/^sha256-[a-f0-9]{64}$/.test(paper.documentRef || "")) invalid("Invalid managed document reference.");
+    if (!Array.isArray(paper.sourceSpanCitations)) invalid("Missing source-span citation map.");
+  });
 }
 
 async function listAvailableModels() {
@@ -164,12 +258,12 @@ function formatAnsweredByModel(model, reasoningEffort) {
   return effort ? `${model} · ${formatEffort(effort)}` : model;
 }
 
-async function runCodex(prompt, body) {
+async function runCodex(prompt, body, signal) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "paper-chat-codex-"));
   const outputFile = path.join(tempDir, "answer.txt");
 
   try {
-    await spawnCodex(prompt, outputFile, body);
+    await spawnCodex(prompt, outputFile, body, signal);
     const text = (await readFile(outputFile, "utf8")).trim();
     if (!text) {
       throw new Error("Codex returned no final message.");
@@ -187,7 +281,7 @@ async function runCodex(prompt, body) {
   }
 }
 
-async function runAntigravity(prompt, body) {
+async function runAntigravity(prompt, body, signal) {
   const model = normalizeModelLabel(body?.model, ANTIGRAVITY_MODEL);
   const args = [
     `--print=${prompt}`,
@@ -197,14 +291,14 @@ async function runAntigravity(prompt, body) {
     "--sandbox",
     ...(model ? ["--model", model] : [])
   ];
-  const result = await spawnForText(ANTIGRAVITY_BIN, args, "", "Antigravity");
+  const result = await spawnForText(ANTIGRAVITY_BIN, args, "", "Antigravity", signal);
   return {
     model: model || "antigravity",
     text: result
   };
 }
 
-function spawnCodex(prompt, outputFile, body) {
+function spawnCodex(prompt, outputFile, body, signal) {
   return new Promise((resolve, reject) => {
     const args = [
       "exec",
@@ -226,18 +320,19 @@ function spawnCodex(prompt, outputFile, body) {
         ...process.env,
         NO_COLOR: "1"
       },
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
+      signal
     });
     const stdout = [];
     const stderr = [];
     let settled = false;
+    let terminationError = null;
+    let forceKill = null;
     const timeout = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
+      if (settled) return;
+      terminationError = new Error(`Codex request timed out after ${REQUEST_TIMEOUT_MS}ms.`);
       child.kill("SIGTERM");
-      reject(new Error(`Codex request timed out after ${REQUEST_TIMEOUT_MS}ms.`));
+      forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
     }, REQUEST_TIMEOUT_MS);
 
     child.stdout.on("data", (chunk) => stdout.push(chunk));
@@ -246,8 +341,14 @@ function spawnCodex(prompt, outputFile, body) {
       if (settled) {
         return;
       }
+      if (error.name === "AbortError") {
+        terminationError = error;
+        forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
+        return;
+      }
       settled = true;
       clearTimeout(timeout);
+      clearTimeout(forceKill);
       reject(error);
     });
     child.on("close", (code) => {
@@ -256,6 +357,11 @@ function spawnCodex(prompt, outputFile, body) {
       }
       settled = true;
       clearTimeout(timeout);
+      clearTimeout(forceKill);
+      if (terminationError) {
+        reject(terminationError);
+        return;
+      }
 
       if (code !== 0) {
         reject(new Error([
@@ -304,35 +410,49 @@ function normalizeProfile(profile) {
   throw error;
 }
 
-function spawnForText(command, args, input, label) {
+function spawnForText(command, args, input, label, signal) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: AGENT_WORKDIR,
       env: { ...process.env, NO_COLOR: "1" },
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
+      signal
     });
     const stdout = [];
     const stderr = [];
     let settled = false;
+    let terminationError = null;
+    let forceKill = null;
     const timeout = setTimeout(() => {
       if (settled) return;
-      settled = true;
+      terminationError = new Error(`${label} request timed out after ${REQUEST_TIMEOUT_MS}ms.`);
       child.kill("SIGTERM");
-      reject(new Error(`${label} request timed out after ${REQUEST_TIMEOUT_MS}ms.`));
+      forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
     }, REQUEST_TIMEOUT_MS);
 
     child.stdout.on("data", (chunk) => stdout.push(chunk));
     child.stderr.on("data", (chunk) => stderr.push(chunk));
     child.on("error", (error) => {
       if (settled) return;
+      if (error.name === "AbortError") {
+        terminationError = error;
+        forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
+        return;
+      }
       settled = true;
       clearTimeout(timeout);
+      clearTimeout(forceKill);
       reject(error);
     });
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      clearTimeout(forceKill);
+      if (terminationError) {
+        reject(terminationError);
+        return;
+      }
       const output = Buffer.concat(stdout).toString("utf8").trim();
       if (code !== 0) {
         reject(new Error([
@@ -352,15 +472,15 @@ function spawnForText(command, args, input, label) {
   });
 }
 
-function readRequestBody(request) {
+function readRequestBody(request, maxBytes = MAX_REQUEST_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let bytes = 0;
 
     request.on("data", (chunk) => {
       bytes += chunk.length;
-      if (bytes > MAX_REQUEST_BYTES) {
-        const error = new Error(`Request body exceeds ${MAX_REQUEST_BYTES} bytes.`);
+      if (bytes > maxBytes) {
+        const error = new Error(`Request body exceeds ${maxBytes} bytes.`);
         error.status = 413;
         reject(error);
         request.destroy();
@@ -371,6 +491,17 @@ function readRequestBody(request) {
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     request.on("error", reject);
   });
+}
+
+function getDocumentRefFromRequest(request) {
+  const pathname = new URL(request.url || "/", "http://127.0.0.1").pathname;
+  const match = pathname.match(/^\/documents\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function writeEmpty(response, request, status) {
+  writeCors(response, request, status);
+  response.end();
 }
 
 function isAuthorized(request) {
@@ -390,7 +521,7 @@ function writeCors(response, request, status, headers = {}) {
   response.writeHead(status, {
     ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, HEAD, PUT, DELETE, POST, OPTIONS",
     ...headers
   });
 }

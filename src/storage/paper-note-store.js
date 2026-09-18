@@ -1,4 +1,6 @@
 import {
+  PAPER_NOTE_ASSET_STORE,
+  PAPER_NOTE_STORE,
   PAPER_STORE,
   openPaperDatabase,
   requestToPromise,
@@ -6,70 +8,225 @@ import {
 } from "./paper-database.js";
 
 const MAX_PAPER_NOTE_CHARS = 50000;
+const NOTE_DOCUMENT_VERSION = 3;
+const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 export async function getPaperUserNote(documentKey) {
   const key = normalizeDocumentKey(documentKey);
-  if (!key) {
-    return createEmptyPaperNote();
-  }
+  if (!key) return createEmptyPaperNote();
 
   const db = await openPaperDatabase();
-  const paper = await requestToPromise(
-    db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE).get(key)
-  );
-
-  return {
-    text: normalizePaperUserNote(paper?.userNote),
-    updatedAt: Number(paper?.userNoteUpdatedAt) || null
-  };
+  const transaction = db.transaction([PAPER_NOTE_STORE, PAPER_NOTE_ASSET_STORE, PAPER_STORE], "readonly");
+  const noteRequest = transaction.objectStore(PAPER_NOTE_STORE).get(key);
+  const paperRequest = transaction.objectStore(PAPER_STORE).get(key);
+  const assetsRequest = transaction.objectStore(PAPER_NOTE_ASSET_STORE).index("byDocumentKey").getAll(key);
+  const [storedNote, paper, storedAssets] = await Promise.all([
+    requestToPromise(noteRequest), requestToPromise(paperRequest), requestToPromise(assetsRequest)
+  ]);
+  const assets = normalizePaperNoteAssets(storedAssets, key);
+  const document = await normalizeLexicalEditorState(storedNote?.document || paper?.userNote || "", assets);
+  const updatedAt = Number(storedNote?.updatedAt || paper?.userNoteUpdatedAt) || null;
+  return { document, assets: [], text: getLexicalPlainText(document), updatedAt };
 }
 
-export async function savePaperUserNote(documentKey, text) {
+export async function savePaperUserNote(documentKey, noteDocument) {
   const key = normalizeDocumentKey(documentKey);
-  if (!key) {
-    throw new Error("Paper note cannot be saved without a document key.");
-  }
+  if (!key) throw new Error("Paper note cannot be saved without a document key.");
 
   const db = await openPaperDatabase();
-  const transaction = db.transaction(PAPER_STORE, "readwrite");
-  const store = transaction.objectStore(PAPER_STORE);
-  const existing = await requestToPromise(store.get(key));
+  const transaction = db.transaction([PAPER_NOTE_STORE, PAPER_NOTE_ASSET_STORE, PAPER_STORE], "readwrite");
+  const noteStore = transaction.objectStore(PAPER_NOTE_STORE);
+  const assetStore = transaction.objectStore(PAPER_NOTE_ASSET_STORE);
+  const paperStore = transaction.objectStore(PAPER_STORE);
+  const [existingPaper, existingNote, existingAssets] = await Promise.all([
+    requestToPromise(paperStore.get(key)),
+    requestToPromise(noteStore.get(key)),
+    requestToPromise(assetStore.index("byDocumentKey").getAll(key))
+  ]);
+  const assets = normalizePaperNoteAssets(existingAssets, key);
+  const document = await normalizeLexicalEditorState(noteDocument, assets);
+  const plainText = getLexicalPlainText(document);
   const now = Date.now();
-  const note = normalizePaperUserNote(text);
-  store.put({
-    ...(existing || {}),
-    documentKey: key,
-    canonicalUrl: existing?.canonicalUrl || "",
-    title: existing?.title || "",
-    titleSource: existing?.titleSource || "",
-    metadata: existing?.metadata || null,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    activeThreadId: existing?.activeThreadId || "",
-    userNote: note,
-    userNoteUpdatedAt: now
+
+  noteStore.put({
+    ...(existingNote || {}), documentKey: key, version: NOTE_DOCUMENT_VERSION,
+    document, plainText, createdAt: existingNote?.createdAt || now, updatedAt: now
+  });
+  for (const asset of assets) {
+    assetStore.delete(asset.assetId);
+  }
+  paperStore.put({
+    ...(existingPaper || {}), documentKey: key,
+    canonicalUrl: existingPaper?.canonicalUrl || "", title: existingPaper?.title || "",
+    titleSource: existingPaper?.titleSource || "", metadata: existingPaper?.metadata || null,
+    createdAt: existingPaper?.createdAt || now, updatedAt: now,
+    activeThreadId: existingPaper?.activeThreadId || "",
+    userNote: plainText, userNoteUpdatedAt: now
   });
   await transactionDone(transaction);
+  return { document, text: plainText, updatedAt: now };
+}
 
-  return {
-    text: note,
-    updatedAt: now
-  };
+export function normalizePaperUserNoteDocument(value, options = {}) {
+  const assetIds = options.assetIds instanceof Set ? options.assetIds : null;
+  const blocks = Array.isArray(value?.blocks) ? value.blocks : [{ type: "text", text: typeof value === "string" ? value : "" }];
+  const normalizedBlocks = [];
+  let remainingText = MAX_PAPER_NOTE_CHARS;
+  for (const block of blocks) {
+    if (block?.type === "image") {
+      const assetId = String(block.assetId || "").trim();
+      if (!assetId || (assetIds && !assetIds.has(assetId))) continue;
+      normalizedBlocks.push({
+        type: "image", assetId,
+        alt: String(block.alt || "").replace(/\s+/g, " ").trim().slice(0, 240),
+        widthRatio: clamp(Number(block.widthRatio), 0.15, 1, 0.72)
+      });
+      continue;
+    }
+    const text = normalizePaperUserNote(block?.text).slice(0, remainingText);
+    remainingText -= text.length;
+    const previous = normalizedBlocks.at(-1);
+    if (previous?.type === "text") previous.text += text;
+    else normalizedBlocks.push({ type: "text", text });
+  }
+  if (!normalizedBlocks.length || normalizedBlocks.every((block) => block.type === "image")) {
+    normalizedBlocks.unshift({ type: "text", text: "" });
+  }
+  const plainText = normalizedBlocks.filter((block) => block.type === "text")
+    .map((block) => block.text).join("\n").slice(0, MAX_PAPER_NOTE_CHARS);
+  return { version: NOTE_DOCUMENT_VERSION, blocks: normalizedBlocks, plainText };
 }
 
 export function normalizePaperUserNote(text) {
-  return String(text || "")
-    .replace(/\r\n?/g, "\n")
-    .slice(0, MAX_PAPER_NOTE_CHARS);
+  return String(text || "").replace(/\r\n?/g, "\n").slice(0, MAX_PAPER_NOTE_CHARS);
+}
+
+function normalizePaperNoteAssets(assets, documentKey) {
+  return (Array.isArray(assets) ? assets : [])
+    .filter((asset) => asset && asset.documentKey === documentKey && asset.blob instanceof Blob)
+    .filter((asset) => IMAGE_MIME_TYPES.has(String(asset.mimeType || asset.blob.type || "").toLowerCase()))
+    .map((asset) => ({
+      ...asset, assetId: String(asset.assetId || "").trim(),
+      mimeType: String(asset.mimeType || asset.blob.type || "").toLowerCase(),
+      naturalWidth: Math.max(1, Number(asset.naturalWidth) || 1),
+      naturalHeight: Math.max(1, Number(asset.naturalHeight) || 1)
+    }))
+    .filter((asset) => asset.assetId);
+}
+
+function createEmptyPaperNote() {
+  const document = createLexicalEditorState([]);
+  return { document, assets: [], text: "", updatedAt: null };
+}
+
+async function normalizeLexicalEditorState(value, assets = []) {
+  if (typeof value === "string") {
+    const source = value.trim();
+    if (source.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(source);
+        if (parsed?.root?.type === "root" && Array.isArray(parsed.root.children)) {
+          return JSON.stringify(parsed);
+        }
+      } catch {
+        // Fall through to legacy plain-text conversion.
+      }
+    }
+    return createLexicalEditorState(createLegacyTextNodes(value));
+  }
+
+  const assetMap = new Map(assets.map((asset) => [asset.assetId, asset]));
+  const children = [];
+  for (const block of Array.isArray(value?.blocks) ? value.blocks : []) {
+    if (block?.type === "image") {
+      const asset = assetMap.get(String(block.assetId || ""));
+      if (!asset?.blob) continue;
+      const src = await blobToDataUrl(asset.blob);
+      const ratio = clamp(Number(block.widthRatio), 0.15, 1, 0.72);
+      const width = Math.min(480, Math.max(1, asset.naturalWidth * ratio));
+      children.push({
+        type: "image",
+        version: 1,
+        src,
+        width,
+        height: width / (asset.naturalWidth / Math.max(1, asset.naturalHeight))
+      });
+      continue;
+    }
+    children.push(...createLegacyTextNodes(block?.text || ""));
+  }
+  return createLexicalEditorState(children);
+}
+
+function createLexicalEditorState(children) {
+  const normalizedChildren = children.length ? children : [createLexicalParagraph("")];
+  return JSON.stringify({
+    root: {
+      children: normalizedChildren,
+      direction: null,
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1
+    }
+  });
+}
+
+function createLegacyTextNodes(text) {
+  return normalizePaperUserNote(text).split("\n").map(createLexicalParagraph);
+}
+
+function createLexicalParagraph(text) {
+  return {
+    children: text ? [{
+      detail: 0,
+      format: 0,
+      mode: "normal",
+      style: "",
+      text,
+      type: "text",
+      version: 1
+    }] : [],
+    direction: null,
+    format: "",
+    indent: 0,
+    type: "paragraph",
+    version: 1,
+    textFormat: 0,
+    textStyle: ""
+  };
+}
+
+function getLexicalPlainText(editorStateJSON) {
+  try {
+    const root = JSON.parse(editorStateJSON)?.root;
+    return collectLexicalText(root).slice(0, MAX_PAPER_NOTE_CHARS);
+  } catch {
+    return "";
+  }
+}
+
+function collectLexicalText(node) {
+  if (!node || typeof node !== "object") return "";
+  if (node.type === "text") return String(node.text || "");
+  if (!Array.isArray(node.children)) return "";
+  const separator = node.type === "root" ? "\n" : "";
+  return node.children.map(collectLexicalText).filter(Boolean).join(separator);
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("The stored note image could not be read."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function normalizeDocumentKey(documentKey) {
   return String(documentKey || "").trim();
 }
 
-function createEmptyPaperNote() {
-  return {
-    text: "",
-    updatedAt: null
-  };
+function clamp(value, min, max, fallback) {
+  return Number.isFinite(value) ? Math.min(Math.max(value, min), max) : fallback;
 }

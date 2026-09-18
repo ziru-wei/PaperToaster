@@ -2,14 +2,39 @@ export const PROMPT_PRESETS_KEY = "selectionPromptPresetsV1";
 
 export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
   {
-    id: "explain-with-examples",
-    label: "Explain with examples",
-    prompt: "Explain this selected passage. Use explicit examples from the original paper text to explain it."
+    id: "overview",
+    label: "Overview",
+    prompt: "Give an overview of this paper, including the problem, motivation, approach, main findings, and conclusions."
   },
   {
-    id: "summarize",
-    label: "Summarize",
-    prompt: "Summarize this paper based on the abstract, introduction, findings and conclusions."
+    id: "contribution",
+    label: "Contribution",
+    prompt: "What are the main contributions of this paper? Explain what is novel relative to the background, prior work, or existing approaches."
+  },
+  {
+    id: "technical-method",
+    label: "Technical Method",
+    prompt: "Explain the technical method of this work, including the system, architecture, algorithm, implementation, or key technical components."
+  },
+  {
+    id: "research-process",
+    label: "Research Process",
+    prompt: "How was this research carried out from start to finish? Explain the major research stages and how each stage informed the next."
+  },
+  {
+    id: "evaluation",
+    label: "Evaluation",
+    prompt: "How was the proposed system or approach evaluated? Explain the evaluation setup, study design, baselines, tasks, metrics, and procedure."
+  },
+  {
+    id: "results",
+    label: "Results",
+    prompt: "What are the main results and findings? Explain the key quantitative and qualitative outcomes of the evaluation or experiments."
+  },
+  {
+    id: "discussion",
+    label: "Discussion",
+    prompt: "How do the authors interpret the findings? Explain the implications, limitations, caveats, and future directions discussed in the paper."
   }
 ]);
 

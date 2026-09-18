@@ -10,17 +10,31 @@ import {
   hasConfiguredAiProvider,
   saveAiSettings
 } from "../storage/ai-settings-store.js";
-import { generateLocalAgentText, listLocalAgentModels } from "../ai/local-agent-client.js";
-import { stripStoredAssistantBoldMarkers } from "../storage/maintenance-store.js";
+import { listLocalAgentModels, testLocalAgentConnection } from "../ai/local-agent-client.js";
+import { stripStoredAssistantEmphasisMarkers } from "../storage/maintenance-store.js";
 import {
   MIN_COMPARISON_PAPERS,
   getComparisonSettings,
   saveComparisonSettings
 } from "../storage/comparison-settings-store.js";
+import {
+  getParsingSettings,
+  saveParsingSettings
+} from "../storage/parsing-settings-store.js";
+import {
+  getSavedQaSettings,
+  saveSavedQaSettings
+} from "../storage/saved-qa-settings-store.js";
+import { importLibraryArchive, validateLibraryArchive } from "../storage/library-archive-store.js";
+import { chooseImportDestination } from "../components/import-destination-dialog.js";
 
 const elements = {
   aiLocalEndpoint: document.querySelector("#aiLocalEndpoint"),
   aiLocalAuthToken: document.querySelector("#aiLocalAuthToken"),
+  autoParse: document.querySelector("#autoParse"),
+  parsingStatus: document.querySelector("#parsingStatus"),
+  savedQaPerPaperLimit: document.querySelector("#savedQaPerPaperLimit"),
+  savedQaStatus: document.querySelector("#savedQaStatus"),
   aiDebugMode: document.querySelector("#aiDebugMode"),
   aiSystemPrompt: document.querySelector("#aiSystemPrompt"),
   aiProviderStatus: document.querySelector("#aiProviderStatus"),
@@ -38,7 +52,10 @@ const elements = {
   addPreset: document.querySelector("#addPreset"),
   resetPresets: document.querySelector("#resetPresets"),
   savePresets: document.querySelector("#savePresets"),
-  stripStoredBoldMarkers: document.querySelector("#stripStoredBoldMarkers"),
+  stripStoredEmphasisMarkers: document.querySelector("#stripStoredEmphasisMarkers"),
+  importLibraryArchive: document.querySelector("#importLibraryArchive"),
+  libraryArchiveFile: document.querySelector("#libraryArchiveFile"),
+  libraryImportStatus: document.querySelector("#libraryImportStatus"),
   presetList: document.querySelector("#presetList"),
   presetTemplate: document.querySelector("#presetTemplate"),
   status: document.querySelector("#status")
@@ -71,6 +88,8 @@ elements.aiLocalAuthToken.addEventListener("change", () => {
 elements.aiDebugMode.addEventListener("change", () => {
   queueAiSettingsSave({ debugMode: elements.aiDebugMode.checked }, "mode");
 });
+elements.autoParse.addEventListener("change", saveAutoParseSetting);
+elements.savedQaPerPaperLimit.addEventListener("change", saveSavedQaLimit);
 elements.aiSystemPrompt.addEventListener("input", scheduleSystemPromptSave);
 elements.aiSystemPrompt.addEventListener("change", saveSystemPromptImmediately);
 elements.testAiProvider.addEventListener("click", testAiProvider);
@@ -78,12 +97,49 @@ elements.copyLocalAgentCommand.addEventListener("click", copyLocalAgentCommand);
 elements.refreshChatModels.addEventListener("click", loadAvailableChatModels);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
-elements.stripStoredBoldMarkers.addEventListener("click", stripStoredBoldMarkers);
+elements.stripStoredEmphasisMarkers.addEventListener("click", stripStoredEmphasisMarkers);
 elements.saveComparisonSettings.addEventListener("click", saveComparativeReadingSettings);
+elements.importLibraryArchive.addEventListener("click", () => elements.libraryArchiveFile.click());
+elements.libraryArchiveFile.addEventListener("change", importSelectedLibraryArchive);
 
 loadAiSettings();
+loadParsingSettings();
+loadSavedQaSettings();
 loadPresets();
 loadComparisonSettings();
+
+async function importSelectedLibraryArchive() {
+  const file = elements.libraryArchiveFile.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  elements.importLibraryArchive.disabled = true;
+  setLibraryImportStatus("Importing...");
+  try {
+    const archive = JSON.parse(await file.text());
+    validateLibraryArchive(archive);
+    const destination = await chooseImportDestination();
+    if (!destination) {
+      setLibraryImportStatus("Import cancelled.");
+      return;
+    }
+    const result = await importLibraryArchive(archive, { destination });
+    const summary = `Added ${result.importedPaperCount} papers · ${result.comparisonCount} comparisons · skipped ${result.skippedPaperCount} existing`;
+    setLibraryImportStatus(summary);
+    window.alert(`Import complete.\n${summary}`);
+  } catch (error) {
+    setLibraryImportStatus(error.message || String(error), true);
+  } finally {
+    elements.libraryArchiveFile.value = "";
+    elements.importLibraryArchive.disabled = false;
+  }
+}
+
+function setLibraryImportStatus(message, isError = false) {
+  elements.libraryImportStatus.textContent = message;
+  elements.libraryImportStatus.classList.toggle("error", isError);
+}
 
 async function loadComparisonSettings() {
   try {
@@ -92,6 +148,67 @@ async function loadComparisonSettings() {
   } catch (error) {
     setComparisonSettingsStatus(error.message || String(error), true);
   }
+}
+
+async function loadParsingSettings() {
+  try {
+    const settings = await getParsingSettings();
+    elements.autoParse.checked = settings.autoParse;
+    setParsingStatus("✓ Auto saved");
+  } catch (error) {
+    setParsingStatus(error.message || String(error), true);
+  }
+}
+
+async function loadSavedQaSettings() {
+  try {
+    const settings = await getSavedQaSettings();
+    elements.savedQaPerPaperLimit.value = String(settings.perPaperLimit);
+    setSavedQaStatus("✓ Auto saved");
+  } catch (error) {
+    setSavedQaStatus(error.message || String(error), true);
+  }
+}
+
+async function saveSavedQaLimit() {
+  const value = Number(elements.savedQaPerPaperLimit.value);
+  if (!Number.isInteger(value) || value < 1) {
+    setSavedQaStatus("Maximum saved Q&A must be a positive integer.", true);
+    return;
+  }
+  setSavedQaStatus("Saving...");
+  try {
+    const settings = await saveSavedQaSettings({ perPaperLimit: value });
+    elements.savedQaPerPaperLimit.value = String(settings.perPaperLimit);
+    setSavedQaStatus("✓ Auto saved");
+  } catch (error) {
+    setSavedQaStatus(error.message || String(error), true);
+  }
+}
+
+function setSavedQaStatus(message, isError = false) {
+  elements.savedQaStatus.textContent = message;
+  elements.savedQaStatus.classList.toggle("error", isError);
+  elements.savedQaStatus.classList.toggle("saving", message === "Saving...");
+}
+
+async function saveAutoParseSetting() {
+  setParsingStatus("Saving...");
+  try {
+    const settings = await saveParsingSettings({
+      autoParse: elements.autoParse.checked
+    });
+    elements.autoParse.checked = settings.autoParse;
+    setParsingStatus("✓ Auto saved");
+  } catch (error) {
+    setParsingStatus(error.message || String(error), true);
+  }
+}
+
+function setParsingStatus(message, isError = false) {
+  elements.parsingStatus.textContent = message;
+  elements.parsingStatus.classList.toggle("error", isError);
+  elements.parsingStatus.classList.toggle("saving", message === "Saving...");
 }
 
 async function saveComparativeReadingSettings() {
@@ -328,16 +445,12 @@ async function testAiProvider() {
   try {
     await aiSettingsSaveQueue.catch(() => {});
     const settings = savedAiSettings || await getAiSettings();
-    await generateLocalAgentText({
+    await testLocalAgentConnection({
       endpoint: settings.localEndpoint,
       authToken: settings.localAuthToken,
       localAgentProfile: settings.localAgentProfile,
       model: settings.model,
-      reasoningEffort: settings.reasoningEffort,
-      prompt: "Reply with exactly: Paper Toaster connection ready.",
-      systemPrompt: "This is a connection test. Follow the requested response exactly.",
-      contextPack: null,
-      conversationMessages: []
+      reasoningEffort: settings.reasoningEffort
     });
     elements.aiProviderStatus.title = "";
     setAiSectionStatus("provider", "✓ Connection ready");
@@ -398,18 +511,18 @@ async function resetPresets() {
   }
 }
 
-async function stripStoredBoldMarkers() {
+async function stripStoredEmphasisMarkers() {
   const shouldContinue = window.confirm(
-    "Strip Markdown bold markers from all stored assistant responses? This rewrites local conversation storage."
+    "Strip Markdown bold and italic markers from all stored assistant responses? This rewrites local conversation storage."
   );
   if (!shouldContinue) {
     return;
   }
 
   try {
-    elements.stripStoredBoldMarkers.disabled = true;
-    setStatus("Stripping stored bold markers...");
-    const result = await stripStoredAssistantBoldMarkers();
+    elements.stripStoredEmphasisMarkers.disabled = true;
+    setStatus("Stripping stored emphasis markers...");
+    const result = await stripStoredAssistantEmphasisMarkers();
     setStatus([
       `Updated ${result.conversation.updated}/${result.conversation.checked} paper chat responses.`,
       `Updated ${result.comparison.updated}/${result.comparison.checked} comparison responses.`
@@ -417,7 +530,7 @@ async function stripStoredBoldMarkers() {
   } catch (error) {
     setStatus(error.message || String(error), true);
   } finally {
-    elements.stripStoredBoldMarkers.disabled = false;
+    elements.stripStoredEmphasisMarkers.disabled = false;
   }
 }
 

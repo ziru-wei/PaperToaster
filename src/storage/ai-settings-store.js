@@ -8,31 +8,11 @@ export const DEFAULT_LOCAL_ENDPOINT = "http://127.0.0.1:32177/ask";
 export const DEFAULT_LOCAL_AUTH_TOKEN = "paper-chat-local";
 
 const DEFAULT_SYSTEM_PROMPT = [
-  "Use natural Chinese-English code-switching by default: write the sentence structure, reasoning, and explanations in Chinese, while keeping technical terms, method names, paper-specific concepts, and important phrases in English.",
-  "",
-  "Embed English terms directly into Chinese sentences. Do not repeat translations in parentheses or mechanically alternate between Chinese and English sentences.",
-  "",
-  "Be factual and grounded in the paper context. Clearly distinguish the paper's claims from inference. Respond directly like an academic peer, without introductory/concluding filler or robotic pleasantries.",
-  "",
-  "Override this style only when I explicitly request another language."
-].join("\n");
-
-const LEGACY_DEFAULT_SYSTEM_PROMPTS = Object.freeze([
-  [
-    "Use bilingual code-switching (Chinese-English) by default for all responses, overriding this ONLY if I explicitly specify a language.",
-    "",
-    "Deliver purely factual, grounded, and accurate content.",
-    "",
-    "Sounds natural like a acedemic buddy. Strip away all mannered prose, introductory/concluding filler, and robotic pleasantries."
-  ].join("\n"),
-  [
-    "You are helping a researcher read an academic paper.",
-    "Answer using only the provided selected text and paper context.",
-    "Ground the answer in the paper and use explicit examples from the provided context when useful.",
-    "If the provided context is insufficient, say what is uncertain instead of guessing.",
-    "Do not invent citations, page numbers, methods, results, or claims that are not in the context."
-  ].join(" ")
-]);
+  "Give the direct core answer first, then provide evidence.",
+  "Use natural Chinese-English code-switching by default. Never translate or gloss either language in parentheses, and never restate the same idea in both languages.",
+  // "Use English for academic terms or phrases while maintain the readibility.",
+  "Please remove all mannerd prose. Avoid chunky paragraphs, long-winded explanations, and verbose preambles. Use concise, direct, and clear language.",
+].join("\n\n");
 
 export const DEFAULT_AI_SETTINGS = Object.freeze({
   provider: AI_PROVIDER_LOCAL,
@@ -96,10 +76,7 @@ export function normalizeAiSettings(settings) {
   const localEndpoint = normalizeLocalEndpoint(settings?.localEndpoint) || DEFAULT_AI_SETTINGS.localEndpoint;
   const localAuthToken = normalizeLocalAuthToken(settings?.localAuthToken) || DEFAULT_AI_SETTINGS.localAuthToken;
   const debugMode = normalizeDebugMode(settings?.debugMode);
-  const normalizedSystemPrompt = normalizeSystemPrompt(settings?.systemPrompt);
-  const systemPrompt = isLegacyDefaultSystemPrompt(normalizedSystemPrompt)
-    ? DEFAULT_AI_SETTINGS.systemPrompt
-    : normalizedSystemPrompt || DEFAULT_AI_SETTINGS.systemPrompt;
+  const systemPrompt = normalizeSystemPrompt(settings?.systemPrompt) || DEFAULT_AI_SETTINGS.systemPrompt;
 
   return {
     provider,
@@ -220,17 +197,4 @@ function normalizeLocalAuthToken(token) {
 
 function normalizeDebugMode(debugMode) {
   return debugMode === true || debugMode === "true" || debugMode === 1 || debugMode === "1";
-}
-
-function isLegacyDefaultSystemPrompt(systemPrompt) {
-  const comparable = normalizeForPromptComparison(systemPrompt);
-  return LEGACY_DEFAULT_SYSTEM_PROMPTS.some((legacyPrompt) => {
-    return comparable === normalizeForPromptComparison(legacyPrompt);
-  });
-}
-
-function normalizeForPromptComparison(systemPrompt) {
-  return String(systemPrompt || "")
-    .replace(/\s+/g, " ")
-    .trim();
 }

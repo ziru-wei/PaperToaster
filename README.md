@@ -22,15 +22,17 @@ Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from
 - Downloads `outline.json`, `debug.json`, and `output.md` as one local ZIP from the single-paper header.
 - Captures the latest selected text from the current PDF tab when available.
 - Adds a right-click `------------------------------>` menu item for selected text.
-- Answers selected-text questions through a lightweight selection-grounded context pack, using the configured AI provider.
+- Answers selected-text questions by sending the current selection as a search anchor while the local Agent reads the managed paper Markdown file.
 - Shows selected-text AI questions and answers as a conversation thread for the current selection.
 - Persists each active conversation thread by canonical paper key in IndexedDB, so switching tabs does not erase the paper's chat memory.
 - Adds a fixed top conversation thread rail: the left button creates a new thread, older threads scroll horizontally to the right, and existing threads can be selected or deleted.
 - Supports slash prompt presets in the selected-text question box, backed by extension-local settings.
 - Supports Debug mode in Options, which returns deterministic placeholder answers without making AI API requests.
 - Provides an Options page for local AI provider settings. API keys are stored in `chrome.storage.local` and are not committed to the repo.
+- Provides parallel Board and Archive library views. Archive preserves local paper/comparison data, Restore returns records to the Board, and Archive View can export restorable JSON without deleting local records.
+- Keeps archived/dead Labels gray and outside the five colored Board Label slots.
 
-Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the stored outline-guided Markdown context.
+Whole-paper, selected-text, and comparative questions use managed outline-guided Markdown files; Saved Q&A remains stored in extension IndexedDB.
 
 ## Load In Edge
 
@@ -58,7 +60,7 @@ Whole-paper, selected-text, Saved Q&A, and comparative reading flows use the sto
 - Parsed-document cache keys prefer DOI, arXiv id, or IEEE `arnumber`; URL fallback removes fragments such as `#page=...` and common volatile query parameters.
 - The persistent document store saves final Markdown and parser outline/debug artifacts, but not raw LiteParse blocks, PDF.js text items, page chunks, or generated RAG packs.
 - Paper title extraction order is explicit: PDF metadata title, first usable raw Markdown H1, earliest usable raw Markdown heading, then manual editing. It does not read title from viewer DOM, tab title, or URL.
-- Selection context preparation is local and lightweight. It locates the selected text in final Markdown, adds nearby context, then adds keyword-retrieved paper context.
+- The bridge stores content-addressed Markdown files and builds request-scoped citation views. Questions send document references and the current question, not browser-retrieved passages or chat history.
 - Conversation history is stored by canonical paper key in IndexedDB. It reloads when that PDF link becomes active again.
 - Selection question presets are stored in `chrome.storage.local` and can be edited from the extension Options page.
 - Local-agent settings are local to the installed browser profile and auto-save from Options. AI Provider, Mode, and System Prompt are independent sections; the saved bearer token is not rendered back into the token field.

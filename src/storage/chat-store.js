@@ -1,5 +1,6 @@
 import { getDocumentMemoryKey, normalizeLegacyDocumentUrl } from "./document-key.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
+import { normalizeCitationCatalog } from "../ai/citation-catalog.js";
 import {
   CONVERSATION_MESSAGE_STORE,
   CONVERSATION_THREAD_STORE,
@@ -53,6 +54,79 @@ export async function getStoredChatThread(url) {
     url,
     messages
   }, url);
+}
+
+export async function pruneActivePaperConversationHistory(url) {
+  const documentKey = getDocumentMemoryKey(url);
+  if (!documentKey) {
+    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+  }
+
+  const db = await openPaperDatabase();
+  const [paper, threads] = await Promise.all([
+    getPaperRecord(db, documentKey),
+    getThreadRecordsForDocument(db, documentKey)
+  ]);
+  if (!threads.length) {
+    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+  }
+
+  const plans = [];
+  let deletedQuestionCount = 0;
+  for (const thread of threads) {
+    const messages = await getThreadMessages(db, thread.threadId);
+    const cleanedMessages = removeUnansweredQuestions(messages);
+    deletedQuestionCount += messages.length - cleanedMessages.length;
+    plans.push({ thread, messages, cleanedMessages });
+  }
+
+  const emptyPlans = plans.filter(({ cleanedMessages }) => !cleanedMessages.length);
+  const changedPlans = plans.filter(({ messages, cleanedMessages }) => (
+    cleanedMessages.length > 0 && cleanedMessages.length !== messages.length
+  ));
+  if (!emptyPlans.length && !changedPlans.length) {
+    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+  }
+
+  const retainedPlans = plans.filter(({ cleanedMessages }) => cleanedMessages.length > 0);
+  const retainedThreadIds = new Set(retainedPlans.map(({ thread }) => thread.threadId));
+  const nextActiveThreadId = retainedThreadIds.has(paper?.activeThreadId)
+    ? paper.activeThreadId
+    : retainedPlans
+        .map(({ thread }) => thread)
+        .sort((left, right) => getThreadSortTime(right) - getThreadSortTime(left))[0]?.threadId || "";
+  const now = Date.now();
+  const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE, CONVERSATION_MESSAGE_STORE], "readwrite");
+  const paperStore = transaction.objectStore(PAPER_STORE);
+  const threadStore = transaction.objectStore(CONVERSATION_THREAD_STORE);
+  const messageStore = transaction.objectStore(CONVERSATION_MESSAGE_STORE);
+
+  emptyPlans.forEach(({ thread }) => {
+    threadStore.delete(thread.threadId);
+    deleteThreadMessages(messageStore, thread.threadId);
+  });
+  changedPlans.forEach(({ thread, messages, cleanedMessages }) => {
+    threadStore.put({
+      ...thread,
+      firstMessageCreatedAt: getFirstUserMessageCreatedAt(cleanedMessages),
+      messageCount: cleanedMessages.length
+    });
+    writeThreadMessages(messageStore, {
+      threadId: thread.threadId,
+      documentKey,
+      messages: cleanedMessages,
+      previousMessageCount: messages.length,
+      now
+    });
+  });
+  if (paper) {
+    paperStore.put({ ...paper, activeThreadId: nextActiveThreadId });
+  }
+  await transactionDone(transaction);
+  return {
+    deletedThreadCount: emptyPlans.length,
+    deletedQuestionCount
+  };
 }
 
 export async function getStoredChatThreadById(url, threadId) {
@@ -196,6 +270,7 @@ export async function listSavedQuestionAnswerUnits(url) {
         question: latestUser?.message?.text || "",
         selectionText: latestUser?.message?.selectionText || "",
         answer: message.text || "",
+        citationCatalog: normalizeCitationCatalog(message.citationCatalog),
         isPinned: isMessageSaved(message) && isMessagePinned(message),
         createdAt: Number(message.createdAt || latestUser?.message?.createdAt || thread.updatedAt || thread.createdAt) || Date.now(),
         questionCreatedAt: Number(latestUser?.message?.createdAt) || null,
@@ -442,6 +517,7 @@ function normalizeChatMessage(message, index = 0) {
     role,
     text,
     model: role === "assistant" ? normalizeMessageModel(message?.model) : "",
+    citationCatalog: role === "assistant" ? normalizeCitationCatalog(message?.citationCatalog) : null,
     selectionText,
     createdAt: Number(message?.createdAt) || Date.now() + index,
     isSaved: isMessageSaved(message),
@@ -529,6 +605,7 @@ async function getThreadMessages(db, threadId) {
       role: message.role,
       text: message.text,
       model: message.model || "",
+      citationCatalog: normalizeCitationCatalog(message.citationCatalog),
       selectionText: message.selectionText || "",
       createdAt: message.createdAt || null,
       isSaved: isMessageSaved(message),
@@ -546,9 +623,11 @@ function writeThreadMessages(store, { threadId, documentKey, messages, previousM
       role: message.role,
       text: message.text,
       model: message.model || "",
+      citationCatalog: normalizeCitationCatalog(message.citationCatalog),
       selectionText: message.selectionText || "",
       isSaved: isMessageSaved(message),
       isPinned: isMessageSaved(message) && isMessagePinned(message),
+      savedDocumentKey: isMessageSaved(message) ? documentKey : "",
       createdAt: message.createdAt || now + index,
       updatedAt: now
     });
@@ -588,6 +667,23 @@ function getFirstUserMessageCreatedAt(messages) {
   const firstMessage = messages.find((message) => message?.role === "user" && Number(message?.createdAt)) ||
     messages.find((message) => Number(message?.createdAt));
   return firstMessage ? Number(firstMessage.createdAt) : null;
+}
+
+function removeUnansweredQuestions(messages) {
+  const pendingQuestionIndexes = [];
+  const answeredQuestionIndexes = new Set();
+  messages.forEach((message, messageIndex) => {
+    if (message?.role === "user") {
+      pendingQuestionIndexes.push(messageIndex);
+      return;
+    }
+    if (message?.role === "assistant" && pendingQuestionIndexes.length) {
+      answeredQuestionIndexes.add(pendingQuestionIndexes.shift());
+    }
+  });
+  return messages.filter((message, messageIndex) => (
+    message?.role !== "user" || answeredQuestionIndexes.has(messageIndex)
+  ));
 }
 
 function selectReusableEmptyThread(threads, activeThreadId = "") {

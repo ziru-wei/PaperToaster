@@ -13,8 +13,14 @@ import {
 } from "../document/load-document.js";
 import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
+import {
+  PARSING_SETTINGS_KEY,
+  getParsingSettings,
+  normalizeParsingSettings
+} from "../storage/parsing-settings-store.js";
 
 const DOCUMENT_CACHE_VERSION = "v16";
+const AGENT_CONNECTION_ERROR_PATTERN = /^(?:typeerror:\s*)?failed to fetch\.?$/i;
 
 export function createSidePanelDocumentContext({
   elements,
@@ -31,19 +37,35 @@ export function createSidePanelDocumentContext({
   let refreshTimer = null;
   let documentRequestId = 0;
   let currentPaperUrl = "";
+  let manualParseReady = false;
+  let preservedViewTabId = null;
+  let preservingExternalNavigation = false;
+  let copyFeedbackTimer = null;
 
   elements.reloadPdf.addEventListener("click", () => {
+    const confirmed = window.confirm(
+      "Reload and re-parse this PDF? This may reset the chat context."
+    );
+    if (!confirmed) {
+      return;
+    }
     loadPdf({ bypassCache: true });
   });
   elements.downloadPaperArtifacts.addEventListener("click", downloadCurrentParserArtifacts);
   elements.openPaperUrl.addEventListener("click", openCurrentPaperUrl);
   elements.documentTitle.addEventListener("input", updateManualDocumentTitle);
+  elements.pdfStatus.addEventListener("click", toggleAgentConnectionHelp);
+  elements.pdfStatus.addEventListener("keydown", handleAgentConnectionHelpKeydown);
+  elements.copyAgentConnectionCommand.addEventListener("click", copyAgentConnectionCommand);
+  document.addEventListener("pointerdown", handleAgentConnectionOutsidePointerDown);
+  document.addEventListener("keydown", handleAgentConnectionDocumentKeydown);
 
   function start() {
     refreshState();
     window.setInterval(refreshSelection, 1500);
-    chrome.tabs.onActivated.addListener(scheduleRefreshState);
+    chrome.tabs.onActivated.addListener(handleTabActivated);
     chrome.tabs.onUpdated.addListener(handleTabUpdated);
+    chrome.storage.onChanged.addListener(handleParsingSettingsChanged);
   }
 
   async function refreshState() {
@@ -83,7 +105,15 @@ export function createSidePanelDocumentContext({
         await renderDocumentIfCurrent(cached, request);
       } else {
         await renderDocumentIfCurrent(null, request);
-        await loadPdf({ bypassCache: false });
+        const parsingSettings = await getParsingSettings();
+        if (!isCurrentDocumentRequest(request)) {
+          return;
+        }
+        if (parsingSettings.autoParse) {
+          await loadPdf({ bypassCache: false });
+        } else {
+          renderIdleState(true, { manualParse: true });
+        }
       }
 
       await refreshSelection();
@@ -105,12 +135,62 @@ export function createSidePanelDocumentContext({
     }, 250);
   }
 
+  function handleTabActivated(activeInfo) {
+    if (preservingExternalNavigation || activeInfo?.tabId === preservedViewTabId) {
+      return;
+    }
+    preservedViewTabId = null;
+    scheduleRefreshState();
+  }
+
   function handleTabUpdated(tabId, changeInfo) {
+    if (preservingExternalNavigation || tabId === preservedViewTabId) {
+      return;
+    }
     if (activeTab?.id !== tabId) {
       return;
     }
 
     if (changeInfo.url || changeInfo.status === "complete") {
+      scheduleRefreshState();
+    }
+  }
+
+  async function preserveViewWhileOpening(openAction) {
+    preservingExternalNavigation = true;
+    try {
+      const result = await openAction();
+      preservedViewTabId = Number.isInteger(result?.tabId) ? result.tabId : null;
+      return result;
+    } finally {
+      preservingExternalNavigation = false;
+    }
+  }
+
+  async function preserveViewForActiveTab() {
+    const tab = await getActiveTab();
+    activeTab = tab;
+    preservedViewTabId = tab.id;
+  }
+
+  function hasPreservedView() {
+    return Number.isInteger(preservedViewTabId);
+  }
+
+  function resumeActiveTabContext() {
+    preservedViewTabId = null;
+    preservingExternalNavigation = false;
+    refreshState();
+  }
+
+  function handleParsingSettingsChanged(changes, areaName) {
+    if (areaName !== "local" || !changes[PARSING_SETTINGS_KEY]) {
+      return;
+    }
+
+    const previous = normalizeParsingSettings(changes[PARSING_SETTINGS_KEY].oldValue);
+    const next = normalizeParsingSettings(changes[PARSING_SETTINGS_KEY].newValue);
+    if (!previous.autoParse && next.autoParse && manualParseReady) {
       scheduleRefreshState();
     }
   }
@@ -218,6 +298,16 @@ export function createSidePanelDocumentContext({
         setBusy(elements.reloadPdf, false);
       }
     }
+  }
+
+  async function activateIdleToaster() {
+    if (!manualParseReady) {
+      return false;
+    }
+
+    manualParseReady = false;
+    await loadPdf({ bypassCache: false });
+    return true;
   }
 
   async function renderLibraryPaperContextIfCurrent(request) {
@@ -360,6 +450,10 @@ export function createSidePanelDocumentContext({
   }
 
   function updateManualDocumentTitle() {
+    if (document.body.classList.contains("comparative-mode")) {
+      return;
+    }
+
     const title = normalizeManualTitle(elements.documentTitle.value);
     elements.documentTitle.classList.toggle("muted", !title);
 
@@ -413,7 +507,7 @@ export function createSidePanelDocumentContext({
       elements.documentTitle.value = title;
       elements.documentTitle.placeholder = "Document title";
       elements.documentTitle.classList.remove("muted");
-      elements.documentTitle.title = title;
+      elements.documentTitle.removeAttribute("title");
       return;
     }
 
@@ -424,28 +518,123 @@ export function createSidePanelDocumentContext({
   }
 
   function showError(message) {
-    elements.pdfStatus.textContent = message;
-    elements.pdfStatus.title = message;
+    const normalizedMessage = String(message || "").trim();
+    elements.pdfStatus.textContent = normalizedMessage;
+    elements.pdfStatus.removeAttribute("title");
     elements.pdfStatus.classList.add("error");
+    setAgentConnectionErrorState(AGENT_CONNECTION_ERROR_PATTERN.test(normalizedMessage));
   }
 
   function setStatus(message) {
     elements.pdfStatus.textContent = message;
-    elements.pdfStatus.title = message;
+    elements.pdfStatus.removeAttribute("title");
     elements.pdfStatus.classList.remove("error");
+    setAgentConnectionErrorState(false);
   }
 
   function clearError() {
     elements.pdfStatus.classList.remove("error");
+    setAgentConnectionErrorState(false);
+  }
+
+  function setAgentConnectionErrorState(isAgentConnectionError) {
+    elements.pdfStatus.classList.toggle("agent-connection-error", isAgentConnectionError);
+    if (isAgentConnectionError) {
+      elements.pdfStatus.setAttribute("role", "button");
+      elements.pdfStatus.setAttribute("tabindex", "0");
+      elements.pdfStatus.setAttribute("aria-haspopup", "dialog");
+      elements.pdfStatus.setAttribute("aria-expanded", "false");
+      elements.pdfStatus.setAttribute("aria-label", "Failed to fetch. Show agent connection help.");
+      return;
+    }
+
+    elements.pdfStatus.removeAttribute("role");
+    elements.pdfStatus.removeAttribute("tabindex");
+    elements.pdfStatus.removeAttribute("aria-haspopup");
+    elements.pdfStatus.removeAttribute("aria-expanded");
+    elements.pdfStatus.removeAttribute("aria-label");
+    resetAgentConnectionCopyFeedback();
+  }
+
+  function toggleAgentConnectionHelp(event) {
+    if (!elements.pdfStatus.classList.contains("agent-connection-error")) {
+      return;
+    }
+    event?.stopPropagation?.();
+    const isOpen = elements.pdfStatus.getAttribute("aria-expanded") === "true";
+    elements.pdfStatus.setAttribute("aria-expanded", String(!isOpen));
+  }
+
+  function handleAgentConnectionHelpKeydown(event) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    toggleAgentConnectionHelp(event);
+  }
+
+  function handleAgentConnectionOutsidePointerDown(event) {
+    if (!elements.statusLineShell.contains(event.target)) {
+      closeAgentConnectionHelp();
+    }
+  }
+
+  function handleAgentConnectionDocumentKeydown(event) {
+    if (event.key === "Escape") {
+      closeAgentConnectionHelp();
+    }
+  }
+
+  function closeAgentConnectionHelp() {
+    if (elements.pdfStatus.classList.contains("agent-connection-error")) {
+      elements.pdfStatus.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  async function copyAgentConnectionCommand(event) {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(elements.agentConnectionCommand.textContent.trim());
+      showAgentConnectionCopyFeedback("Copied", true);
+    } catch (error) {
+      showAgentConnectionCopyFeedback("Copy failed", false);
+      onDiagnostic?.(`Could not copy local agent command: ${error.message || String(error)}`);
+    }
+  }
+
+  function showAgentConnectionCopyFeedback(label, copied) {
+    window.clearTimeout(copyFeedbackTimer);
+    const labelElement = elements.copyAgentConnectionCommand.querySelector(".agent-connection-copy-label");
+    labelElement.textContent = label;
+    elements.copyAgentConnectionCommand.classList.toggle("copied", copied);
+    copyFeedbackTimer = window.setTimeout(resetAgentConnectionCopyFeedback, 1200);
+  }
+
+  function resetAgentConnectionCopyFeedback() {
+    window.clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = null;
+    const labelElement = elements.copyAgentConnectionCommand.querySelector(".agent-connection-copy-label");
+    if (labelElement) {
+      labelElement.textContent = "Copy";
+    }
+    elements.copyAgentConnectionCommand.classList.remove("copied");
   }
 
   function setBusy(button, busy) {
     button.disabled = busy;
   }
 
-  function renderIdleState(isIdle) {
+  function renderIdleState(isIdle, options = {}) {
+    manualParseReady = Boolean(isIdle && options.manualParse);
     document.body.classList.toggle("idle-mode", Boolean(isIdle));
+    document.body.classList.toggle("manual-parse-mode", manualParseReady);
     elements.idleState.hidden = !isIdle;
+    elements.idleDashboardMessage.hidden = manualParseReady;
+    elements.manualParseMessage.hidden = !manualParseReady;
+    elements.idleState.querySelector(".idle-bubble")?.setAttribute(
+      "aria-label",
+      manualParseReady ? "Light the stove" : "Where is my food?"
+    );
 
     if (!isIdle) {
       return;
@@ -470,6 +659,11 @@ export function createSidePanelDocumentContext({
     start,
     scheduleRefreshState,
     refreshSelection,
+    activateIdleToaster,
+    preserveViewWhileOpening,
+    preserveViewForActiveTab,
+    hasPreservedView,
+    resumeActiveTabContext,
     getCurrentDocument,
     clearError,
     showError

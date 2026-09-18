@@ -1,39 +1,55 @@
-# Dashboard Archive And Import
+# Dashboard Archive, Export, And Import
 
-Last updated: 2026-09-07
+Last updated: 2026-09-09
 
-Status: implemented for single-paper and eligible Comparative Reading records.
+Status: implemented; manual acceptance pending.
 
-## Goal
+## Archive State
 
-Add a lightweight management mode to the Reading Dashboard so papers can be selected in bulk, archived, deleted, and later restored.
+Archive is an in-product state for papers and Comparative Reading sessions. Archiving a record sets `archivedAt`, clears its star, removes it from the Board, and shows it in Archive View. Documents, parser artifacts, conversations, aliases, comparison messages, and cross-record references remain local and are not copied or deleted.
 
-## Current Implementation
+The Dashboard and Archive View share one extension page. The upper-right view button switches between them. Search and Label/Time grouping work in both views; Archive View does not expose Sort, Star, or Add to Comparison.
 
-The dashboard has a selection-management mode:
+Archived paper cards and archived comparison cards load their stored context into the Side Panel. Opening an archived paper's web PDF also reuses its cached document without restoring or reparsing it.
 
-- The selection button toggles card-level selection and bulk management controls.
-- Cards can be multi-selected.
-- `Import` is a separate dashboard action next to the selection button.
-- `Select all` selects all currently visible dashboard papers.
-- `Backup` exports selected dashboard papers and does not delete anything.
-- `Delete` removes selected papers from local IndexedDB.
-- `Archive` exports selected records as a JSON file, then deletes them locally.
-- `Import` reads a previously exported JSON archive and restores records into IndexedDB.
-- Comparative Reading records can also be selected in Manage mode. Backup/Archive/Delete applies to selected comparison records as well as selected paper records.
+## Management Actions
 
-Archive data is handled in `src/storage/library-archive-store.js`. The dashboard UI only owns selection state, file download/upload, and confirmation prompts.
+Board selection mode supports:
 
-## Archive Format
+- `Archive`: move selected papers/comparisons to Archive View without exporting or deleting them.
+- `Delete`: permanently delete selected records using the existing cascade.
 
-The archive is a JSON object:
+Archive selection mode supports:
+
+- `Restore`: return selected records to the Board.
+- `Delete`: permanently delete selected records.
+- `Export`: download a restorable JSON file without changing local state.
+
+The former Board `Backup` action has been removed. Its non-destructive JSON behavior now belongs to Archive View's `Export` action.
+
+## Label Rules
+
+Archive Labels are editable but always gray. Archive Label creation, rename, assignment, and deletion affect only archived papers and do not consume any of the five colored Board Label slots.
+
+Board Label changes do not mutate archived papers. On Restore, a paper rejoins a live colored Label only when the Board currently has the same normalized Label name. Otherwise the name is retained as a gray dead Label. Dead Labels group by name, remain editable, and do not consume colored Label slots.
+
+## Comparative Reading
+
+Papers and comparison sessions have independent archive state. Archiving a paper does not change existing comparison membership, and existing comparisons may continue reading its cached document. Archived papers are excluded from new comparison candidates and rejected by draft/session validation.
+
+Restoring a comparison does not restore its source papers. Permanent paper deletion retains the existing pruning behavior: deleted keys are removed from comparisons, and comparisons with fewer than two papers are deleted with their messages.
+
+## Export Format
+
+The current transfer envelope is version 4:
 
 ```json
 {
   "schema": "pdf-ai-inspector.library-archive",
-  "version": 3,
-  "exportedAt": "2026-09-05T00:00:00.000Z",
+  "version": 4,
+  "exportedAt": "2026-09-09T00:00:00.000Z",
   "documentKeys": ["..."],
+  "comparisonIds": ["..."],
   "records": {
     "papers": [],
     "documents": [],
@@ -46,42 +62,30 @@ The archive is a JSON object:
 }
 ```
 
-The exported data includes final Markdown and parser artifacts stored in `documents`, conversation threads/messages, aliases, paper metadata, star state, `group`/`groupTone` Label state on paper records, and Comparative Reading sessions/messages whose full paper set is included in the export. It does not include raw LiteParse/PDF.js extraction data or derived RAG chunks.
-
-Only version 3 archives are accepted. Earlier experimental archive versions are intentionally unsupported.
-
-## Delete Semantics
-
-Deleting or archiving a paper removes records keyed by `documentKey` from:
-
-- `papers`
-- `documents`
-- `conversationThreads`
-- `conversationMessages`
-- `documentAliases`
-
-Comparative Reading sessions are pruned when selected papers are deleted. If a comparison loses too many papers to remain meaningful, its session and messages are removed. If at least two papers remain, the deleted paper keys are removed from the session.
+Exports include final Markdown/parser artifacts, paper metadata and Label/archive state, threads/messages, aliases, and eligible comparison sessions/messages. Exporting a selected comparison includes its required source-paper records. Raw extraction blocks and derived RAG packs are not exported.
 
 ## Import Semantics
 
-Import defaults to `skip existing` at the paper level.
+Versions 3 and 4 are accepted. After validation, Import asks for one destination:
 
-If any local records already exist for an archived `documentKey`, the whole paper is skipped. This prevents an older backup from overwriting newer local Markdown or newer conversation messages. Newly added papers are imported with their document records, final Markdown and parser artifacts, conversation threads/messages, aliases, star and Label state, and eligible Comparative Reading sessions.
+- `Import to Dashboard`: import records as active. Labels matching a current live Board Label adopt its tone; other Labels become gray dead Labels.
+- `Import to Archive`: import records as archived, unstarred records with gray Archive Labels.
+- `Cancel`: write nothing.
 
-After import, the dashboard shows a popup with:
+Import keeps skip-existing semantics across both views. If any local data already exists for a paper key, that paper is skipped and is not moved between Board and Archive. Existing comparison IDs are also skipped. Restore/Archive, rather than Import, changes the state of an existing local record.
 
-- how many papers were added
-- how many existing papers were skipped
+## Implementation Modules
 
-Future conflict handling could add explicit advanced options:
+```text
+src/storage/library-lifecycle-store.js
+  atomic Archive and Restore transitions
 
-- Preview before import.
-- Overwrite existing records.
-- Import summary by paper title.
-- Explicit archive migrations if backward compatibility becomes a future requirement.
+src/storage/library-archive-store.js
+  JSON Export/Import and permanent deletion
 
-## Open Questions
+src/dashboard/dashboard-bulk-actions.js
+  Board and Archive selection actions
 
-- Whether archive should include an optional human-readable Markdown sidecar for each paper.
-- Whether archive should be split into one file per paper when many papers are selected.
-- Whether delete should require typing a confirmation word for large selections.
+src/components/import-destination-dialog.js
+  Import destination choice
+```

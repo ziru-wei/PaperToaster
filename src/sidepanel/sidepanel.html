@@ -13,10 +13,10 @@
       <header>
         <div class="title-stack">
           <div class="url-row">
-            <button id="openDashboard" class="mini-icon-button" type="button" title="Reading Dashboard" aria-label="Reading Dashboard">
+            <button id="openDashboard" class="mini-icon-button" type="button" aria-label="Reading Dashboard">
               <span class="icon-mask dashboard-entry-icon" aria-hidden="true"></span>
             </button>
-            <button id="reloadPdf" class="mini-icon-button" type="button" title="Reload PDF" aria-label="Reload PDF">
+            <button id="reloadPdf" class="mini-icon-button" type="button" aria-label="Reload PDF">
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                 <path d="M3 3v5h5"></path>
@@ -37,13 +37,13 @@
                 <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"></path>
               </svg>
             </button>
-            <button id="conversationThreadArchive" class="mini-icon-button thread-archive-button" type="button" title="Conversation history" aria-label="Conversation history">
+            <button id="conversationThreadArchive" class="mini-icon-button thread-archive-button" type="button" aria-label="Conversation history">
               <span class="icon-mask thread-archive-icon" aria-hidden="true"></span>
             </button>
             <div id="conversationThreadWheel" class="thread-wheel" aria-label="Conversation history" hidden></div>
           </div>
           <div class="title-row">
-            <button id="openPaperUrl" class="mini-icon-button title-link-button" type="button" title="Open paper" aria-label="Open paper" disabled>
+            <button id="openPaperUrl" class="mini-icon-button title-link-button" type="button" aria-label="Open paper" disabled>
               <span class="icon-mask open-paper-icon" aria-hidden="true"></span>
             </button>
             <input id="documentTitle" class="document-title muted" type="text" placeholder="Title not loaded" aria-label="Document title">
@@ -54,7 +54,7 @@
             </span>
           </div>
           <div class="paper-meta-row">
-            <button id="documentStar" class="document-star" type="button" title="Star paper" aria-label="Star paper" disabled>
+            <button id="documentStar" class="document-star" type="button" aria-label="Star paper" disabled>
               <span aria-hidden="true"></span>
             </button>
             <div id="documentLabel" class="header-paper-label"></div>
@@ -62,15 +62,30 @@
           <div id="comparisonContextBar" class="comparison-context-bar" hidden>
             <div id="comparisonStatus" class="comparison-status muted"></div>
           </div>
-          <div id="pdfStatus" class="status-line muted">Loading...</div>
+          <div id="statusLineShell" class="status-line-shell">
+            <div id="pdfStatus" class="status-line muted">Loading...</div>
+            <div id="agentConnectionHelp" class="agent-connection-popover" role="dialog" aria-label="Agent connection help">
+              <p>Run in your terminal to connect with agents</p>
+              <div class="agent-connection-command-row">
+                <code id="agentConnectionCommand">cd "/Users/ziru/Documents/GitHub/chromePaperChat" &amp;&amp; PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js</code>
+                <button id="copyAgentConnectionCommand" class="agent-connection-copy" type="button">
+                  <span class="agent-connection-copy-icon" aria-hidden="true"></span>
+                  <span class="agent-connection-copy-label">Copy</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
       <section class="chat-panel">
         <div id="idleState" class="idle-state toaster-empty" hidden>
-          <div class="idle-bubble toaster-empty-bubble" aria-label="Feed me a Paper, please.">
-            <pre>.--------------------------.
-| Feed me a Paper, please. |
+          <div class="idle-bubble toaster-empty-bubble" aria-label="Where is my food?">
+            <pre id="idleDashboardMessage">.--------------------------.
+| Where is my food? |
+'-------------v------------'</pre>
+            <pre id="manualParseMessage" hidden>.--------------------------.
+|     <em>Light the stove</em>      |
 '-------------v------------'</pre>
           </div>
           <img id="idleOpenDashboard" class="idle-icon toaster-empty-icon" src="../assets/extension/icon-128.png" alt="" role="button" tabindex="0" aria-label="Open Paper Toaster dashboard">
@@ -91,8 +106,7 @@
             </div>
             <form id="selectionQuestionForm">
               <div class="prompt-field">
-                <div id="routeSuggestion" class="route-suggestion" aria-live="polite" hidden></div>
-                <textarea id="selectionQuestion" rows="4" placeholder="Type / for prompts"></textarea>
+                <textarea id="selectionQuestion" rows="4" placeholder="Start with typing /"></textarea>
                 <span id="modelCommandCompletion" class="model-command-completion" aria-hidden="true" hidden></span>
                 <span id="currentModelIndicator" class="current-model-indicator" hidden></span>
                 <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden>Press ↵ to start a new thread</div>
@@ -100,10 +114,15 @@
               </div>
             </form>
           </div>
-          <div id="selectionContextStatus" class="muted"></div>
+          <div class="chat-query-prompt" aria-hidden="true">
+            <span>Press</span><kbd>↵</kbd><span>Enter for querying</span>
+          </div>
         </div>
       </section>
     </main>
+    <footer class="saved-qa-footer" aria-hidden="true">
+      <span>Press</span><kbd>↵</kbd><span>Enter for querying</span>
+    </footer>
     <div id="savedQaControls" class="saved-qa-controls" hidden>
       <button id="savedQaToggle" class="saved-qa-toggle" type="button" aria-label="Saved Q&A">
         <span class="icon-mask saved-qa-toggle-icon" aria-hidden="true"></span>
@@ -112,6 +131,7 @@
         <span class="icon-mask saved-qa-collapse-icon" aria-hidden="true"></span>
       </button>
     </div>
+    <span id="sidePanelLiveStatus" class="visually-hidden" role="status" aria-live="polite"></span>
     <script type="module" src="./sidepanel.js"></script>
   </body>
 </html>

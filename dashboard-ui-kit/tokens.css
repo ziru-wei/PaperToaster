@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light;
+
+  --ptk-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ptk-font-size: 14px;
+  --ptk-line-height: 1.4;
+
+  --ptk-color-page: #eeeeef;
+  --ptk-color-text: #202020;
+  --ptk-color-muted: #707070;
+  --ptk-color-subtle: #969696;
+  --ptk-color-danger: #991b1b;
+  --ptk-color-inverse: #ffffff;
+
+  --ptk-glass-border: rgba(255, 255, 255, 0.56);
+  --ptk-glass-border-hover: rgba(255, 255, 255, 0.32);
+  --ptk-glass-surface:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.31) 0%, rgba(255, 255, 255, 0.16) 38%, rgba(255, 255, 255, 0.07) 68%, rgba(184, 184, 184, 0.035) 100%),
+    rgba(242, 242, 242, 0.36);
+  --ptk-glass-surface-hover:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.18) 38%, rgba(255, 255, 255, 0.08) 68%, rgba(163, 163, 163, 0.04) 100%),
+    rgba(158, 158, 158, 0.48);
+  --ptk-glass-surface-pressed:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.055) 42%, rgba(116, 116, 116, 0.09) 100%),
+    rgba(163, 163, 163, 0.22);
+  --ptk-glass-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), inset 0 -1px 1px rgba(85, 85, 85, 0.04), 0 2px 8px rgba(24, 24, 24, 0.028);
+  --ptk-glass-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.54), inset 0 -1px 0 rgba(85, 85, 85, 0.06), 0 3px 8px rgba(24, 24, 24, 0.045);
+  --ptk-glass-shadow-pressed: inset 0 1px 2px rgba(85, 85, 85, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.24), 0 1px 3px rgba(24, 24, 24, 0.025);
+  --ptk-glass-blur: blur(10px) saturate(100%);
+
+  --ptk-card-surface: rgba(248, 248, 248, 0.72);
+  --ptk-card-surface-hover: rgba(82, 82, 82, 0.025);
+  --ptk-card-surface-active: rgba(82, 82, 82, 0.12);
+  --ptk-card-surface-related: rgba(222, 222, 223, 0.45);
+  --ptk-card-border: rgba(82, 82, 82, 0.06);
+  --ptk-card-border-active: rgba(82, 82, 82, 0.08);
+  --ptk-card-border-related: rgba(82, 82, 82, 0.09);
+
+  --ptk-label-0-fg: #5a5487;
+  --ptk-label-0-bg: #d4cef1;
+  --ptk-label-1-fg: #8a551d;
+  --ptk-label-1-bg: #fad0a5;
+  --ptk-label-2-fg: #3d6847;
+  --ptk-label-2-bg: #c7e3cb;
+  --ptk-label-3-fg: #735f15;
+  --ptk-label-3-bg: #f5df8e;
+  --ptk-label-4-fg: #854766;
+  --ptk-label-4-bg: #efc7d8;
+  --ptk-label-neutral-fg: #595959;
+  --ptk-label-neutral-bg: #e5e5e5;
+
+  --ptk-layout-max: 1240px;
+  --ptk-page-gutter: 24px;
+  --ptk-card-radius: 6px;
+  --ptk-control-size: 30px;
+  --ptk-transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease, transform 100ms ease;
+}

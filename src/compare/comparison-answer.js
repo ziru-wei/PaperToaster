@@ -1,24 +1,18 @@
 import { generateLocalAgentText } from "../ai/local-agent-client.js";
 import { AI_PROVIDER_LOCAL, DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
-import { buildComparisonPrompt } from "./comparison-prompt.js";
 
 export async function answerComparisonQuestion({
   aiSettings,
-  contextPack,
-  conversationMessages = [],
+  question,
+  papers,
   signal
 }) {
   const provider = aiSettings?.provider || AI_PROVIDER_LOCAL;
-  const prompt = buildComparisonPrompt({
-    contextPack,
-    systemPrompt: aiSettings?.systemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
-    conversationMessages
-  });
 
   if (aiSettings?.debugMode) {
     signal?.throwIfAborted?.();
     return {
-      text: buildDebugComparisonAnswer({ contextPack, conversationMessages }),
+      text: buildDebugComparisonAnswer({ question, papers }),
       model: "debug-placeholder",
       raw: { debugMode: true }
     };
@@ -31,10 +25,10 @@ export async function answerComparisonQuestion({
       localAgentProfile: aiSettings.localAgentProfile,
       model: aiSettings.model,
       reasoningEffort: aiSettings.reasoningEffort,
-      prompt,
-      systemPrompt: aiSettings?.systemPrompt,
-      contextPack,
-      conversationMessages,
+      systemPrompt: aiSettings.systemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
+      mode: "comparative-reading",
+      question,
+      papers,
       signal
     });
   }
@@ -42,15 +36,12 @@ export async function answerComparisonQuestion({
   throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
-function buildDebugComparisonAnswer({ contextPack, conversationMessages }) {
-  const papers = contextPack.papers || [];
+function buildDebugComparisonAnswer({ question, papers = [] }) {
   return [
     "Debug comparative response only. No AI request was sent.",
     "",
-    `Question: ${contextPack.question || "(empty)"}`,
-    `Route: ${contextPack.comparisonPlan?.intent?.id || "general_synthesis"}`,
-    `Papers: ${papers.map((paper) => `[${paper.label}] ${paper.title}`).join("; ")}`,
-    `Evidence packets: ${papers.reduce((sum, paper) => sum + (paper.selectedEvidence?.length || 0), 0)}`,
-    `Previous comparison messages: ${conversationMessages.filter((message) => message?.role && message?.text).length}`
+    `Question: ${question || "(empty)"}`,
+    `Papers: ${papers.map((paper) => paper.title).join("; ")}`,
+    `Managed documents: ${papers.length}`
   ].join("\n");
 }

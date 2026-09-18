@@ -1,5 +1,5 @@
-import { annotateChunksWithSections, chunkDocument, createSectionOutline } from "../pdf/chunk-document.js";
-import { ensurePaperOverview } from "../rag/paper-overview.js";
+import { createMarkdownSourceSpans } from "../pdf/chunk-document.js";
+import { createPaperCitationShortName } from "../ai/citation-catalog.js";
 import {
   getDocumentMemoryKey,
   normalizeDocumentUrl,
@@ -65,8 +65,8 @@ export async function saveStoredDocument({ url, parserId, cacheVersion, document
     parser: document.parser || null,
     pageCount: document.pageCount || 0,
     markdown: document.markdown || "",
-    overview: document.overview || null,
-    sectionOutline: document.sectionOutline || createSectionOutline(document.chunks || []),
+    agentDocumentRef: document.agentDocumentRef || "",
+    sourceSpans: document.sourceSpans || createMarkdownSourceSpans(document.markdown || ""),
     byteLength: document.byteLength || null,
     contentType: document.contentType || "",
     metadata: document.metadata || null,
@@ -105,12 +105,7 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     text: record.markdown || ""
   };
 
-  const chunks = record.markdown ? annotateChunksWithSections(chunkDocument({
-    pageCount: record.pageCount || 1,
-    pages: [page]
-  })) : [];
-
-  const document = {
+  return {
     url: requestedUrl || record.url,
     documentKey: record.documentKey || "",
     normalizedUrl: record.normalizedUrl || "",
@@ -122,10 +117,11 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     pageCount: record.pageCount || 1,
     pages: record.markdown ? [page] : [],
     markdown: record.markdown || "",
+    agentDocumentRef: record.agentDocumentRef || "",
     rawMarkdown: "",
-    chunks,
-    sectionOutline: record.sectionOutline?.length ? record.sectionOutline : createSectionOutline(chunks),
-    overview: record.overview || null,
+    sourceSpans: record.sourceSpans?.length
+      ? record.sourceSpans
+      : createMarkdownSourceSpans(record.markdown || ""),
     metadata: record.metadata || null,
     artifacts: record.artifacts || null,
     warnings: record.warnings || [],
@@ -134,11 +130,6 @@ function hydrateStoredDocument(record, requestedUrl = "") {
     contentType: record.contentType || "",
     parsedAt: record.parsedAt || null,
     storedAt: record.updatedAt || null
-  };
-
-  return {
-    ...document,
-    overview: record.overview || ensurePaperOverview(document)
   };
 }
 
@@ -169,6 +160,7 @@ function upsertPaperRecord(store, { documentKey, url, title, titleSource, metada
       documentKey,
       canonicalUrl: url || existing.canonicalUrl || "",
       title: title || existing.title || "",
+      citationShortName: createPaperCitationShortName(title || existing.title || ""),
       titleSource: titleSource || existing.titleSource || "",
       metadata: metadata || existing.metadata || null,
       createdAt: existing.createdAt || now,

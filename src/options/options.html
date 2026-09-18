@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Paper Toaster Settings</title>
     <link rel="stylesheet" href="./options.css">
+    <link rel="stylesheet" href="../components/import-destination-dialog.css">
   </head>
   <body>
     <main>
@@ -49,6 +50,24 @@
         <div class="section-header">
           <div>
             <div class="section-title-row">
+              <h2>Saved Q&amp;A</h2>
+              <span id="savedQaStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>Limit the number of saved answers retained for each paper.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="full-width-field">
+            <span>Maximum saved Q&amp;A per paper</span>
+            <input id="savedQaPerPaperLimit" type="number" min="1" step="1" inputmode="numeric">
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <div class="section-title-row">
               <h2>Chat Models</h2>
               <span id="chatModelsStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
             </div>
@@ -57,6 +76,27 @@
           <button id="refreshChatModels" type="button">Refresh</button>
         </div>
         <div id="chatModelList" class="chat-model-list"></div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <div class="section-title-row">
+              <h2>Parsing</h2>
+              <span id="parsingStatus" class="save-indicator" aria-live="polite"><span aria-hidden="true">✓</span> Auto saved</span>
+            </div>
+            <p>Control whether newly opened PDF pages are parsed automatically.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="full-width-field">
+            <span>AutoParse</span>
+            <span class="checkbox-row">
+              <input id="autoParse" type="checkbox">
+              <span>Automatically parse uncached PDF pages.</span>
+            </span>
+          </label>
+        </div>
       </section>
 
       <section>
@@ -139,9 +179,23 @@
             <p>Debug tools for local stored conversation data.</p>
           </div>
           <div class="actions">
-            <button id="stripStoredBoldMarkers" type="button">Strip stored bold</button>
+            <button id="stripStoredEmphasisMarkers" type="button">Strip stored emphasis</button>
           </div>
         </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <h2>Import Library</h2>
+            <p>Restore papers and comparative readings from a Paper Toaster archive. Existing records are skipped.</p>
+          </div>
+          <div class="actions">
+            <button id="importLibraryArchive" type="button">Import</button>
+          </div>
+        </div>
+        <input id="libraryArchiveFile" type="file" accept="application/json,.json" hidden>
+        <div id="libraryImportStatus" class="status" role="status"></div>
       </section>
 
       <div id="status" class="status" role="status"></div>

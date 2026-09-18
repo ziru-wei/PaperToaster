@@ -20993,12 +20993,20 @@ function installContextCitationRule(markdownInstance) {
       if (!Array.isArray(blockToken.children)) {
         return;
       }
-      blockToken.children = blockToken.children.flatMap((token) => token.type === "text" ? splitContextCitationToken(state.Token, token) : token);
+      const children = [];
+      blockToken.children.forEach((token) => {
+        const replacements = token.type === "text" ? splitContextCitationToken(state.Token, token, state.env?.citationCatalog) : [token];
+        if (replacements[0]?.attrGet?.("class") === "paper-context-citation") {
+          attachCitationToPreviousText(children);
+        }
+        children.push(...replacements);
+      });
+      blockToken.children = children;
     });
   });
 }
-function splitContextCitationToken(Token3, token) {
-  const citationPattern = /\(\[p\d+-c\d+\](?:,\s*\[p\d+-c\d+\])*\)/gi;
+function splitContextCitationToken(Token3, token, citationCatalog) {
+  const citationPattern = /\[p\d+-h\d+-c\d+\](?:\s+\[p\d+-h\d+-c\d+\])*/gi;
   const matches = [...token.content.matchAll(citationPattern)];
   if (!matches.length) {
     return [token];
@@ -21007,13 +21015,22 @@ function splitContextCitationToken(Token3, token) {
   let cursor = 0;
   matches.forEach((match) => {
     if (match.index > cursor) {
-      tokens.push(createTextToken(Token3, token.content.slice(cursor, match.index), token.level));
+      const precedingText = token.content.slice(cursor, match.index).replace(/[ \t]+$/, "\u202F");
+      tokens.push(createTextToken(Token3, precedingText, token.level));
     }
     const openToken = new Token3("span_open", "span", 1);
     openToken.level = token.level;
     openToken.attrSet("class", "paper-context-citation");
     tokens.push(openToken);
-    tokens.push(createTextToken(Token3, match[0], token.level + 1));
+    const iconOpenToken = new Token3("span_open", "span", 1);
+    iconOpenToken.level = token.level + 1;
+    iconOpenToken.attrSet("class", "paper-context-citation-icon");
+    iconOpenToken.attrSet("aria-hidden", "true");
+    tokens.push(iconOpenToken);
+    const iconCloseToken = new Token3("span_close", "span", -1);
+    iconCloseToken.level = token.level + 1;
+    tokens.push(iconCloseToken);
+    tokens.push(...createCitationPopoverTokens(Token3, match[0], token.level + 1, citationCatalog));
     const closeToken = new Token3("span_close", "span", -1);
     closeToken.level = token.level;
     tokens.push(closeToken);
@@ -21023,6 +21040,85 @@ function splitContextCitationToken(Token3, token) {
     tokens.push(createTextToken(Token3, token.content.slice(cursor), token.level));
   }
   return tokens;
+}
+function attachCitationToPreviousText(tokens) {
+  const previous = tokens.at(-1);
+  if (previous?.type === "text" && /[ \t]$/.test(previous.content)) {
+    previous.content = previous.content.replace(/[ \t]+$/, "\u202F");
+  }
+}
+function createCitationPopoverTokens(Token3, citationText, level, citationCatalog) {
+  const tokens = [];
+  const popoverOpen = new Token3("span_open", "span", 1);
+  popoverOpen.level = level;
+  popoverOpen.attrSet("class", "paper-context-citation-popover");
+  tokens.push(popoverOpen);
+  groupCitationIds(citationText, citationCatalog).forEach((group) => {
+    const rowOpen = new Token3("span_open", "span", 1);
+    rowOpen.level = level + 1;
+    rowOpen.attrSet("class", "paper-context-citation-label");
+    rowOpen.attrSet("data-citation-paper-id", group.paperId);
+    tokens.push(rowOpen);
+    const paperOpen = new Token3("span_open", "span", 1);
+    paperOpen.level = level + 2;
+    paperOpen.attrSet("class", "paper-context-citation-paper");
+    tokens.push(paperOpen);
+    tokens.push(createTextToken(Token3, group.shortName, level + 3));
+    tokens.push(createCloseToken(Token3, level + 2));
+    group.locations.forEach((location) => {
+      const locationOpen = new Token3("span_open", "span", 1);
+      locationOpen.level = level + 2;
+      locationOpen.attrSet("class", "paper-context-citation-location");
+      tokens.push(locationOpen);
+      tokens.push(createTextToken(Token3, `/ ${location.heading} \xB7 ${location.chunks.join(", ")}`, level + 3));
+      tokens.push(createCloseToken(Token3, level + 2));
+    });
+    tokens.push(createCloseToken(Token3, level + 1));
+  });
+  tokens.push(createCloseToken(Token3, level));
+  return tokens;
+}
+function groupCitationIds(citationText, citationCatalog) {
+  const papers = new Map(
+    (Array.isArray(citationCatalog?.papers) ? citationCatalog.papers : []).map((paper) => [paper.id, paper])
+  );
+  const groups = /* @__PURE__ */ new Map();
+  for (const match of citationText.matchAll(/\[(p\d+)-(h\d+)-(c\d+)\]/gi)) {
+    const paperId = match[1].toLowerCase();
+    const headingId = match[2].toLowerCase();
+    const chunkId = match[3].toLowerCase();
+    if (!groups.has(paperId)) {
+      const paper2 = papers.get(paperId);
+      groups.set(paperId, {
+        paperId,
+        shortName: paper2?.shortName || paperId,
+        locationsByHeading: /* @__PURE__ */ new Map()
+      });
+    }
+    const paper = papers.get(paperId);
+    const headingName = truncateCitationHeading(paper?.headings?.[headingId] || headingId);
+    const group = groups.get(paperId);
+    if (!group.locationsByHeading.has(headingId)) {
+      group.locationsByHeading.set(headingId, {
+        heading: headingName,
+        chunks: []
+      });
+    }
+    group.locationsByHeading.get(headingId).chunks.push(chunkId);
+  }
+  return [...groups.values()].map(({ locationsByHeading, ...group }) => ({
+    ...group,
+    locations: [...locationsByHeading.values()]
+  }));
+}
+function truncateCitationHeading(value) {
+  const heading2 = String(value || "").trim();
+  return heading2.length > 22 ? `${heading2.slice(0, 21).trimEnd()}\u2026` : heading2;
+}
+function createCloseToken(Token3, level) {
+  const token = new Token3("span_close", "span", -1);
+  token.level = level;
+  return token;
 }
 function createTextToken(Token3, content, level) {
   const token = new Token3("text", "", 0);
@@ -21361,7 +21457,8 @@ function renderMarkdownFragment(markdownText, options = {}) {
 }
 function createMarkdownEnv(options = {}) {
   return {
-    omitHiddenText: Boolean(options.omitHiddenText)
+    omitHiddenText: Boolean(options.omitHiddenText),
+    citationCatalog: options.citationCatalog || null
   };
 }
 function getPurifier() {

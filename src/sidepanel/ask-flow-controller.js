@@ -1,9 +1,9 @@
 import { answerSelectionQuestion } from "../ai/selection-answer.js";
-import { formatSelectionContextForPrompt } from "../ai/selection-prompt.js";
-import { buildSelectionContextPack } from "../pdf/selection-context.js";
 import { getEffectiveAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { createLoadingMessageRotator, getInitialLoadingMessage } from "./loading-messages.js";
 import { notifyLibraryPaperActivityChanged } from "./paper-actions-controller.js";
+import { ensureAgentDocument } from "../ai/local-agent-document-client.js";
+import { createSourceSpanCitationContext } from "../ai/citation-catalog.js";
 
 export function createAskFlowController({
   conversation,
@@ -30,7 +30,7 @@ export function createAskFlowController({
     }
   }
 
-  async function askAiAboutSelection(event, submission = {}) {
+  async function askAiAboutSelection(event) {
     event.preventDefault();
     clearError();
     let pendingMessageId = "";
@@ -46,17 +46,32 @@ export function createAskFlowController({
       }
 
       const currentDocument = getCurrentDocument();
-      const contextPack = buildSelectionContextPack({
+      if (!currentDocument?.markdown || !currentDocument.agentDocumentRef) {
+        throw new Error("The active paper has no managed Markdown reference. Parse a new paper before asking.");
+      }
+
+      const aiSettings = await getEffectiveAiSettings();
+      if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
+        throw new Error("AI provider is not configured. Open extension Options to finish setup.");
+      }
+      const sourceCitationContext = createSourceSpanCitationContext({
         document: currentDocument,
-        selectionText,
-        question,
-        options: {
-          intentOverride: submission.intentOverride,
-          intentOverrideSource: submission.intentOverrideSource
-        }
+        paperIndex: 1,
+        title: currentDocument.title
       });
-      console.debug("[PDF AI] Selection context pack", contextPack);
-      console.debug("[PDF AI] Selection prompt context\n%s", formatSelectionContextForPrompt(contextPack));
+      if (!usesDebugAiMode(aiSettings)) {
+        await ensureAgentDocument({
+          endpoint: aiSettings.localEndpoint,
+          authToken: aiSettings.localAuthToken,
+          document: currentDocument
+        });
+      }
+      const papers = [{
+        title: currentDocument.title || "Untitled paper",
+        documentRef: currentDocument.agentDocumentRef,
+        paperId: "p1",
+        sourceSpanCitations: sourceCitationContext.sourceSpanCitations
+      }];
 
       const previousMessages = conversation.getMessages();
       conversation.appendMessage({
@@ -80,21 +95,16 @@ export function createAskFlowController({
       getComposer().clear();
       selectionPanel.clearComposerSelection();
 
-      const aiSettings = await getEffectiveAiSettings();
-      if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
-        throw new Error("AI provider is not configured. Open extension Options to finish setup.");
-      }
-
       currentAnswerAbortController = new AbortController();
       if (conversation.isSnapshotCurrent(askSnapshot)) {
         selectionPanel.setAnswerBusy(true);
-        selectionPanel.setContextStatus(getContextStatusForAsk(contextPack, Boolean(selectionText)));
       }
 
       const answer = await answerSelectionQuestion({
         aiSettings,
-        contextPack,
-        conversationMessages: previousMessages,
+        question,
+        selectionText,
+        papers,
         signal: currentAnswerAbortController.signal
       });
       loadingRotator?.stop();
@@ -103,26 +113,23 @@ export function createAskFlowController({
       const assistantMessage = {
         role: "assistant",
         text: answer.text,
-        model: answer.model
+        model: answer.model,
+        citationCatalog: { version: 1, papers: [sourceCitationContext.paper] }
       };
       const persistedMessages = [...(askSnapshot?.messages || previousMessages), assistantMessage];
 
-      const answerWasPlaced = conversation.isSnapshotCurrent(askSnapshot)
-        ? conversation.replaceTransientMessage(pendingMessageId, assistantMessage)
-        : false;
+      if (conversation.isSnapshotCurrent(askSnapshot)) {
+        conversation.replaceTransientMessage(pendingMessageId, assistantMessage);
+      }
       pendingMessageId = "";
 
       await conversation.saveMessagesForSnapshot(askSnapshot, persistedMessages);
       notifyLibraryPaperActivityChanged(currentDocument?.documentKey);
-      if (answerWasPlaced && conversation.isSnapshotCurrent(askSnapshot)) {
-        selectionPanel.setContextStatus(`Answered by ${answer.model}.`);
-      }
     } catch (error) {
       if (pendingMessageId && (!askSnapshot || conversation.isSnapshotCurrent(askSnapshot))) {
         conversation.removeTransientMessage(pendingMessageId);
       }
       if (!askSnapshot || conversation.isSnapshotCurrent(askSnapshot)) {
-        selectionPanel.clearContextStatus();
         showError(error.message || String(error));
       }
     } finally {
@@ -139,12 +146,4 @@ export function createAskFlowController({
     askAiAboutSelection,
     startNewThreadFromComposer
   };
-}
-
-function getContextStatusForAsk(contextPack, hasSelection) {
-  if (hasSelection && !contextPack.selection.anchor) {
-    return "Crunching the context...";
-  }
-
-  return getInitialLoadingMessage();
 }

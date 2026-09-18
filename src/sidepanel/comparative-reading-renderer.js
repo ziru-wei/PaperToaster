@@ -5,6 +5,7 @@ import { createToasterEmptyState } from "./toaster-empty-state.js";
 export function renderComparativeReadingPanel({
   elements,
   title,
+  titleEditable = false,
   selectedPapers,
   messages,
   status,
@@ -17,6 +18,7 @@ export function renderComparativeReadingPanel({
   onOpenPaperUrl,
   onEditUserMessage,
   onToggleSaved,
+  onSaveLimitRejected,
   onDeleteUnit,
   onHighlightAssistantSelection,
   onCircleAssistantSelection,
@@ -24,18 +26,23 @@ export function renderComparativeReadingPanel({
   onRemoveAssistantHighlight,
   onRemoveAssistantCircle,
   onRemoveAssistantHiddenText,
+  onNavigateCitation,
+  collapsedAssistantMessageIndexes,
+  onAssistantResponseCollapseChange,
   scrollToLatest,
   scrollToBottom = true
 }) {
   document.body.classList.add("comparative-mode");
   document.body.classList.toggle("comparison-empty-mode", !messages.length);
-  elements.documentTitle.readOnly = true;
-  elements.documentTitle.tabIndex = -1;
-  elements.documentTitle.setAttribute("aria-readonly", "true");
-  elements.documentTitle.value = title || "Comparative Reading";
+  elements.documentTitle.readOnly = !titleEditable;
+  elements.documentTitle.tabIndex = titleEditable ? 0 : -1;
+  elements.documentTitle.setAttribute("aria-readonly", String(!titleEditable));
+  if (!titleEditable || document.activeElement !== elements.documentTitle) {
+    elements.documentTitle.value = title || "Comparative Reading";
+  }
   elements.documentTitle.placeholder = "Comparative Reading";
   elements.documentTitle.classList.remove("muted");
-  elements.documentTitle.title = title || "Comparative Reading";
+  elements.documentTitle.removeAttribute("title");
   elements.openPaperUrl.disabled = true;
   elements.reloadPdf.disabled = true;
   elements.documentStar.disabled = true;
@@ -50,7 +57,6 @@ export function renderComparativeReadingPanel({
   elements.comparisonStatus.hidden = !visibleStatus;
   elements.comparisonStatus.classList.toggle("error", Boolean(status));
   elements.comparisonContextBar.hidden = !visibleStatus;
-  elements.selectionContextStatus.textContent = "";
   elements.selectionQuestion.placeholder = allowRemovePapers ? "Press @ or @# to feed." : "";
 
   renderPaperChips({
@@ -63,15 +69,19 @@ export function renderComparativeReadingPanel({
   });
   elements.conversationThread.classList.remove("comparison-empty-thread");
   renderConversationMessages(elements.conversationThread, messages, {
+    collapsedAssistantMessageIndexes,
+    onAssistantResponseCollapseChange,
     onEditUserMessage,
     onToggleSaved,
+    onSaveLimitRejected,
     onDeleteUnit,
     onHighlightAssistantSelection,
     onCircleAssistantSelection,
     onHideAssistantSelection,
     onRemoveAssistantHighlight,
     onRemoveAssistantCircle,
-    onRemoveAssistantHiddenText
+    onRemoveAssistantHiddenText,
+    onNavigateCitation
   });
   if (!messages.length) {
     renderComparisonEmptyState(elements.conversationThread, selectedPapers.length, emptySubtitle);
@@ -91,7 +101,7 @@ export function clearComparativeReadingPanel(elements) {
   elements.documentTitle.removeAttribute("tabindex");
   elements.documentTitle.removeAttribute("aria-readonly");
   elements.selectionText.hidden = false;
-  elements.selectionQuestion.placeholder = "Type / for prompts";
+  elements.selectionQuestion.placeholder = "Start with typing /";
   elements.comparisonContextBar.hidden = true;
   elements.comparisonStatus.textContent = "";
   elements.comparisonStatus.hidden = false;

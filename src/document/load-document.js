@@ -7,6 +7,7 @@ import { createEmptyTitleInfo, selectTitleInfoByPriority } from "../pdf/select-t
 import { parsePdfToContent } from "../parsers/parser-registry.js";
 import { getDocumentStoreKey, getStoredDocument, saveStoredDocument } from "../storage/document-store.js";
 import { createDocument } from "./create-document.js";
+import { createAgentDocumentRef } from "../ai/local-agent-document-client.js";
 
 const documentMemoryCache = new Map();
 const activeLoadKeys = new Set();
@@ -148,15 +149,16 @@ export async function loadDocumentForTab({
       diagnose(`${content.parserLabel} produced ${content.pageCount} rendered text groups.`);
     }
 
-    diagnose("Step 5: extracting text and building chunks.");
+    diagnose("Step 5: extracting text and building citation source spans.");
     const document = createDocument({
       url: tab.url,
       fetched,
       content,
       titleInfo
     });
+    document.agentDocumentRef = await createAgentDocumentRef(document.markdown);
     const extractedChars = document.pages.reduce((total, page) => total + page.text.length, 0);
-    diagnose(`Extracted ${extractedChars.toLocaleString()} text characters into ${document.chunks.length} chunks.`);
+    diagnose(`Extracted ${extractedChars.toLocaleString()} text characters into ${document.sourceSpans.length} citation source spans.`);
 
     for (const warning of document.warnings) {
       diagnose(`${warning.severity}: ${warning.message}`);

@@ -1,6 +1,8 @@
 import {
   deleteLibraryPaperGroup,
   getLibraryPaperSummary,
+  LIBRARY_SCOPE_ARCHIVE,
+  LIBRARY_SCOPE_BOARD,
   listLibraryPapers,
   renameLibraryPaperGroup,
   setLibraryPaperGroup,
@@ -14,6 +16,7 @@ import {
   renderSortMenu as renderDashboardSortMenu
 } from "./dashboard-renderer.js";
 import { MessageType } from "../shared/messages.js";
+import { openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 
 const SORT_OPTIONS = [
   { id: "latestThread", label: "Latest ask", sortBy: "latestThread", sortDirection: "desc" },
@@ -30,40 +33,53 @@ const PAPER_GROUP_MODE = {
   RECENT_CONVERSATION: "recent-conversation"
 };
 const PAPER_GROUP_MODE_STORAGE_KEY = "dashboardPaperGroupMode";
+const PAPER_MESSAGE_RINGS_VISIBLE_STORAGE_KEY = "dashboardPaperMessageRingsVisible";
+const PAPER_LABEL_GROUP_ORDER_STORAGE_KEY = "dashboardPaperLabelGroupOrder";
+const LIBRARY_VIEW = {
+  BOARD: LIBRARY_SCOPE_BOARD,
+  ARCHIVE: LIBRARY_SCOPE_ARCHIVE
+};
 
 const state = {
   activeDocumentKey: "",
   activeComparisonId: "",
   activeComparisonDocumentKeys: new Set(),
   comparisonMessageCountByDocumentKey: new Map(),
+  hasLocalPapers: false,
   papers: [],
   comparisons: [],
   sort: "latestThread",
   query: "",
   paperGroupMode: PAPER_GROUP_MODE.LABEL,
+  labelGroupOrder: [],
+  messageRingsVisible: true,
   manageMode: false,
   selectedDocumentKeys: new Set(),
-  selectedComparisonIds: new Set()
+  selectedComparisonIds: new Set(),
+  libraryView: LIBRARY_VIEW.BOARD
 };
 
 const elements = {
   summary: document.querySelector("#librarySummary"),
   search: document.querySelector("#paperSearch"),
-  importButton: document.querySelector("#paperImportButton"),
-  importFile: document.querySelector("#paperImportFile"),
   manageButton: document.querySelector("#paperManageButton"),
   bulkActions: document.querySelector("#bulkActions"),
   selectionSummary: document.querySelector("#selectionSummary"),
   selectAllButton: document.querySelector("#selectAllButton"),
   sendToMachineButton: document.querySelector("#sendToMachineButton"),
-  backupSelectedButton: document.querySelector("#backupSelectedButton"),
   archiveSelectedButton: document.querySelector("#archiveSelectedButton"),
+  restoreSelectedButton: document.querySelector("#restoreSelectedButton"),
+  exportSelectedButton: document.querySelector("#exportSelectedButton"),
   deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
   sortButton: document.querySelector("#paperSortButton"),
   sortMenu: document.querySelector("#paperSortMenu"),
   groupLayoutButton: document.querySelector("#paperGroupLayoutButton"),
+  messageRingButton: document.querySelector("#paperMessageRingButton"),
+  viewSwitch: document.querySelector("#libraryViewSwitch"),
   paperList: document.querySelector("#paperList"),
-  emptyState: document.querySelector("#emptyState")
+  emptyState: document.querySelector("#emptyState"),
+  emptyStateMessage: document.querySelector("#emptyStateMessage"),
+  keyboardHint: document.querySelector("#dashboardKeyboardHint")
 };
 
 const bulkActions = createDashboardBulkActions({
@@ -71,13 +87,25 @@ const bulkActions = createDashboardBulkActions({
   elements,
   onSendToMachine: sendSelectedPapersToMachine,
   onDeleteComplete: handlePapersDeleted,
-  onRenderRequested: renderDashboard,
-  onRefreshAllRequested: refreshAll
+  onRenderRequested: renderDashboard
 });
 
 elements.search.addEventListener("input", () => {
   state.query = elements.search.value;
   refreshRecords();
+});
+
+elements.viewSwitch.addEventListener("click", async () => {
+  state.libraryView = state.libraryView === LIBRARY_VIEW.BOARD
+    ? LIBRARY_VIEW.ARCHIVE
+    : LIBRARY_VIEW.BOARD;
+  bulkActions.setManageMode(false);
+  setSortMenuOpen(false);
+  state.activeDocumentKey = "";
+  state.activeComparisonId = "";
+  state.activeComparisonDocumentKeys = new Set();
+  renderViewControls();
+  await refreshRecords();
 });
 
 elements.paperList.addEventListener("click", (event) => {
@@ -115,6 +143,17 @@ elements.groupLayoutButton.addEventListener("click", () => {
   renderPapers();
 });
 
+elements.messageRingButton.addEventListener("click", () => {
+  state.messageRingsVisible = !state.messageRingsVisible;
+  chrome.storage.local.set({
+    [PAPER_MESSAGE_RINGS_VISIBLE_STORAGE_KEY]: state.messageRingsVisible
+  }).catch((error) => {
+    console.debug("[Paper Toaster] Could not save message-ring visibility", error);
+  });
+  renderMessageRingButton();
+  renderPapers();
+});
+
 bulkActions.attachEventListeners();
 
 window.addEventListener("focus", () => {
@@ -132,7 +171,43 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || event.defaultPrevented || shouldIgnoreDashboardEscape(event.target)) {
+  if (event.defaultPrevented) {
+    return;
+  }
+
+  if (
+    event.key === "Enter" &&
+    state.libraryView === LIBRARY_VIEW.BOARD &&
+    !state.manageMode &&
+    state.selectedDocumentKeys.size === 0 &&
+    state.selectedComparisonIds.size === 0 &&
+    (
+      Boolean(state.activeDocumentKey) ||
+      Boolean(state.activeComparisonId) ||
+      state.activeComparisonDocumentKeys.size === 0
+    ) &&
+    !shouldIgnoreDashboardShortcut(event.target)
+  ) {
+    event.preventDefault();
+    bulkActions.setManageMode(true);
+    return;
+  }
+
+  if (
+    event.key === "Enter" &&
+    state.libraryView === LIBRARY_VIEW.BOARD &&
+    state.manageMode &&
+    bulkActions.getSelectedDocumentKeys().length > 0 &&
+    !shouldIgnoreDashboardShortcut(event.target)
+  ) {
+    event.preventDefault();
+    bulkActions.sendSelectedPapers().catch((error) => {
+      elements.summary.textContent = `Could not send papers: ${error.message || String(error)}`;
+    });
+    return;
+  }
+
+  if (event.key !== "Escape" || shouldIgnoreDashboardEscape(event.target)) {
     return;
   }
 
@@ -169,15 +244,21 @@ initializeDashboard().catch((error) => {
 });
 
 async function initializeDashboard() {
-  await restorePaperGroupMode().catch((error) => {
-    console.debug("[Paper Toaster] Could not restore dashboard grouping mode", error);
+  await Promise.all([
+    restorePaperGroupMode(),
+    restoreMessageRingVisibility(),
+    restoreLabelGroupOrder()
+  ]).catch((error) => {
+    console.debug("[Paper Toaster] Could not restore dashboard view preferences", error);
   });
   const groupingCriterion = getGroupingCriterion();
   if (state.sort === groupingCriterion) {
     state.sort = groupingCriterion === "label" ? "latestThread" : "label";
   }
   renderGroupLayoutButton();
+  renderMessageRingButton();
   renderSortMenu();
+  renderViewControls();
   await clearDashboardContext();
   await refreshAll();
 }
@@ -190,20 +271,37 @@ async function restorePaperGroupMode() {
   }
 }
 
+async function restoreMessageRingVisibility() {
+  const stored = await chrome.storage.local.get(PAPER_MESSAGE_RINGS_VISIBLE_STORAGE_KEY);
+  if (typeof stored[PAPER_MESSAGE_RINGS_VISIBLE_STORAGE_KEY] === "boolean") {
+    state.messageRingsVisible = stored[PAPER_MESSAGE_RINGS_VISIBLE_STORAGE_KEY];
+  }
+}
+
+async function restoreLabelGroupOrder() {
+  const stored = await chrome.storage.local.get(PAPER_LABEL_GROUP_ORDER_STORAGE_KEY);
+  const order = stored[PAPER_LABEL_GROUP_ORDER_STORAGE_KEY];
+  if (Array.isArray(order)) {
+    state.labelGroupOrder = order.filter((key) => typeof key === "string");
+  }
+}
+
 async function refreshAll() {
   await refreshActivePaperContext();
   await refreshRecords();
 }
 
 async function refreshRecords() {
-  const [papers, allComparisons] = await Promise.all([
+  const [allPapers, allComparisons] = await Promise.all([
     listLibraryPapers({
-      ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread),
-      query: state.query
+      view: state.libraryView,
+      ...(SORT_CONFIG[state.sort] || SORT_CONFIG.latestThread)
     }),
-    listDashboardComparisons()
+    listDashboardComparisons(state.libraryView)
   ]);
-  state.papers = papers.filter(isDisplayablePaper);
+  const displayablePapers = allPapers.filter(isDisplayablePaper);
+  state.hasLocalPapers = displayablePapers.length > 0 || allComparisons.length > 0;
+  state.papers = filterDashboardPapers(displayablePapers, state.query);
   state.comparisonMessageCountByDocumentKey = countComparisonMessagesByDocument(allComparisons);
   state.comparisons = filterDashboardComparisons(allComparisons, state.query);
   renderPapers();
@@ -218,7 +316,8 @@ function renderDashboard() {
 function renderSummary() {
   const totalMessages = state.papers.reduce((sum, paper) => sum + paper.messageCount, 0);
   const totalComparisonMessages = state.comparisons.reduce((sum, comparison) => sum + comparison.messageCount, 0);
-  elements.summary.textContent = `${state.papers.length} papers · ${state.comparisons.length} comparisons · ${totalMessages + totalComparisonMessages} messages`;
+  elements.search.placeholder = `${state.papers.length} papers · ${state.comparisons.length} comparisons · ${totalMessages + totalComparisonMessages} messages`;
+  elements.summary.textContent = "";
   bulkActions.renderBulkActions();
 }
 
@@ -228,9 +327,13 @@ function renderPapers() {
     emptyState: elements.emptyState,
     papers: state.papers,
     comparisons: state.comparisons,
+    libraryView: state.libraryView,
+    showEmptyState: !state.hasLocalPapers,
     comparisonMessageCountByDocumentKey: state.comparisonMessageCountByDocumentKey,
     sortId: state.sort,
     paperGroupMode: state.paperGroupMode,
+    labelGroupOrder: state.labelGroupOrder,
+    showMessageRings: state.libraryView === LIBRARY_VIEW.BOARD && state.messageRingsVisible,
     activeDocumentKey: state.activeDocumentKey,
     activeComparisonId: state.activeComparisonId,
     activeComparisonDocumentKeys: getActiveComparisonDocumentKeys(),
@@ -238,9 +341,11 @@ function renderPapers() {
     selectedDocumentKeys: state.selectedDocumentKeys,
     selectedComparisonIds: state.selectedComparisonIds,
     onOpenPaperContext: openPaperContextInSidePanel,
+    onOpenPaper: openPaperFromDashboard,
     onOpenComparisonContext: openComparisonContextInSidePanel,
     onTogglePaperSelection: bulkActions.togglePaperSelection,
     onSetPaperGroupSelected: bulkActions.setPaperSelection,
+    onReorderLabelGroups: reorderLabelGroups,
     onToggleComparisonSelection: bulkActions.toggleComparisonSelection,
     onTogglePaperStarred: togglePaperStarred,
     onToggleComparisonStarred: toggleComparisonStarred,
@@ -248,6 +353,68 @@ function renderPapers() {
     onRenamePaperGroup: renamePaperGroup,
     onDeletePaperGroup: deletePaperGroup
   });
+  renderKeyboardHint();
+}
+
+function reorderLabelGroups(groupOrder) {
+  const visibleKeys = new Set(groupOrder);
+  let visibleIndex = 0;
+  const mergedOrder = state.labelGroupOrder.map((key) => {
+    if (!visibleKeys.has(key)) {
+      return key;
+    }
+    return groupOrder[visibleIndex++];
+  });
+  state.labelGroupOrder = [
+    ...mergedOrder,
+    ...groupOrder.slice(visibleIndex).filter((key) => !mergedOrder.includes(key))
+  ];
+  persistLabelGroupOrder();
+}
+
+function persistLabelGroupOrder() {
+  chrome.storage.local.set({
+    [PAPER_LABEL_GROUP_ORDER_STORAGE_KEY]: state.labelGroupOrder
+  }).catch((error) => {
+    console.debug("[Paper Toaster] Could not save label-group order", error);
+  });
+}
+
+function renderKeyboardHint() {
+  const selectedPaperCount = bulkActions.getSelectedDocumentKeys().length;
+  const showSelectionHint = state.libraryView === LIBRARY_VIEW.BOARD && state.manageMode && selectedPaperCount > 0;
+  const showActivationHint = !state.manageMode &&
+    state.paperGroupMode === PAPER_GROUP_MODE.LABEL &&
+    Boolean(state.activeDocumentKey);
+  const showMultiSelectHint = state.libraryView === LIBRARY_VIEW.BOARD &&
+    !state.manageMode &&
+    !state.activeDocumentKey &&
+    !state.activeComparisonId &&
+    state.activeComparisonDocumentKeys.size === 0 &&
+    state.selectedDocumentKeys.size === 0 &&
+    state.selectedComparisonIds.size === 0;
+  elements.keyboardHint.hidden = !showSelectionHint && !showActivationHint && !showMultiSelectHint;
+  elements.keyboardHint.replaceChildren();
+
+  if (showSelectionHint) {
+    elements.keyboardHint.append(
+      "Press ",
+      createShortcutLabel("↵", "Enter"),
+      " for toasting"
+    );
+  } else if (showMultiSelectHint || showActivationHint) {
+    elements.keyboardHint.append(
+      "Press and hold a card to move it, OR, Press ",
+      createShortcutLabel("↵"),
+      " Enter for multi-selection"
+    );
+  }
+}
+
+function createShortcutLabel(symbol, label) {
+  const shortcut = document.createElement("kbd");
+  shortcut.textContent = [symbol, label].filter(Boolean).join(" ");
+  return shortcut;
 }
 
 async function openPaperContextInSidePanel(documentKey) {
@@ -267,6 +434,19 @@ async function openPaperContextInSidePanel(documentKey) {
     });
   } catch (error) {
     console.debug("[PDF AI] Could not open paper context in side panel", error);
+  }
+}
+
+async function openPaperFromDashboard(paper) {
+  const url = paper?.canonicalUrl;
+  if (!url) {
+    return;
+  }
+
+  try {
+    await openPaperUrlInExistingTab(url);
+  } catch (error) {
+    console.debug("[Paper Toaster] Could not open paper from dashboard", error);
   }
 }
 
@@ -333,21 +513,33 @@ async function togglePaperStarred(paper) {
 }
 
 async function updatePaperGroup(paper, group) {
-  await setLibraryPaperGroup(paper.documentKey, group, paper);
+  await setLibraryPaperGroup(paper.documentKey, group, paper, { scope: state.libraryView });
   notifyPaperActivityChanged(paper.documentKey);
   await refreshRecords();
 }
 
 async function renamePaperGroup(oldGroup, newGroup) {
-  const changedDocumentKeys = await renameLibraryPaperGroup(oldGroup, newGroup);
+  const changedDocumentKeys = await renameLibraryPaperGroup(oldGroup, newGroup, { scope: state.libraryView });
+  const oldKey = getLabelGroupKey(oldGroup);
+  const newKey = getLabelGroupKey(newGroup);
+  state.labelGroupOrder = state.labelGroupOrder.map((key) => key === oldKey ? newKey : key);
+  persistLabelGroupOrder();
   changedDocumentKeys.forEach(notifyPaperActivityChanged);
   await refreshRecords();
 }
 
 async function deletePaperGroup(group) {
-  const changedDocumentKeys = await deleteLibraryPaperGroup(group);
+  const changedDocumentKeys = await deleteLibraryPaperGroup(group, { scope: state.libraryView });
+  const deletedKey = getLabelGroupKey(group);
+  state.labelGroupOrder = state.labelGroupOrder.filter((key) => key !== deletedKey);
+  persistLabelGroupOrder();
   changedDocumentKeys.forEach(notifyPaperActivityChanged);
   await refreshRecords();
+}
+
+function getLabelGroupKey(group) {
+  const normalized = String(group || "").trim().toLowerCase();
+  return normalized || "__unlabeled__";
 }
 
 async function toggleComparisonStarred(comparison) {
@@ -377,12 +569,20 @@ function getGroupingCriterion() {
 
 function renderGroupLayoutButton() {
   const groupsByRecentConversation = state.paperGroupMode === PAPER_GROUP_MODE.RECENT_CONVERSATION;
-  elements.groupLayoutButton.classList.toggle("active", groupsByRecentConversation);
+  elements.groupLayoutButton.classList.remove("active");
   elements.groupLayoutButton.setAttribute("aria-pressed", String(groupsByRecentConversation));
   elements.groupLayoutButton.setAttribute(
     "aria-label",
     groupsByRecentConversation ? "Group papers by label" : "Group papers by latest conversation"
   );
+}
+
+function renderMessageRingButton() {
+  const ringsHidden = !state.messageRingsVisible;
+  elements.messageRingButton.classList.remove("active");
+  elements.messageRingButton.classList.toggle("rings-hidden", ringsHidden);
+  elements.messageRingButton.setAttribute("aria-pressed", String(ringsHidden));
+  elements.messageRingButton.setAttribute("aria-label", ringsHidden ? "Show message rings" : "Hide message rings");
 }
 
 async function handlePapersDeleted(selection) {
@@ -407,6 +607,7 @@ async function sendSelectedPapersToMachine(documentKeys) {
   const response = await chrome.runtime.sendMessage({
     type: MessageType.UPDATE_COMPARISON_DRAFT,
     documentKeys,
+    append: true,
     rejectOverflow: true,
     openPanel: true
   });
@@ -414,8 +615,8 @@ async function sendSelectedPapersToMachine(documentKeys) {
   renderPapers();
 }
 
-async function listDashboardComparisons() {
-  const sessions = await listComparisonSessions();
+async function listDashboardComparisons(view = LIBRARY_VIEW.BOARD) {
+  const sessions = await listComparisonSessions({ view });
   const summaries = [];
 
   for (const session of sessions) {
@@ -432,7 +633,8 @@ async function listDashboardComparisons() {
       firstMessageCreatedAt: session.firstMessageCreatedAt || session.createdAt || null,
       updatedAt: session.updatedAt || session.createdAt || null,
       isStarred: Boolean(session.isStarred),
-      starredAt: session.starredAt || null
+      starredAt: session.starredAt || null,
+      archivedAt: session.archivedAt || null
     };
 
     summaries.push(comparison);
@@ -441,11 +643,37 @@ async function listDashboardComparisons() {
   return summaries;
 }
 
+function renderViewControls() {
+  const archiveView = state.libraryView === LIBRARY_VIEW.ARCHIVE;
+  document.body.classList.toggle("library-view-archive", archiveView);
+  elements.viewSwitch.setAttribute("aria-label", archiveView ? "Back to Board" : "Open Archive");
+  elements.viewSwitch.classList.toggle("active", archiveView);
+  elements.sortButton.closest(".sort-control").hidden = archiveView;
+  elements.messageRingButton.hidden = archiveView;
+  elements.sendToMachineButton.hidden = archiveView || elements.sendToMachineButton.hidden;
+  elements.paperList.setAttribute("aria-label", archiveView ? "Archived papers" : "Local papers");
+  elements.emptyStateMessage.textContent = archiveView ? "archive is empty" : "open a PDF to kick off";
+}
+
 function filterDashboardComparisons(comparisons, query) {
   const normalizedQuery = String(query || "").trim().toLowerCase();
   return normalizedQuery
     ? comparisons.filter((comparison) => matchesComparisonQuery(comparison, normalizedQuery))
     : comparisons;
+}
+
+function filterDashboardPapers(papers, query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) {
+    return papers;
+  }
+
+  return papers.filter((paper) => [
+    paper.title,
+    paper.canonicalUrl,
+    paper.domain,
+    paper.group
+  ].some((value) => String(value || "").toLowerCase().includes(normalizedQuery)));
 }
 
 function countComparisonMessagesByDocument(comparisons) {
@@ -526,6 +754,18 @@ function shouldIgnoreDashboardEscape(target) {
 
   return Boolean(eventTarget?.closest?.(
     ".paper-group-editor, .paper-group-control"
+  ));
+}
+
+function shouldIgnoreDashboardShortcut(target) {
+  const activeElement = document.activeElement;
+  const eventTarget = target || activeElement;
+  if (isEditableElement(eventTarget) || isEditableElement(activeElement)) {
+    return true;
+  }
+
+  return Boolean(eventTarget?.closest?.(
+    "button, a, [role='button'], .paper-group-editor, .paper-group-control"
   ));
 }
 

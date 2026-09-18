@@ -1,12 +1,12 @@
 # Reading Dashboard Architecture
 
-Last updated: 2026-09-07
+Last updated: 2026-09-09
 
 Status: implemented. Unfinished work is tracked in `docs/unfinished-feature-plan.md`.
 
 ## Purpose
 
-The Reading Dashboard is the local library view for Paper Toaster. It lists papers with stored document context and Comparative Reading sessions without fetching or reparsing PDFs.
+The Reading Dashboard is the local library page for Paper Toaster. It provides parallel Board and Archive views for papers and Comparative Reading sessions without fetching or reparsing PDFs.
 
 ## Data Model
 
@@ -22,12 +22,14 @@ isStarred
 starredAt
 group
 groupTone
+labelState
+archivedAt
 activeThreadId
 createdAt
 updatedAt
 ```
 
-`group` is the current single-label value shown by the UI. `groupTone` is its stable palette index. Label creation, replacement, rename, deletion, and grouping are implemented by `src/storage/library-store.js`; there is no separate label or paper-label join store.
+`group` is the current single-label value shown by the UI. `groupTone` is its stable palette index, `labelState` distinguishes live and dead Board Labels, and `archivedAt` separates Board and Archive records. Label creation, replacement, rename, deletion, and grouping are implemented by `src/storage/library-store.js`; there is no separate label or paper-label join store.
 
 Comparative Reading cards are derived from `comparisonSessions` and `comparisonMessages`. They reference source papers by `documentKeys` rather than copying Markdown or paper metadata.
 
@@ -40,6 +42,8 @@ Comparative Reading cards are derived from `comparisonSessions` and `comparisonM
 - Single-paper and Comparative Reading records have separate visual regions.
 - Activating a record hydrates the side panel from IndexedDB.
 - Related records receive secondary highlighting without becoming active.
+- Archive View supports search and Label/Time grouping but does not expose sorting, Star, or Add to Comparison.
+- Archive and dead Labels render gray and do not consume the five live Label tones.
 
 ## Paper Actions
 
@@ -51,13 +55,14 @@ Comparative Reading cards are derived from `comparisonSessions` and `comparisonM
 
 ## Management
 
-Selection mode supports paper and comparison records:
+Board selection mode supports paper and comparison records:
 
-- Backup exports selected records.
-- Archive exports and then deletes selected records.
+- Archive moves selected records to Archive View and clears their stars.
 - Delete removes selected records after confirmation.
-- Import is a separate action and accepts only the current archive schema.
+- Backup is no longer exposed on the Board.
 - Clear Unasked removes only paper records without Q&A and does not remove comparison sessions.
+
+Archive selection mode supports Restore, permanent Delete, and non-destructive JSON Export. Import accepts transfer versions 3 and 4 and asks whether new records should enter the Board or Archive View.
 
 Archive behavior is documented in `docs/dashboard-archive-import.md`.
 
@@ -71,7 +76,7 @@ src/dashboard/dashboard-renderer.js
   card/group/comparison rendering
 
 src/dashboard/dashboard-bulk-actions.js
-  selection, backup, archive, delete, and import
+  Board/Archive selection, lifecycle actions, export, and delete
 
 src/components/paper-label-control.js
   shared paper Label interaction
@@ -80,7 +85,10 @@ src/storage/library-store.js
   paper summaries, stars, and group metadata
 
 src/storage/library-archive-store.js
-  archive/import persistence
+  JSON export/import and permanent deletion
+
+src/storage/library-lifecycle-store.js
+  archive/restore persistence
 ```
 
 The dashboard does not own PDF parsing, conversation persistence, or AI provider behavior.

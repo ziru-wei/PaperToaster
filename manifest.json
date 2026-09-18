@@ -38,6 +38,22 @@
       "128": "src/assets/extension/icon-128.png"
     }
   },
+  "commands": {
+    "open-dashboard": {
+      "suggested_key": {
+        "default": "Ctrl+E",
+        "mac": "Command+E"
+      },
+      "description": "Open the Paper Toaster dashboard"
+    },
+    "_execute_side_panel": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
+      "description": "Toggle the Paper Toaster side panel"
+    }
+  },
   "side_panel": {
     "default_path": "src/sidepanel/sidepanel.html"
   },

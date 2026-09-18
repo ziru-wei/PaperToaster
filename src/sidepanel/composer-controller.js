@@ -8,8 +8,6 @@ export function createComposerController({
   paperMentionMenu,
   promptPresetMenuElement,
   usePaperMentionMenu = () => false,
-  routeSuggestion,
-  shouldSuggestRoute = () => true,
   canSubmit,
   onSubmit,
   onNewThread
@@ -32,7 +30,6 @@ export function createComposerController({
 
   function clear() {
     textarea.value = "";
-    routeSuggestion?.reset();
     updateNewThreadPromptHint();
     syncContentState();
   }
@@ -52,13 +49,11 @@ export function createComposerController({
       return;
     }
 
-    const submission = routeSuggestion?.accept() || {};
-    onSubmit(event, submission);
+    onSubmit(event);
   }
 
   function handleInput() {
     syncContentState();
-    routeSuggestion?.reset();
     getInactiveMenu()?.hide();
     getActiveMenu().update();
     updateNewThreadPromptHint();
@@ -84,10 +79,6 @@ export function createComposerController({
       return;
     }
 
-    if (shouldSuggestRoute() && routeSuggestion?.handleKeydown(event)) {
-      return;
-    }
-
     if (getActiveMenu().handleKeydown(event)) {
       return;
     }
@@ -98,12 +89,6 @@ export function createComposerController({
 
     event.preventDefault();
     if (!getText() || !canSubmit()) {
-      return;
-    }
-
-    if (shouldSuggestRoute() && routeSuggestion && !routeSuggestion.hasPendingSuggestionFor(getText())) {
-      hideMenus();
-      routeSuggestion.prepare(getText());
       return;
     }
 
@@ -124,7 +109,6 @@ export function createComposerController({
   }
 
   async function startNewThread() {
-    routeSuggestion?.reset();
     await onNewThread();
   }
 

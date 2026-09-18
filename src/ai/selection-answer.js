@@ -1,19 +1,13 @@
 import { generateLocalAgentText } from "./local-agent-client.js";
-import { formatSelectionContextForPrompt, getPaperReadingPolicyPrompt } from "./selection-prompt.js";
 import { AI_PROVIDER_LOCAL, DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
 
-export async function answerSelectionQuestion({ aiSettings, contextPack, conversationMessages = [], signal }) {
+export async function answerSelectionQuestion({ aiSettings, question, selectionText = "", papers, signal }) {
   const provider = aiSettings?.provider || AI_PROVIDER_LOCAL;
-  const prompt = buildSelectionQuestionPrompt({
-    contextPack,
-    systemPrompt: aiSettings?.systemPrompt,
-    conversationMessages
-  });
 
   if (aiSettings?.debugMode) {
     signal?.throwIfAborted?.();
     return {
-      text: buildDebugSelectionAnswer({ contextPack, conversationMessages }),
+      text: buildDebugSelectionAnswer({ question, selectionText, papers }),
       model: "debug-placeholder",
       raw: { debugMode: true }
     };
@@ -26,10 +20,11 @@ export async function answerSelectionQuestion({ aiSettings, contextPack, convers
       localAgentProfile: aiSettings.localAgentProfile,
       model: aiSettings.model,
       reasoningEffort: aiSettings.reasoningEffort,
-      prompt,
-      systemPrompt: aiSettings?.systemPrompt,
-      contextPack,
-      conversationMessages,
+      systemPrompt: aiSettings.systemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
+      mode: "single-paper",
+      question,
+      selectionText,
+      papers,
       signal
     });
   }
@@ -37,53 +32,15 @@ export async function answerSelectionQuestion({ aiSettings, contextPack, convers
   throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
-export function buildSelectionQuestionPrompt({ contextPack, systemPrompt, conversationMessages = [] }) {
-  const normalizedSystemPrompt = String(systemPrompt || "").trim();
-  return [
-    normalizedSystemPrompt || DEFAULT_AI_SETTINGS.systemPrompt,
-    "",
-    getPaperReadingPolicyPrompt(),
-    "",
-    "Previous conversation in this thread:",
-    formatConversationMessages(conversationMessages),
-    "",
-    formatSelectionContextForPrompt(contextPack)
-  ].join("\n");
-}
-
-function formatConversationMessages(messages) {
-  const visibleMessages = messages
-    .filter((message) => message?.role && message?.text)
-    .slice(-8);
-
-  if (!visibleMessages.length) {
-    return "(No previous messages.)";
-  }
-
-  return visibleMessages
-    .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.text}`)
-    .join("\n\n");
-}
-
-function buildDebugSelectionAnswer({ contextPack, conversationMessages }) {
-  const title = contextPack?.paper?.title || "Untitled paper";
-  const question = compactPreview(contextPack?.question || "", 180);
-  const selection = compactPreview(contextPack?.selection?.text || "", 260);
-  const localCount = contextPack?.context?.local?.length || 0;
-  const retrievedCount = contextPack?.context?.retrieved?.length || 0;
-  const previousCount = conversationMessages.filter((message) => message?.role && message?.text).length;
-  const pageLabel = contextPack?.selection?.anchor?.pageStart
-    ? `page ${contextPack.selection.anchor.pageStart}`
-    : "page not located";
-
+function buildDebugSelectionAnswer({ question, selectionText, papers }) {
   return [
     "Debug response only. No AI request was sent.",
     "",
-    `Paper: ${title}`,
-    `Selection: "${selection || "(empty)"}"`,
-    `Question: ${question || "(empty)"}`,
+    `Paper: ${papers?.[0]?.title || "Untitled paper"}`,
+    `Selection characters: ${String(selectionText || "").length}`,
+    `Question: ${compactPreview(question, 180) || "(empty)"}`,
     "",
-    `Context check: selection ${pageLabel}; nearby chunks ${localCount}; retrieved chunks ${retrievedCount}; previous thread messages ${previousCount}.`
+    `Managed document reference: ${papers?.[0]?.documentRef || "unavailable"}.`
   ].join("\n");
 }
 

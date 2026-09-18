@@ -6,6 +6,12 @@ import {
   setCurrentAiModelSelection
 } from "../storage/ai-settings-store.js";
 
+const MODEL_MENU_OPTION = Object.freeze({
+  id: "model-menu",
+  label: "model",
+  type: "model-menu"
+});
+
 export function createPromptPresetMenuController({
   textarea,
   menuElement,
@@ -17,6 +23,7 @@ export function createPromptPresetMenuController({
   let enabledModels = [];
   let currentModel = null;
   let activeIndex = 0;
+  let modelFeedbackTimer = null;
 
   textarea.addEventListener("scroll", () => {
     if (!commandCompletionElement?.hidden) {
@@ -119,6 +126,10 @@ export function createPromptPresetMenuController({
       activeIndex = (activeIndex - 1 + options.length) % options.length;
       render(options, request);
       return true;
+    } else if (event.key === "ArrowRight" && options[activeIndex]?.type === "model-menu") {
+      event.preventDefault();
+      openModelMenu(request);
+      return true;
     } else if (event.key === "Enter") {
       event.preventDefault();
       selectOption(options[activeIndex], request);
@@ -140,11 +151,7 @@ export function createPromptPresetMenuController({
     menuElement.textContent = "";
 
     if (!options.length) {
-      const empty = document.createElement("div");
-      empty.className = "prompt-preset-empty muted";
-      empty.textContent = request.type === "model" ? "No matching models." : "No matching prompts.";
-      menuElement.append(empty);
-      menuElement.hidden = false;
+      hide();
       return;
     }
 
@@ -153,6 +160,7 @@ export function createPromptPresetMenuController({
       button.type = "button";
       button.className = "prompt-preset-option";
       button.classList.toggle("model-menu-option", request.type === "model");
+      button.classList.toggle("model-menu-entry", preset.type === "model-menu");
       button.classList.toggle("active", index === activeIndex);
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", index === activeIndex ? "true" : "false");
@@ -161,9 +169,14 @@ export function createPromptPresetMenuController({
       if (request.type === "model") {
         label.className = "model-menu-label";
       }
-      label.textContent = preset.label;
+      label.textContent = request.type === "model" ? preset.label : `/${preset.label}`;
       button.append(label);
-      if (request.type !== "model") {
+      if (preset.type === "model-menu") {
+        const arrow = document.createElement("span");
+        arrow.className = "model-menu-entry-arrow";
+        arrow.textContent = "\u203a";
+        button.append(arrow);
+      } else if (request.type !== "model") {
         const prompt = document.createElement("span");
         prompt.textContent = preset.prompt;
         button.append(prompt);
@@ -171,7 +184,7 @@ export function createPromptPresetMenuController({
 
       button.addEventListener("mouseenter", () => {
         activeIndex = index;
-        render(options, request);
+        updateActiveOption();
       });
       button.addEventListener("click", () => {
         selectOption(preset, request);
@@ -191,6 +204,14 @@ export function createPromptPresetMenuController({
     });
   }
 
+  function updateActiveOption() {
+    menuElement.querySelectorAll(".prompt-preset-option").forEach((option, index) => {
+      const active = index === activeIndex;
+      option.classList.toggle("active", active);
+      option.setAttribute("aria-selected", String(active));
+    });
+  }
+
   function filterPresets(query) {
     const normalizedQuery = normalizeQuery(query);
     if (!normalizedQuery) {
@@ -205,7 +226,11 @@ export function createPromptPresetMenuController({
 
   function getOptions(request) {
     if (request.type !== "model") {
-      return filterPresets(request.query);
+      const query = normalizeQuery(request.query);
+      const presets = filterPresets(request.query);
+      return !query || "model".includes(query)
+        ? [...presets, MODEL_MENU_OPTION]
+        : presets;
     }
     const query = normalizeQuery(request.query);
     return enabledModels
@@ -305,11 +330,27 @@ export function createPromptPresetMenuController({
   }
 
   function selectOption(option, request) {
+    if (option?.type === "model-menu") {
+      openModelMenu(request);
+      return;
+    }
     if (request.type === "model") {
       selectModel(option, request);
       return;
     }
     insert(option, request);
+  }
+
+  function openModelMenu(request) {
+    const value = textarea.value;
+    const replacement = "/model ";
+    textarea.value = `${value.slice(0, request.lineStart)}${replacement}${value.slice(request.cursor)}`;
+    const nextCursor = request.lineStart + replacement.length;
+    textarea.setSelectionRange(nextCursor, nextCursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.focus();
+    activeIndex = 0;
+    update();
   }
 
   async function selectModel(model, request) {
@@ -324,6 +365,7 @@ export function createPromptPresetMenuController({
       textarea.focus();
       textarea.setSelectionRange(request.lineStart, request.lineStart);
       renderModelIndicator();
+      showModelSelectionFeedback();
       hide();
     } catch (error) {
       onError?.(error);
@@ -335,6 +377,19 @@ export function createPromptPresetMenuController({
     const label = String(currentModel?.label || currentModel?.model || "").trim();
     modelIndicator.textContent = label;
     modelIndicator.hidden = !label;
+  }
+
+  function showModelSelectionFeedback() {
+    window.clearTimeout(modelFeedbackTimer);
+    modelIndicator?.classList.remove("model-selection-feedback");
+    textarea.classList.remove("model-selection-feedback");
+    void textarea.offsetWidth;
+    modelIndicator?.classList.add("model-selection-feedback");
+    textarea.classList.add("model-selection-feedback");
+    modelFeedbackTimer = window.setTimeout(() => {
+      modelIndicator?.classList.remove("model-selection-feedback");
+      textarea.classList.remove("model-selection-feedback");
+    }, 600);
   }
 
   function insert(preset, request) {

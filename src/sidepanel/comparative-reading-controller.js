@@ -1,13 +1,13 @@
 import { answerComparisonQuestion } from "../compare/comparison-answer.js";
-import { buildComparisonContextPack } from "../compare/build-comparison-context.js";
 import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { MessageType } from "../shared/messages.js";
 import {
   appendComparisonMessage,
   createComparisonSession,
   getComparisonSession,
-  listComparisonSessions,
-  saveComparisonMessages
+  listComparisonSessions as listStoredComparisonSessions,
+  saveComparisonMessages,
+  setComparisonSessionTitle
 } from "../storage/comparison-store.js";
 import {
   DEFAULT_COMPARISON_PAPER_LIMIT,
@@ -16,6 +16,10 @@ import {
 } from "../storage/comparison-settings-store.js";
 import { getEffectiveAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
+import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
+import { ensureAgentDocument } from "../ai/local-agent-document-client.js";
+import { createPaperCitationShortName, createSourceSpanCitationContext } from "../ai/citation-catalog.js";
+import { setComparisonAnswerSaved } from "../storage/saved-qa-store.js";
 import {
   applyMarkdownCircle,
   applyMarkdownHiddenText,
@@ -29,6 +33,11 @@ import {
   renderComparativeReadingPanel
 } from "./comparative-reading-renderer.js";
 import { createLoadingMessageRotator, getInitialLoadingMessage } from "./loading-messages.js";
+import { scrollToConversationMessagePair } from "./conversation-navigation.js";
+import {
+  scheduleConversationQuestionCloudLayout,
+  updatePendingConversationMessageText
+} from "./conversation-message-renderer.js";
 
 export function createComparativeReadingController({
   elements,
@@ -37,8 +46,11 @@ export function createComparativeReadingController({
   clearError,
   showError,
   onChange,
-  onDiagnostic
+  onDiagnostic,
+  onNavigateCitation,
+  onSaveLimitRejected
 }) {
+  const TITLE_SAVE_DELAY_MS = 400;
   const state = {
     active: false,
     selectedPapers: [],
@@ -49,10 +61,29 @@ export function createComparativeReadingController({
     contextLoading: false,
     status: "",
     draftIssue: "",
-    paperLimit: DEFAULT_COMPARISON_PAPER_LIMIT
+    paperLimit: DEFAULT_COMPARISON_PAPER_LIMIT,
+    savedQaPerPaperLimit: 20
   };
+  let titleSaveTimer = null;
+  const pendingTitlesBySession = new Map();
+  const collapsedAssistantResponsesBySession = new Map();
+
+  async function listComparisonSessions() {
+    const sessions = await listStoredComparisonSessions();
+    if (!state.activeSessionId || sessions.some((session) => session.comparisonId === state.activeSessionId)) {
+      return sessions;
+    }
+    const activeSession = await getComparisonSession(state.activeSessionId);
+    return activeSession ? [...sessions, activeSession] : sessions;
+  }
+
+  elements.documentTitle.addEventListener("input", handleTitleInput);
+  elements.documentTitle.addEventListener("blur", () => {
+    void flushTitleSave();
+  });
 
   async function show(context = {}) {
+    await flushTitleSave();
     state.active = true;
     clearError?.();
     const comparisonId = String(context.comparisonId || "").trim();
@@ -100,6 +131,7 @@ export function createComparativeReadingController({
       return;
     }
 
+    void flushTitleSave();
     state.active = false;
     state.status = "";
     clearComparativeReadingPanel(elements);
@@ -118,6 +150,10 @@ export function createComparativeReadingController({
     }
 
     const paper = await getLibraryPaperSummary(key);
+    if (paper?.archivedAt) {
+      setStatus("Archived papers cannot be added to a new comparison.");
+      return;
+    }
     if (!paper?.hasMarkdown) {
       setStatus("That paper has no cached Markdown yet.");
       return;
@@ -201,6 +237,7 @@ export function createComparativeReadingController({
     state.activeSessionId = session.comparisonId;
     state.selectedPapers = await hydratePapers(session.documentKeys);
     state.messages = session.messages || [];
+    resetAssistantResponsesCollapsed();
     state.status = "";
     state.draftIssue = "";
     if (options.renderAfter !== false) {
@@ -241,6 +278,7 @@ export function createComparativeReadingController({
       pending: true,
       createdAt: userCreatedAt + 1
     };
+    collapseHistoricalAssistantResponses();
     state.messages = [
       ...previousMessages,
       {
@@ -267,7 +305,7 @@ export function createComparativeReadingController({
           ...state.messages[pendingIndex],
           text
         };
-        render({ scrollToBottom: false });
+        updatePendingConversationMessageText(elements.conversationThread, pendingIndex, text);
       });
       loadingRotator.start();
 
@@ -288,20 +326,53 @@ export function createComparativeReadingController({
       ];
       render();
 
-      const contextPack = await buildComparisonContextPack({
-        documentKeys: state.selectedPapers.map((paper) => paper.documentKey),
-        question,
-        maxPapers: state.paperLimit
-      });
       const aiSettings = await getEffectiveAiSettings();
       if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
         throw new Error("AI provider is not configured. Open extension Options to finish setup.");
       }
 
+      const usedShortNames = new Set();
+      const citationShortNames = state.selectedPapers.map((paper) => {
+        const base = String(paper.citationShortName || createPaperCitationShortName(paper.title)).trim() || "pap";
+        let name = base;
+        let suffix = 2;
+        while (usedShortNames.has(name.toLowerCase())) name = `${base}-${suffix++}`;
+        usedShortNames.add(name.toLowerCase());
+        return name;
+      });
+      const citationContexts = await Promise.all(state.selectedPapers.map(async (paper, index) => {
+        const document = await getStoredDocumentByDocumentKey(paper.documentKey);
+        if (!document?.markdown || !document.agentDocumentRef) {
+          throw new Error(`${paper.title || `Paper ${index + 1}`} has no local agent document reference.`);
+        }
+        if (!usesDebugAiMode(aiSettings)) {
+          await ensureAgentDocument({
+            endpoint: aiSettings.localEndpoint,
+            authToken: aiSettings.localAuthToken,
+            document
+          });
+        }
+        const citationContext = createSourceSpanCitationContext({
+          document,
+          paperIndex: index + 1,
+          title: paper.title,
+          shortName: citationShortNames[index]
+        });
+        return {
+          citationContext,
+          descriptor: {
+            title: paper.title || document.title || `Paper ${index + 1}`,
+            documentRef: document.agentDocumentRef,
+            paperId: `p${index + 1}`,
+            sourceSpanCitations: citationContext.sourceSpanCitations
+          }
+        };
+      }));
+
       const answer = await answerComparisonQuestion({
         aiSettings,
-        contextPack,
-        conversationMessages: previousMessages
+        question,
+        papers: citationContexts.map(({ descriptor }) => descriptor)
       });
       loadingRotator?.stop();
       loadingRotator = null;
@@ -310,7 +381,11 @@ export function createComparativeReadingController({
         role: "assistant",
         text: answer.text,
         model: answer.model,
-        citedDocumentKeys: contextPack.papers.map((paper) => paper.documentKey),
+        citationCatalog: {
+          version: 1,
+          papers: citationContexts.map(({ citationContext }) => citationContext.paper)
+        },
+        citedDocumentKeys: state.selectedPapers.map((paper) => paper.documentKey),
         createdAt: Date.now()
       });
       state.messages = updatedSession?.messages || [];
@@ -343,6 +418,16 @@ export function createComparativeReadingController({
     return state.busy;
   }
 
+  function shouldIgnoreContextRefresh(context = {}) {
+    return Boolean(
+      state.active &&
+      state.busy &&
+      state.activeSessionId &&
+      context.mode === "comparative-reading" &&
+      context.comparisonId === state.activeSessionId
+    );
+  }
+
   function canAddPapers() {
     return state.active && !state.activeSessionId && state.selectedPapers.length < state.paperLimit;
   }
@@ -361,6 +446,10 @@ export function createComparativeReadingController({
       render();
       onChange?.();
     }
+  }
+
+  function setSavedQaPerPaperLimit(value) {
+    state.savedQaPerPaperLimit = Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : 20;
   }
 
   async function refreshSessions() {
@@ -399,6 +488,7 @@ export function createComparativeReadingController({
     renderComparativeReadingPanel({
       elements,
       title: activeSession?.title || "Comparative Reading",
+      titleEditable: Boolean(activeSession),
       selectedPapers: state.selectedPapers,
       messages: state.messages,
       status: state.status,
@@ -413,6 +503,7 @@ export function createComparativeReadingController({
       onOpenPaperUrl: openPaperUrl,
       onEditUserMessage: editUserMessage,
       onToggleSaved: toggleMessageSaved,
+      onSaveLimitRejected,
       onDeleteUnit: deleteMessageUnit,
       onHighlightAssistantSelection: highlightAssistantSelection,
       onCircleAssistantSelection: circleAssistantSelection,
@@ -420,9 +511,63 @@ export function createComparativeReadingController({
       onRemoveAssistantHighlight: removeAssistantHighlight,
       onRemoveAssistantCircle: removeAssistantCircle,
       onRemoveAssistantHiddenText: removeAssistantHiddenText,
+      onNavigateCitation,
+      collapsedAssistantMessageIndexes: getCollapsedAssistantMessageIndexes(),
+      onAssistantResponseCollapseChange: setAssistantResponseCollapsed,
       scrollToLatest,
       scrollToBottom
     });
+    elements.conversationThread.classList.toggle("question-cloud-mode", getAssistantMessageIndexes().length > 0);
+  }
+
+  function handleTitleInput() {
+    if (!state.active || !state.activeSessionId) {
+      return;
+    }
+
+    const title = elements.documentTitle.value;
+    pendingTitlesBySession.set(state.activeSessionId, title);
+    state.sessions = state.sessions.map((session) => session.comparisonId === state.activeSessionId
+      ? { ...session, title }
+      : session);
+    window.clearTimeout(titleSaveTimer);
+    titleSaveTimer = window.setTimeout(() => {
+      void flushTitleSave();
+    }, TITLE_SAVE_DELAY_MS);
+  }
+
+  async function flushTitleSave() {
+    window.clearTimeout(titleSaveTimer);
+    titleSaveTimer = null;
+    if (!state.active || !state.activeSessionId) {
+      return;
+    }
+
+    const comparisonId = state.activeSessionId;
+    const pendingTitle = pendingTitlesBySession.get(comparisonId);
+    if (pendingTitle === undefined) {
+      return;
+    }
+    let saved = null;
+    try {
+      saved = await setComparisonSessionTitle(comparisonId, pendingTitle);
+    } catch (error) {
+      onDiagnostic?.(`Could not save comparative title: ${error.message || String(error)}`);
+      return;
+    }
+    if (saved && pendingTitlesBySession.get(comparisonId) === pendingTitle) {
+      pendingTitlesBySession.delete(comparisonId);
+    }
+    if (!saved || !state.active || state.activeSessionId !== comparisonId) {
+      return;
+    }
+
+    state.sessions = state.sessions.map((session) => session.comparisonId === comparisonId
+      ? { ...session, title: saved.title }
+      : session);
+    elements.documentTitle.value = saved.title;
+    elements.documentTitle.removeAttribute("title");
+    notifyComparisonActivityChanged();
   }
 
   async function editUserMessage(messageIndex, nextText) {
@@ -474,6 +619,78 @@ export function createComparativeReadingController({
     };
   }
 
+  function getAssistantCollapseScopeKey() {
+    return state.activeSessionId || "draft";
+  }
+
+  function getCollapsedAssistantMessageIndexes() {
+    const key = getAssistantCollapseScopeKey();
+    if (!collapsedAssistantResponsesBySession.has(key)) {
+      collapsedAssistantResponsesBySession.set(key, new Set(
+        state.messages
+          .map((message, index) => message?.role === "assistant" && !message.pending ? index : -1)
+          .filter((index) => index >= 0)
+      ));
+    }
+    return collapsedAssistantResponsesBySession.get(key);
+  }
+
+  function resetAssistantResponsesCollapsed() {
+    collapsedAssistantResponsesBySession.set(
+      getAssistantCollapseScopeKey(),
+      new Set(getAssistantMessageIndexes())
+    );
+  }
+
+  function collapseHistoricalAssistantResponses() {
+    const collapsedIndexes = getCollapsedAssistantMessageIndexes();
+    state.messages.forEach((message, index) => {
+      if (message?.role === "assistant" && !message.pending) {
+        collapsedIndexes.add(index);
+      }
+    });
+  }
+
+  function setAssistantResponseCollapsed(_userMessageIndex, assistantMessageIndex, collapsed) {
+    const collapsedIndexes = getCollapsedAssistantMessageIndexes();
+    if (collapsed) {
+      collapsedIndexes.add(assistantMessageIndex);
+    } else {
+      collapsedIndexes.delete(assistantMessageIndex);
+    }
+    onChange?.();
+  }
+
+  function setAllAssistantResponsesCollapsed(collapsed) {
+    const indexes = getAssistantMessageIndexes();
+    const collapsedIndexes = getCollapsedAssistantMessageIndexes();
+    collapsedIndexes.clear();
+    if (collapsed) {
+      indexes.forEach((index) => collapsedIndexes.add(index));
+    }
+    elements.conversationThread.querySelectorAll(".conversation-message.assistant").forEach((element) => {
+      element.classList.toggle("assistant-response-collapsed", Boolean(collapsed));
+    });
+    elements.conversationThread.querySelectorAll(".conversation-response-toggle").forEach((element) => {
+      element.setAttribute("aria-expanded", String(!collapsed));
+    });
+    elements.conversationThread.classList.toggle("question-cloud-mode", indexes.length > 0);
+    scheduleConversationQuestionCloudLayout(elements.conversationThread);
+    onChange?.();
+  }
+
+  function areAllAssistantResponsesCollapsed() {
+    const indexes = getAssistantMessageIndexes();
+    const collapsedIndexes = getCollapsedAssistantMessageIndexes();
+    return indexes.length > 0 && indexes.every((index) => collapsedIndexes.has(index));
+  }
+
+  function getAssistantMessageIndexes() {
+    return state.messages
+      .map((message, index) => message?.role === "assistant" ? index : -1)
+      .filter((index) => index >= 0);
+  }
+
   function setStatus(message) {
     state.status = message || "";
     render();
@@ -486,17 +703,22 @@ export function createComparativeReadingController({
       return;
     }
 
-    state.messages[index] = {
-      ...message,
-      isSaved: !message.isSaved
-    };
-    render({ scrollToBottom: false });
-    const session = await saveComparisonMessages(state.activeSessionId, state.messages);
+    const result = await setComparisonAnswerSaved({
+      comparisonId: state.activeSessionId,
+      sequence: index,
+      saved: !message.isSaved,
+      perPaperLimit: state.savedQaPerPaperLimit
+    });
+    if (result.status === "limit-reached" || result.status === "not-found") {
+      return result;
+    }
+    const session = await getComparisonSession(state.activeSessionId);
     state.messages = session?.messages || state.messages;
     state.sessions = await listComparisonSessions();
     notifyComparisonActivityChanged();
     render({ scrollToBottom: false });
     onChange?.();
+    return result;
   }
 
   async function highlightAssistantSelection(messageIndex, selectedText) {
@@ -679,6 +901,7 @@ export function createComparativeReadingController({
     }
 
     state.messages.splice(startIndex, deleteCount);
+    getCollapsedAssistantMessageIndexes().clear();
     render();
     const session = await saveComparisonMessages(state.activeSessionId, state.messages);
     state.messages = session?.messages || state.messages;
@@ -706,6 +929,21 @@ export function createComparativeReadingController({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  function jumpToMessagePair({ userMessageIndex, assistantMessageIndex }) {
+    scrollToConversationMessagePair({ userMessageIndex, assistantMessageIndex });
+  }
+
+  function resolveCitationPaper(paper) {
+    const match = String(paper?.id || "").match(/^p(\d+)$/i);
+    const indexedPaper = match ? state.selectedPapers[Number(match[1]) - 1] : null;
+    return {
+      ...(indexedPaper || {}),
+      ...(paper || {}),
+      documentKey: paper?.documentKey || indexedPaper?.documentKey || "",
+      canonicalUrl: paper?.canonicalUrl || indexedPaper?.canonicalUrl || ""
+    };
+  }
+
   return {
     show,
     hide,
@@ -716,10 +954,16 @@ export function createComparativeReadingController({
     canAsk,
     isActive,
     isBusy,
+    shouldIgnoreContextRefresh,
     canAddPapers,
     setPaperLimit,
+    setSavedQaPerPaperLimit,
     getSelectedDocumentKeys,
-    hasScrollableMessages
+    hasScrollableMessages,
+    jumpToMessagePair,
+    resolveCitationPaper,
+    setAllAssistantResponsesCollapsed,
+    areAllAssistantResponsesCollapsed
   };
 }
 

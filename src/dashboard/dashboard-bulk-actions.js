@@ -1,20 +1,23 @@
 import {
   deleteLibraryRecords,
-  exportLibraryRecords,
-  importLibraryArchive
+  exportLibraryRecords
 } from "../storage/library-archive-store.js";
+import {
+  archiveLibraryRecords,
+  restoreLibraryRecords
+} from "../storage/library-lifecycle-store.js";
 
 export function createDashboardBulkActions({
   state,
   elements,
   onSendToMachine,
   onDeleteComplete,
-  onRenderRequested,
-  onRefreshAllRequested
+  onRenderRequested
 }) {
   return {
     attachEventListeners,
     renderBulkActions,
+    sendSelectedPapers,
     setManageMode,
     togglePaperSelection,
     setPaperSelection,
@@ -24,18 +27,6 @@ export function createDashboardBulkActions({
   };
 
   function attachEventListeners() {
-    elements.importButton.addEventListener("click", () => {
-      elements.importFile.click();
-    });
-
-    elements.importFile.addEventListener("change", () => {
-      importArchiveFile(elements.importFile.files?.[0]).catch((error) => {
-        elements.summary.textContent = `Could not import archive: ${error.message || String(error)}`;
-      }).finally(() => {
-        elements.importFile.value = "";
-      });
-    });
-
     elements.manageButton.addEventListener("click", () => {
       setManageMode(!state.manageMode);
     });
@@ -50,15 +41,21 @@ export function createDashboardBulkActions({
       });
     });
 
-    elements.backupSelectedButton.addEventListener("click", () => {
-      backupSelectedPapers().catch((error) => {
-        elements.summary.textContent = `Could not back up papers: ${error.message || String(error)}`;
-      });
-    });
-
     elements.archiveSelectedButton.addEventListener("click", () => {
       archiveSelectedPapers().catch((error) => {
         elements.summary.textContent = `Could not archive papers: ${error.message || String(error)}`;
+      });
+    });
+
+    elements.restoreSelectedButton.addEventListener("click", () => {
+      restoreSelectedRecords().catch((error) => {
+        elements.summary.textContent = `Could not restore papers: ${error.message || String(error)}`;
+      });
+    });
+
+    elements.exportSelectedButton.addEventListener("click", () => {
+      exportSelectedRecords().catch((error) => {
+        elements.summary.textContent = `Could not export papers: ${error.message || String(error)}`;
       });
     });
 
@@ -74,18 +71,22 @@ export function createDashboardBulkActions({
     const selectedComparisonIds = getSelectedComparisonIds();
     const selectedCount = selectedDocumentKeys.length + selectedComparisonIds.length;
     const hasSelection = selectedCount > 0;
-    elements.bulkActions.hidden = !state.manageMode;
+    elements.bulkActions.classList.toggle("is-hidden", !state.manageMode);
+    elements.bulkActions.setAttribute("aria-hidden", String(!state.manageMode));
     elements.selectionSummary.textContent = `${selectedCount} selected`;
     elements.selectAllButton.hidden = hasSelection;
-    elements.sendToMachineButton.hidden = selectedDocumentKeys.length === 0;
-    elements.backupSelectedButton.hidden = !hasSelection;
-    elements.archiveSelectedButton.hidden = !hasSelection;
+    const archiveView = state.libraryView === "archive";
+    elements.sendToMachineButton.hidden = archiveView || selectedDocumentKeys.length === 0;
+    elements.archiveSelectedButton.hidden = archiveView || !hasSelection;
+    elements.restoreSelectedButton.hidden = !archiveView || !hasSelection;
+    elements.exportSelectedButton.hidden = !archiveView || !hasSelection;
     elements.deleteSelectedButton.hidden = !hasSelection;
     elements.selectAllButton.textContent = "Select all";
     elements.selectAllButton.disabled = state.papers.length === 0 && state.comparisons.length === 0;
     elements.sendToMachineButton.disabled = selectedDocumentKeys.length === 0;
-    elements.backupSelectedButton.disabled = selectedCount === 0;
     elements.archiveSelectedButton.disabled = selectedCount === 0;
+    elements.restoreSelectedButton.disabled = selectedCount === 0;
+    elements.exportSelectedButton.disabled = selectedCount === 0;
     elements.deleteSelectedButton.disabled = selectedCount === 0;
     elements.manageButton.classList.toggle("active", state.manageMode);
     elements.manageButton.setAttribute("aria-label", state.manageMode ? "Done selecting papers" : "Select papers");
@@ -93,7 +94,15 @@ export function createDashboardBulkActions({
   }
 
   function setManageMode(manageMode) {
-    state.manageMode = Boolean(manageMode);
+    const nextManageMode = Boolean(manageMode);
+    if (nextManageMode && !state.manageMode) {
+      if (state.activeDocumentKey) {
+        state.selectedDocumentKeys.add(state.activeDocumentKey);
+      } else if (state.activeComparisonId) {
+        state.selectedComparisonIds.add(state.activeComparisonId);
+      }
+    }
+    state.manageMode = nextManageMode;
     if (!state.manageMode) {
       state.selectedDocumentKeys.clear();
       state.selectedComparisonIds.clear();
@@ -172,25 +181,40 @@ export function createDashboardBulkActions({
   async function archiveSelectedPapers() {
     const selection = getSelectedRecords();
     const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
-    if (!selectedCount || !window.confirm(`Archive ${selectedCount} selected record(s)? This downloads a restorable archive, then removes them from the dashboard.`)) {
+    if (!selectedCount || !window.confirm("Archive the paper?")) {
       return;
     }
 
-    const archive = await exportLibraryRecords(selection);
-    downloadArchiveFile(archive);
-    await deleteLibraryRecords(selection);
+    await archiveLibraryRecords(selection);
+    await afterDelete(selection);
+  }
+
+  async function restoreSelectedRecords() {
+    const selection = getSelectedRecords();
+    const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
+    if (!selectedCount || !window.confirm(`Restore ${selectedCount} papers to the board?`)) {
+      return;
+    }
+
+    await restoreLibraryRecords(selection);
     await afterDelete(selection);
   }
 
   async function deleteSelectedPapers() {
     const selection = getSelectedRecords();
     const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
-    if (!selectedCount || !window.confirm(`Delete ${selectedCount} selected record(s)? This removes their local conversations and cached records.`)) {
+    const confirmation = state.libraryView === "archive"
+      ? `Burn ${selectedCount} papers? This can't be recovered`
+      : `Delete ${selectedCount} selected record(s)? This removes their local conversations and cached records.`;
+    if (!selectedCount || !window.confirm(confirmation)) {
       return;
     }
 
-    await deleteLibraryRecords(selection);
+    const result = await deleteLibraryRecords(selection);
     await afterDelete(selection);
+    if (result.managedDocumentCleanupFailures.length) {
+      elements.summary.textContent = `Papers deleted, but ${result.managedDocumentCleanupFailures.length} local Agent file cleanup(s) failed. Check the console.`;
+    }
   }
 
   async function sendSelectedPapers() {
@@ -203,29 +227,15 @@ export function createDashboardBulkActions({
     setManageMode(false);
   }
 
-  async function backupSelectedPapers() {
+  async function exportSelectedRecords() {
     const selection = getSelectedRecords();
-    if (!selection.documentKeys.length && !selection.comparisonIds.length) {
+    const selectedCount = selection.documentKeys.length + selection.comparisonIds.length;
+    if (!selectedCount || !window.confirm(`Export ${selectedCount} papers to your local storage? (this won't delete them in toaster)`)) {
       return;
     }
 
     const archive = await exportLibraryRecords(selection);
-    downloadArchiveFile(archive, "backup");
-  }
-
-  async function importArchiveFile(file) {
-    if (!file) {
-      return;
-    }
-
-    const archive = JSON.parse(await file.text());
-    const result = await importLibraryArchive(archive);
-    state.selectedDocumentKeys.clear();
-    state.selectedComparisonIds.clear();
-    await onRefreshAllRequested();
-    const summary = `Added ${result.importedPaperCount} papers · ${result.comparisonCount} comparisons · skipped ${result.skippedPaperCount} existing`;
-    elements.summary.textContent = summary;
-    window.alert(`Import complete.\n${summary}`);
+    downloadArchiveFile(archive);
   }
 
   async function afterDelete(selection) {
@@ -251,15 +261,15 @@ export function createDashboardBulkActions({
   }
 }
 
-function downloadArchiveFile(archive, kind = "archive") {
+function downloadArchiveFile(archive) {
   const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = new Date().toISOString().replace(/[:.]/g, "-");
   link.href = url;
   const paperCount = archive.documentKeys?.length || 0;
   const comparisonCount = archive.comparisonIds?.length || 0;
-  link.download = `reading-dashboard-${kind}-${date}-${paperCount}-papers-${comparisonCount}-comparisons.json`;
+  link.download = `paper-toaster-export-${date}-${paperCount}-papers-${comparisonCount}-comparisons.json`;
   document.body.append(link);
   link.click();
   link.remove();

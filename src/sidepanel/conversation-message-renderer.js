@@ -1,18 +1,38 @@
 import { renderMarkdownInto } from "../markdown/render-markdown.js";
-import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
+import {
+  normalizeAiResponseMarkdown,
+  prepareAiResponseMarkdownForCopy
+} from "../markdown/normalize-ai-response-markdown.js";
 import { annotate } from "../../vendor/rough-notation/rough-notation.mjs";
 import { createToasterEmptyState } from "./toaster-empty-state.js";
+import { createPaperNoteEditor, disposePaperNoteEditor } from "./paper-note-editor.js";
 
 const highlightBarCleanups = new WeakMap();
+const questionCloudAnimationFrames = new WeakMap();
+const questionCloudResizeObservers = new WeakMap();
+const questionCloudLayouts = new WeakMap();
+const pendingPreservedQuestionCloudPositions = new WeakMap();
+const questionCloudExpansionFrames = new WeakMap();
+const questionCloudAnswerResizeObservers = new WeakMap();
+const pendingResponseVisualFrames = new WeakMap();
 
 export function renderConversationMessages(threadElement, messages, options = {}) {
+  const preservedQuestionCloudPositions = options.preserveQuestionCloudLayout
+    ? captureQuestionCloudPositions(threadElement)
+    : null;
   highlightBarCleanups.get(threadElement)?.();
   highlightBarCleanups.delete(threadElement);
+  const paperNote = threadElement.querySelector(".saved-paper-user-note");
+  if (paperNote) disposePaperNoteEditor(paperNote);
   threadElement.textContent = "";
   threadElement.classList.remove("saved-qa-thread");
   threadElement.hidden = !messages.length;
   const editBars = [];
   const cleanupCallbacks = [];
+  const collapsedAssistantMessageIndexes = options.collapsedAssistantMessageIndexes instanceof Set
+    ? options.collapsedAssistantMessageIndexes
+    : new Set();
+  const responseMessageIndexesByQuestion = createQuestionResponseMap(messages);
 
   messages.forEach((message, messageIndex) => {
     const item = document.createElement("article");
@@ -21,13 +41,19 @@ export function renderConversationMessages(threadElement, messages, options = {}
     if (message.pending) {
       item.classList.add("pending");
     }
-    if (message.role === "user" && isQuestionInSavedUnit(messages, messageIndex)) {
+    if (message.role === "assistant" && collapsedAssistantMessageIndexes.has(messageIndex)) {
+      item.classList.add("assistant-response-collapsed");
+    }
+    if (message.role === "user" && isQuestionInSavedUnit(messages, responseMessageIndexesByQuestion.get(messageIndex))) {
       item.classList.add("saved-unit");
+    }
+    if (message.role === "user" && messages[responseMessageIndexesByQuestion.get(messageIndex)]?.pending) {
+      item.classList.add("pending-question");
     }
 
     const text = document.createElement("div");
     text.className = "conversation-text";
-    renderMessageText(text, message);
+    renderMessageText(text, message, options, cleanupCallbacks);
     if (message.role === "assistant" && !message.pending) {
       wireRenderedAnnotations({
         textElement: text,
@@ -48,7 +74,38 @@ export function renderConversationMessages(threadElement, messages, options = {}
       item.append(quote);
     }
 
-    item.append(text);
+    const content = message.role === "assistant"
+      ? document.createElement("div")
+      : item;
+    if (message.role === "assistant") {
+      content.className = "conversation-assistant-content";
+      item.append(content);
+    }
+    content.append(text);
+    if (message.role === "user") {
+      const assistantMessageIndex = responseMessageIndexesByQuestion.get(messageIndex) ?? -1;
+      if (assistantMessageIndex >= 0 && typeof options.onAssistantResponseCollapseChange === "function") {
+        item.classList.add("question-has-response");
+        item.dataset.responseMessageIndex = String(assistantMessageIndex);
+        text.classList.add("conversation-response-toggle");
+        text.setAttribute("aria-expanded", String(!collapsedAssistantMessageIndexes.has(assistantMessageIndex)));
+        item.addEventListener("click", (event) => {
+          if (event.target.closest("button, textarea, a, [contenteditable=\"true\"], .conversation-selection")) {
+            return;
+          }
+          const response = threadElement.querySelector(
+            `.conversation-message.assistant[data-message-index="${assistantMessageIndex}"]`
+          );
+          if (!response) {
+            return;
+          }
+          const collapsed = response.classList.toggle("assistant-response-collapsed");
+          text.setAttribute("aria-expanded", String(!collapsed));
+          options.onAssistantResponseCollapseChange(messageIndex, assistantMessageIndex, collapsed);
+          scheduleConversationQuestionCloudExpansion(threadElement);
+        });
+      }
+    }
     if (message.role === "user" && !message.pending && typeof options.onEditUserMessage === "function") {
       item.append(createUserMessageMetaRow({
         item,
@@ -72,19 +129,429 @@ export function renderConversationMessages(threadElement, messages, options = {}
             : null
         });
         editBars.push(editBar);
-        item.append(editBar.bar);
+        content.append(editBar.bar);
       }
-      item.append(createAssistantActionRow({
+      content.append(createAssistantActionRow({
         message,
         messageIndex,
         onToggleSaved: options.onToggleSaved,
-        onDeleteUnit: options.onDeleteUnit
+        onDeleteUnit: options.onDeleteUnit,
+        onSaveLimitRejected: options.onSaveLimitRejected
       }));
     }
     threadElement.append(item);
   });
 
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
+  schedulePendingResponseVisualState(threadElement, messages.some((message) => message?.role === "assistant" && message.pending));
+  scheduleConversationQuestionCloudLayout(threadElement, { preservedQuestionCloudPositions });
+}
+
+export function updatePendingConversationMessageText(threadElement, messageIndex, text) {
+  const textElement = threadElement.querySelector(
+    `.conversation-message.pending[data-message-index="${Number(messageIndex)}"] .conversation-text`
+  );
+  if (!textElement) return false;
+  textElement.textContent = String(text || "Toasting the pages...");
+  return true;
+}
+
+function schedulePendingResponseVisualState(threadElement, pending) {
+  const currentFrame = pendingResponseVisualFrames.get(threadElement);
+  if (currentFrame) window.cancelAnimationFrame(currentFrame);
+  if (pending === threadElement.classList.contains("awaiting-ai-response")) return;
+  const frame = window.requestAnimationFrame(() => {
+    pendingResponseVisualFrames.delete(threadElement);
+    threadElement.getBoundingClientRect();
+    threadElement.classList.toggle("awaiting-ai-response", pending);
+  });
+  pendingResponseVisualFrames.set(threadElement, frame);
+}
+
+export function scheduleConversationQuestionCloudLayout(threadElement, options = {}) {
+  if (Object.prototype.hasOwnProperty.call(options, "preservedQuestionCloudPositions")) {
+    if (options.preservedQuestionCloudPositions?.size) {
+      pendingPreservedQuestionCloudPositions.set(threadElement, options.preservedQuestionCloudPositions);
+    } else {
+      pendingPreservedQuestionCloudPositions.delete(threadElement);
+    }
+  }
+  if (typeof ResizeObserver === "function" && !questionCloudResizeObservers.has(threadElement)) {
+    const observer = new ResizeObserver(() => scheduleConversationQuestionCloudLayout(threadElement));
+    observer.observe(threadElement);
+    questionCloudResizeObservers.set(threadElement, observer);
+  }
+  const pendingFrame = questionCloudAnimationFrames.get(threadElement);
+  if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
+  const frame = window.requestAnimationFrame(() => {
+    questionCloudAnimationFrames.delete(threadElement);
+    const preservedPositions = pendingPreservedQuestionCloudPositions.get(threadElement) || null;
+    pendingPreservedQuestionCloudPositions.delete(threadElement);
+    layoutConversationQuestionCloud(threadElement, preservedPositions);
+  });
+  questionCloudAnimationFrames.set(threadElement, frame);
+}
+
+function captureQuestionCloudPositions(threadElement) {
+  const layout = questionCloudLayouts.get(threadElement);
+  const positions = new Map();
+  if (!layout) return positions;
+  for (const [question, rect] of layout.positions) {
+    const messageIndex = Number(question.dataset.messageIndex);
+    if (Number.isInteger(messageIndex) && messageIndex >= 0) {
+      positions.set(messageIndex, { ...rect });
+    }
+  }
+  return positions;
+}
+
+function layoutConversationQuestionCloud(threadElement, preservedPositions = null) {
+  const questions = Array.from(threadElement.querySelectorAll(".conversation-message.user"));
+  const assistants = Array.from(threadElement.querySelectorAll(".conversation-message.assistant"));
+  questions.forEach((question, index) => {
+    question.classList.remove("cloud-question-expanded");
+    question.dataset.cloudWidth = question.classList.contains("saved-unit")
+      ? "wide"
+      : ["compact", "medium", "wide", "compact", "medium"][index % 5];
+    question.style.removeProperty("left");
+    question.style.removeProperty("top");
+  });
+  assistants.forEach((assistant) => {
+    assistant.style.removeProperty("left");
+    assistant.style.removeProperty("top");
+    assistant.style.removeProperty("width");
+  });
+  if (!threadElement.classList.contains("question-cloud-mode") || !questions.length) {
+    questionCloudLayouts.delete(threadElement);
+    disconnectQuestionCloudAnswerResizeObserver(threadElement);
+    threadElement.style.removeProperty("--question-cloud-scroll-height");
+    return;
+  }
+
+  const insets = getCloudHorizontalInsets(threadElement);
+  const availableWidth = Math.max(120, threadElement.clientWidth - insets.left - insets.right);
+  const halfWidth = availableWidth / 2;
+  const gap = 7;
+  const orderedQuestions = questions
+    .map((element, index) => ({
+      element,
+      index,
+      messageIndex: Number(element.dataset.messageIndex),
+      saved: element.classList.contains("saved-unit"),
+      width: element.getBoundingClientRect().width,
+      height: element.getBoundingClientRect().height
+    }))
+    .sort((left, right) => Number(right.saved) - Number(left.saved) || left.index - right.index);
+  const cloudCenterX = insets.left + halfWidth;
+  const shouldPreservePositions = preservedPositions instanceof Map && preservedPositions.size > 0;
+  const placed = shouldPreservePositions
+    ? orderedQuestions
+        .filter((question) => preservedPositions.has(question.messageIndex))
+        .map((question) => {
+          const previous = preservedPositions.get(question.messageIndex);
+          return {
+            x: previous.x - cloudCenterX,
+            y: previous.y,
+            width: question.width,
+            height: question.height,
+            element: question.element
+          };
+        })
+    : [];
+  const questionsToPlace = shouldPreservePositions
+    ? orderedQuestions.filter((question) => !preservedPositions.has(question.messageIndex))
+    : orderedQuestions;
+
+  questionsToPlace.forEach((question, questionIndex) => {
+    const appendBelowPreservedCloud = shouldPreservePositions &&
+      question.element.classList.contains("pending-question") &&
+      placed.length > 0;
+    let position;
+    if (appendBelowPreservedCloud) {
+      const bottom = placed.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
+      position = centeredCloudRect(question, 0, bottom + gap + question.height / 2);
+    } else {
+      position = questionIndex === 0 && !placed.length
+        ? centeredCloudRect(question, 0, 0)
+        : findPackedCloudRect(question, questionIndex, placed, halfWidth, gap, {
+            minimumY: shouldPreservePositions ? 4 : -Infinity
+          });
+    }
+    if (!position) {
+      const bottom = placed.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
+      position = centeredCloudRect(question, 0, bottom + gap + question.height / 2);
+    }
+    placed.push({ ...position, element: question.element });
+  });
+
+  const minX = Math.min(...placed.map((rect) => rect.x));
+  const maxX = Math.max(...placed.map((rect) => rect.x + rect.width));
+  const minY = Math.min(...placed.map((rect) => rect.y));
+  const maxY = Math.max(...placed.map((rect) => rect.y + rect.height));
+  const cloudWidth = maxX - minX;
+  const cloudHeight = maxY - minY;
+  const cloudLeft = insets.left + Math.max(0, (availableWidth - cloudWidth) / 2);
+  const cloudTop = Math.max(12, (threadElement.clientHeight - cloudHeight) * 0.1);
+
+  placed.forEach((rect) => {
+    rect.x = shouldPreservePositions ? cloudCenterX + rect.x : cloudLeft + rect.x - minX;
+    rect.y = shouldPreservePositions ? rect.y : cloudTop + rect.y - minY;
+    rect.element.style.left = `${Math.round(rect.x)}px`;
+    rect.element.style.top = `${Math.round(rect.y)}px`;
+  });
+  questionCloudLayouts.set(threadElement, {
+    gap,
+    insets,
+    positions: new Map(placed.map((rect) => [rect.element, { ...rect }]))
+  });
+  applyConversationQuestionCloudExpansion(threadElement);
+}
+
+function findPackedCloudRect(question, questionIndex, placed, halfWidth, gap, options = {}) {
+  const minimumY = Number.isFinite(options.minimumY) ? options.minimumY : -Infinity;
+  const horizontalCandidates = createAdjacentCloudCandidates(question, questionIndex, placed, gap, true)
+    .filter((candidate) => cloudRectFits(candidate, placed, halfWidth, gap, minimumY));
+  if (horizontalCandidates.length) return chooseCompactCloudCandidate(horizontalCandidates);
+
+  const verticalCandidates = createAdjacentCloudCandidates(question, questionIndex, placed, gap, false)
+    .filter((candidate) => cloudRectFits(candidate, placed, halfWidth, gap, minimumY));
+  if (verticalCandidates.length) return chooseCompactCloudCandidate(verticalCandidates);
+
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let step = 1; step <= 6000; step += 1) {
+    const radius = 5.2 * Math.sqrt(step);
+    const angle = step * goldenAngle + questionIndex * 0.83;
+    const centerX = Math.cos(angle) * radius;
+    const centerY = Math.sin(angle) * radius * 0.68;
+    const candidate = centeredCloudRect(question, centerX, centerY);
+    if (candidate.y < minimumY) continue;
+    if (candidate.x < -halfWidth || candidate.x + candidate.width > halfWidth) continue;
+    if (placed.every((rect) => !cloudRectsOverlap(candidate, rect, gap))) return candidate;
+  }
+  return null;
+}
+
+function createAdjacentCloudCandidates(question, questionIndex, placed, gap, horizontal) {
+  const candidates = [];
+  const direction = questionIndex % 2 === 0 ? -1 : 1;
+  for (const anchor of placed) {
+    if (horizontal) {
+      const yOffsets = [
+        direction * Math.min(question.height, anchor.height) * 0.28,
+        0,
+        -direction * Math.min(question.height, anchor.height) * 0.42
+      ];
+      for (const yOffset of yOffsets) {
+        const y = anchor.y + (anchor.height - question.height) / 2 + yOffset;
+        candidates.push({ x: anchor.x + anchor.width + gap, y, width: question.width, height: question.height });
+        candidates.push({ x: anchor.x - question.width - gap, y, width: question.width, height: question.height });
+      }
+    } else {
+      const xOffsets = [
+        direction * Math.min(question.width, anchor.width) * 0.24,
+        -direction * Math.min(question.width, anchor.width) * 0.18,
+        0
+      ];
+      for (const xOffset of xOffsets) {
+        const x = anchor.x + (anchor.width - question.width) / 2 + xOffset;
+        candidates.push({ x, y: anchor.y - question.height - gap, width: question.width, height: question.height });
+        candidates.push({ x, y: anchor.y + anchor.height + gap, width: question.width, height: question.height });
+      }
+    }
+  }
+  return candidates;
+}
+
+function cloudRectFits(candidate, placed, halfWidth, gap, minimumY = -Infinity) {
+  return candidate.y >= minimumY &&
+    candidate.x >= -halfWidth &&
+    candidate.x + candidate.width <= halfWidth &&
+    placed.every((rect) => !cloudRectsOverlap(candidate, rect, gap));
+}
+
+function chooseCompactCloudCandidate(candidates) {
+  return candidates.reduce((best, candidate) => {
+    const centerX = candidate.x + candidate.width / 2;
+    const centerY = candidate.y + candidate.height / 2;
+    const score = Math.abs(centerX) * 0.82 + Math.abs(centerY) * 1.18;
+    return !best || score < best.score ? { ...candidate, score } : best;
+  }, null);
+}
+
+function scheduleConversationQuestionCloudExpansion(threadElement) {
+  const pendingFrame = questionCloudExpansionFrames.get(threadElement);
+  if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
+  const frame = window.requestAnimationFrame(() => {
+    questionCloudExpansionFrames.delete(threadElement);
+    applyConversationQuestionCloudExpansion(threadElement);
+  });
+  questionCloudExpansionFrames.set(threadElement, frame);
+}
+
+function applyConversationQuestionCloudExpansion(threadElement) {
+  const layout = questionCloudLayouts.get(threadElement);
+  if (!layout || !threadElement.classList.contains("question-cloud-mode")) return;
+  const questions = [...layout.positions.keys()];
+  const assistants = Array.from(threadElement.querySelectorAll(".conversation-message.assistant"));
+  for (const [question, rect] of layout.positions) {
+    question.classList.remove("cloud-question-expanded");
+    question.style.left = `${Math.round(rect.x)}px`;
+    question.style.top = `${Math.round(rect.y)}px`;
+  }
+  assistants.forEach((assistant) => {
+    assistant.style.removeProperty("left");
+    assistant.style.removeProperty("top");
+    assistant.style.removeProperty("width");
+  });
+
+  const expandedQuestions = questions.filter((question) => {
+    const responseIndex = question.dataset.responseMessageIndex;
+    const response = responseIndex === undefined
+      ? null
+      : threadElement.querySelector(`.conversation-message.assistant[data-message-index="${responseIndex}"]`);
+    return response && !response.classList.contains("assistant-response-collapsed");
+  });
+  if (!expandedQuestions.length) {
+    disconnectQuestionCloudAnswerResizeObserver(threadElement);
+    updateQuestionCloudScrollHeight(threadElement, [...layout.positions.values()]);
+    return;
+  }
+
+  const insets = getCloudHorizontalInsets(threadElement);
+  const answerWidth = Math.max(1, threadElement.clientWidth - insets.left - insets.right);
+  const expandedUnits = expandedQuestions
+    .map((question) => {
+      const base = layout.positions.get(question);
+      const responseIndex = question.dataset.responseMessageIndex;
+      const answer = threadElement.querySelector(`.conversation-message.assistant[data-message-index="${responseIndex}"]`);
+      question.classList.add("cloud-question-expanded");
+      const questionWidth = question.getBoundingClientRect().width;
+      const questionX = threadElement.clientWidth - insets.right - questionWidth;
+      question.style.left = `${Math.round(questionX)}px`;
+      answer.style.left = `${Math.round(insets.left)}px`;
+      answer.style.width = `${Math.round(answerWidth)}px`;
+      return { question, answer, base, questionX, questionWidth };
+    })
+    .sort((left, right) => left.base.y - right.base.y);
+
+  let expandedBottom = -Infinity;
+  for (const unit of expandedUnits) {
+    const questionHeight = unit.question.getBoundingClientRect().height;
+    const top = Math.max(unit.base.y, expandedBottom + layout.gap);
+    const answerY = top + questionHeight + layout.gap;
+    unit.question.style.top = `${Math.round(top)}px`;
+    unit.answer.style.top = `${Math.round(answerY)}px`;
+    const answerContent = unit.answer.querySelector(".conversation-assistant-content");
+    const answerStyle = window.getComputedStyle(unit.answer);
+    const verticalPadding = (Number.parseFloat(answerStyle.paddingTop) || 0) +
+      (Number.parseFloat(answerStyle.paddingBottom) || 0);
+    const answerHeight = Math.max(
+      unit.answer.getBoundingClientRect().height,
+      unit.answer.scrollHeight,
+      (answerContent?.scrollHeight || 0) + verticalPadding
+    );
+    unit.top = top;
+    unit.questionHeight = questionHeight;
+    unit.answerY = answerY;
+    unit.answerHeight = answerHeight;
+    unit.bottom = answerY + answerHeight;
+    expandedBottom = unit.bottom;
+  }
+
+  observeExpandedQuestionCloudAnswers(threadElement, expandedUnits.map(({ answer }) => answer));
+  const positionedRects = [];
+  const collapsedItems = questions
+    .filter((question) => !expandedQuestions.includes(question))
+    .map((question) => ({ question, rect: layout.positions.get(question) }))
+    .sort((left, right) => left.rect.y - right.rect.y);
+  for (const { question, rect } of collapsedItems) {
+    let y = rect.y;
+    let shifted;
+    do {
+      shifted = false;
+      for (const unit of expandedUnits) {
+        if (y + rect.height + layout.gap > unit.top && y < unit.bottom + layout.gap) {
+          y = unit.bottom + layout.gap;
+          shifted = true;
+        }
+      }
+      const collision = positionedRects.find((placed) => cloudRectsOverlap({ ...rect, y }, placed, layout.gap));
+      if (collision) {
+        y = collision.y + collision.height + layout.gap;
+        shifted = true;
+      }
+    } while (shifted);
+    question.style.top = `${Math.round(y)}px`;
+    positionedRects.push({ ...rect, y });
+  }
+
+  updateQuestionCloudScrollHeight(threadElement, [
+    ...positionedRects,
+    ...expandedUnits.flatMap((unit) => [
+      { x: unit.questionX, y: unit.top, width: unit.questionWidth, height: unit.questionHeight },
+      { x: insets.left, y: unit.answerY, width: answerWidth, height: unit.answerHeight }
+    ])
+  ]);
+}
+
+function getCloudHorizontalInsets(threadElement) {
+  const style = window.getComputedStyle(threadElement);
+  return {
+    left: Math.max(4, Number.parseFloat(style.paddingLeft) || 0),
+    right: Math.max(4, Number.parseFloat(style.paddingRight) || 0)
+  };
+}
+
+function updateQuestionCloudScrollHeight(threadElement, rects) {
+  const bottom = rects.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
+  threadElement.style.setProperty("--question-cloud-scroll-height", `${Math.ceil(bottom + 28)}px`);
+}
+
+function observeExpandedQuestionCloudAnswers(threadElement, answers) {
+  if (typeof ResizeObserver !== "function") return;
+  const current = questionCloudAnswerResizeObservers.get(threadElement);
+  if (current?.answers.length === answers.length && current.answers.every((answer, index) => answer === answers[index])) return;
+  current?.observer.disconnect();
+  const observer = new ResizeObserver(() => scheduleConversationQuestionCloudExpansion(threadElement));
+  answers.forEach((answer) => observer.observe(answer.querySelector(".conversation-assistant-content") || answer));
+  questionCloudAnswerResizeObservers.set(threadElement, { answers, observer });
+}
+
+function disconnectQuestionCloudAnswerResizeObserver(threadElement) {
+  questionCloudAnswerResizeObservers.get(threadElement)?.observer.disconnect();
+  questionCloudAnswerResizeObservers.delete(threadElement);
+}
+
+function centeredCloudRect(question, centerX, centerY) {
+  return {
+    x: centerX - question.width / 2,
+    y: centerY - question.height / 2,
+    width: question.width,
+    height: question.height
+  };
+}
+
+function cloudRectsOverlap(left, right, gap) {
+  return !(
+    left.x + left.width + gap <= right.x ||
+    right.x + right.width + gap <= left.x ||
+    left.y + left.height + gap <= right.y ||
+    right.y + right.height + gap <= left.y
+  );
+}
+
+function createQuestionResponseMap(messages) {
+  const pendingQuestions = [];
+  const responseIndexes = new Map();
+  messages.forEach((message, messageIndex) => {
+    if (message?.role === "user") {
+      pendingQuestions.push(messageIndex);
+      return;
+    }
+    if (message?.role !== "assistant" || !pendingQuestions.length) return;
+    responseIndexes.set(pendingQuestions.shift(), messageIndex);
+  });
+  return responseIndexes;
 }
 
 function createUserMessageMetaRow({ item, message, messageIndex, textElement, onEditUserMessage }) {
@@ -128,27 +595,25 @@ function beginUserMessageEdit({
   editButton,
   onEditUserMessage
 }) {
-  const editor = document.createElement("textarea");
-  editor.className = "conversation-user-editor";
-  editor.value = String(message.text || "");
-  editor.rows = 1;
-  editor.setAttribute("aria-label", "Edit question");
-  const bubbleWidth = textElement.getBoundingClientRect().width;
-  if (bubbleWidth > 0) {
-    editor.style.width = `${Math.max(140, bubbleWidth)}px`;
-  }
+  const questionLabel = textElement.querySelector(".conversation-question-label");
+  if (!questionLabel) return;
 
   item.classList.add("editing-user-message");
-  textElement.hidden = true;
-  textElement.after(editor);
+  questionLabel.dataset.originalText = String(message.text || "");
+  questionLabel.contentEditable = "true";
+  questionLabel.setAttribute("role", "textbox");
+  questionLabel.setAttribute("aria-label", "Edit question");
+  questionLabel.setAttribute("aria-multiline", "true");
   editButton.classList.add("confirm");
   editButton.setAttribute("aria-label", "Confirm question edit");
-  resizeUserMessageEditor(editor);
-  editor.focus();
-  editor.setSelectionRange(editor.value.length, editor.value.length);
+  scheduleEditedQuestionCloudExpansion(item);
+  questionLabel.focus();
+  moveCaretToEnd(questionLabel);
 
-  editor.addEventListener("input", () => resizeUserMessageEditor(editor));
-  editor.addEventListener("keydown", (event) => {
+  questionLabel.oninput = () => {
+    scheduleEditedQuestionCloudExpansion(item);
+  };
+  questionLabel.onkeydown = (event) => {
     if (
       event.key === "Enter" &&
       !event.shiftKey &&
@@ -170,19 +635,19 @@ function beginUserMessageEdit({
     }
     event.preventDefault();
     cancelUserMessageEdit({ item, textElement, editButton });
-  });
+  };
 }
 
 async function confirmUserMessageEdit({ item, messageIndex, onEditUserMessage }) {
-  const editor = item.querySelector(".conversation-user-editor");
+  const editor = item.querySelector('.conversation-question-label[contenteditable="true"]');
   const editButton = item.querySelector(".conversation-user-edit-button");
-  const nextText = String(editor?.value || "").trim();
+  const nextText = String(editor?.innerText || editor?.textContent || "").trim();
   if (!editor || !editButton || !nextText) {
     editor?.focus();
     return;
   }
 
-  editor.disabled = true;
+  editor.contentEditable = "false";
   editButton.disabled = true;
   try {
     const saved = await onEditUserMessage(messageIndex, nextText);
@@ -190,7 +655,7 @@ async function confirmUserMessageEdit({ item, messageIndex, onEditUserMessage })
       throw new Error("Question is no longer available for editing.");
     }
   } catch (error) {
-    editor.disabled = false;
+    editor.contentEditable = "true";
     editButton.disabled = false;
     editor.focus();
     console.debug("[Paper Toaster] Could not edit user question", error);
@@ -198,17 +663,37 @@ async function confirmUserMessageEdit({ item, messageIndex, onEditUserMessage })
 }
 
 function cancelUserMessageEdit({ item, textElement, editButton }) {
-  item.querySelector(".conversation-user-editor")?.remove();
+  const questionLabel = textElement.querySelector(".conversation-question-label");
+  if (questionLabel) {
+    questionLabel.textContent = questionLabel.dataset.originalText || questionLabel.textContent;
+    delete questionLabel.dataset.originalText;
+    questionLabel.removeAttribute("contenteditable");
+    questionLabel.removeAttribute("role");
+    questionLabel.removeAttribute("aria-label");
+    questionLabel.removeAttribute("aria-multiline");
+    questionLabel.oninput = null;
+    questionLabel.onkeydown = null;
+  }
   item.classList.remove("editing-user-message");
-  textElement.hidden = false;
   editButton.classList.remove("confirm");
   editButton.setAttribute("aria-label", "Edit question");
+  scheduleEditedQuestionCloudExpansion(item);
   editButton.focus();
 }
 
-function resizeUserMessageEditor(editor) {
-  editor.style.height = "auto";
-  editor.style.height = `${editor.scrollHeight}px`;
+function scheduleEditedQuestionCloudExpansion(item) {
+  const threadElement = item.closest(".question-cloud-mode");
+  if (threadElement) scheduleConversationQuestionCloudExpansion(threadElement);
+}
+
+function moveCaretToEnd(element) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function formatConversationMessageTime(value) {
@@ -234,8 +719,8 @@ function formatConversationMessageTime(value) {
   return `${date.toLocaleDateString([], { month: "short", day: "2-digit" })} ${time}`;
 }
 
-function isQuestionInSavedUnit(messages, messageIndex) {
-  const nextMessage = messages[messageIndex + 1];
+function isQuestionInSavedUnit(messages, assistantMessageIndex) {
+  const nextMessage = messages[assistantMessageIndex];
   return Boolean(
     nextMessage &&
     nextMessage.role === "assistant" &&
@@ -247,6 +732,7 @@ function isQuestionInSavedUnit(messages, messageIndex) {
 export function renderSavedQuestionAnswerUnits(threadElement, units, options = {}) {
   highlightBarCleanups.get(threadElement)?.();
   highlightBarCleanups.delete(threadElement);
+  threadElement.querySelector(".saved-paper-user-note") && disposePaperNoteEditor(threadElement.querySelector(".saved-paper-user-note"));
   threadElement.textContent = "";
   threadElement.classList.add("saved-qa-thread");
   threadElement.hidden = false;
@@ -283,17 +769,14 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
     } else {
       normalItems.push({
         unit,
-        element: unitElement,
-        estimatedHeight: estimateSavedQuestionAnswerUnitHeight(
-          unit,
-          options.collapsedUnitKeys?.has(getSavedQuestionAnswerUnitKey(unit))
-        )
+        element: unitElement
       });
     }
   });
 
-  appendBalancedSavedQuestionAnswerUnits(track, normalItems);
-  track.classList.toggle("single-note", normalItems.length === 1);
+  normalItems
+    .sort(compareSavedQuestionAnswerUnitItemsByAge)
+    .forEach((item) => track.append(item.element));
   if (pinnedRow.children.length) {
     threadElement.append(pinnedRow);
   }
@@ -304,96 +787,12 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
 }
 
 function createPaperUserNoteElement(options) {
-  const note = document.createElement("section");
-  note.className = "saved-paper-user-note";
-
-  const textarea = document.createElement("textarea");
-  textarea.id = "savedPaperUserNote";
-  textarea.className = "saved-paper-user-note-input";
-  textarea.rows = 1;
-  textarea.maxLength = 50000;
-  textarea.placeholder = "jot down your thoughts, chief.";
-  textarea.value = String(options.userNote || "");
-  textarea.setAttribute("aria-label", "User note for this paper");
-  textarea.addEventListener("input", () => {
-    resizePaperUserNoteInput(textarea);
-    options.onUserNoteChange?.(textarea.value);
+  return createPaperNoteEditor({
+    noteDocument: options.userNoteDocument,
+    onChange: options.onUserNoteChange,
+    onCommit: options.onUserNoteCommit,
+    onError: options.onUserNoteError
   });
-  textarea.addEventListener("blur", () => {
-    textarea.scrollTop = 0;
-    options.onUserNoteCommit?.(textarea.value);
-  });
-
-  note.append(textarea);
-  window.requestAnimationFrame(() => resizePaperUserNoteInput(textarea));
-  return note;
-}
-
-function resizePaperUserNoteInput(textarea) {
-  textarea.style.height = "auto";
-  const maxHeight = Number.parseFloat(getComputedStyle(textarea).maxHeight) || textarea.scrollHeight;
-  const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-  textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-}
-
-function appendBalancedSavedQuestionAnswerUnits(track, items) {
-  const sortedItems = [...items].sort(compareSavedQuestionAnswerUnitItemsByAge);
-  if (sortedItems.length <= 1) {
-    sortedItems.forEach((item) => track.append(item.element));
-    return;
-  }
-
-  const columns = [
-    createSavedQuestionAnswerColumn(),
-    createSavedQuestionAnswerColumn()
-  ];
-
-  sortedItems.forEach((item) => {
-    const column = chooseSavedQuestionAnswerColumn(columns, item);
-    column.height += item.estimatedHeight;
-    column.lastWasLong = isLongSavedQuestionAnswerItem(item);
-    column.element.append(item.element);
-  });
-
-  columns.forEach((column) => track.append(column.element));
-}
-
-function createSavedQuestionAnswerColumn() {
-  const element = document.createElement("div");
-  element.className = "saved-qa-column";
-  return {
-    element,
-    height: 0,
-    lastWasLong: false
-  };
-}
-
-function chooseSavedQuestionAnswerColumn(columns, item) {
-  if (!columns[0].element.children.length) {
-    return columns[0];
-  }
-
-  if (!columns[1].element.children.length) {
-    return columns[1];
-  }
-
-  return columns
-    .map((column) => ({
-      column,
-      score: column.height + getSavedQuestionAnswerLongItemPenalty(column, item)
-    }))
-    .sort((left, right) => left.score - right.score)[0].column;
-}
-
-function getSavedQuestionAnswerLongItemPenalty(column, item) {
-  return column.lastWasLong && isLongSavedQuestionAnswerItem(item)
-    ? item.estimatedHeight * 0.35
-    : 0;
-}
-
-function isLongSavedQuestionAnswerItem(item) {
-  return item.estimatedHeight >= 280;
 }
 
 function compareSavedQuestionAnswerUnitItemsByAge(left, right) {
@@ -404,45 +803,12 @@ function getSavedQuestionAnswerUnitTime(unit) {
   return Number(unit?.answerCreatedAt || unit?.createdAt || unit?.questionCreatedAt) || 0;
 }
 
-function estimateSavedQuestionAnswerUnitHeight(unit, isCollapsed) {
-  const questionLines = estimateWrappedLines(unit?.question, 31);
-  const baseHeight = 30 + questionLines * 15;
-  if (isCollapsed) {
-    return baseHeight + 16;
-  }
-
-  const answerText = stripMarkdownAnnotationTokens(unit?.answer || "");
-  const answerLines = estimateWrappedLines(answerText, 36);
-  const codeBonus = countMarkdownCodeBlocks(unit?.answer || "") * 18;
-  const selectionBonus = unit?.selectionText
-    ? 36 + estimateWrappedLines(unit.selectionText, 44) * 8
-    : 0;
-
-  return baseHeight + answerLines * 14 + codeBonus + selectionBonus + 32;
-}
-
-function estimateWrappedLines(text, charsPerLine) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return 1;
-  }
-
-  return Math.max(1, Math.ceil(normalized.length / charsPerLine));
-}
-
-function stripMarkdownAnnotationTokens(text) {
-  return String(text || "").replace(/\{\{(?:highlight64|hide64|circle64):[^}]+}}/g, "");
-}
-
-function countMarkdownCodeBlocks(text) {
-  return (String(text || "").match(/```/g) || []).length / 2;
-}
-
 function createSavedQuestionAnswerUnitElement({ unit, options, editBars, cleanupCallbacks }) {
   const unitKey = getSavedQuestionAnswerUnitKey(unit);
   const isComparisonUnit = unit?.sourceType === "comparison";
   const unitElement = document.createElement("article");
   unitElement.className = "saved-qa-unit";
+  unitElement.classList.toggle("pinned", Boolean(unit.isPinned));
   unitElement.dataset.savedUnitKey = unitKey;
   if (options.collapsedUnitKeys?.has(unitKey)) {
     unitElement.classList.add("collapsed");
@@ -463,7 +829,7 @@ function createSavedQuestionAnswerUnitElement({ unit, options, editBars, cleanup
   questionText.className = "saved-qa-question-text";
   questionText.textContent = unit.question || "Question unavailable";
   question.append(questionText);
-  if (!isComparisonUnit) {
+  if (typeof options.onJumpToUnit === "function") {
     question.append(createSavedJumpButton(unit, options.onJumpToUnit));
   }
   question.addEventListener("click", () => toggleSavedQuestionAnswerUnit(unitElement, question));
@@ -478,7 +844,21 @@ function createSavedQuestionAnswerUnitElement({ unit, options, editBars, cleanup
 
   const answer = document.createElement("div");
   answer.className = "saved-qa-answer";
-  renderMarkdownInto(answer, normalizeAiResponseMarkdown(unit.answer || ""), { omitHiddenText: true });
+  renderMarkdownInto(answer, normalizeAiResponseMarkdown(unit.answer || ""), {
+    omitHiddenText: true,
+    citationCatalog: unit.citationCatalog
+  });
+  wireCitationNavigation(
+    answer,
+    unit.citationCatalog,
+    typeof options.onNavigateCitation === "function"
+      ? (paper) => options.onNavigateCitation(paper, {
+        sourceType: unit.sourceType || "single",
+        comparisonId: unit.comparisonId || ""
+      })
+      : null,
+    cleanupCallbacks
+  );
   decorateSavedCodeBlocks(answer);
   if (
     isComparisonUnit ||
@@ -620,6 +1000,7 @@ function toggleSavedQuestionAnswerUnit(unitElement, questionElement) {
 export function setSavedQuestionAnswerUnitsCollapsed(threadElement, collapsed) {
   const units = Array.from(threadElement.querySelectorAll(".saved-qa-unit"));
   units.forEach((unitElement) => setSavedQuestionAnswerUnitCollapsed(unitElement, collapsed));
+  threadElement.classList.toggle("saved-qa-cloud-mode", Boolean(collapsed));
   return units.length > 0;
 }
 
@@ -642,7 +1023,7 @@ function setSavedQuestionAnswerUnitCollapsed(unitElement, collapsed, questionEle
   question?.setAttribute("aria-expanded", String(!collapsed));
 }
 
-function getSavedQuestionAnswerUnitKey(unit) {
+export function getSavedQuestionAnswerUnitKey(unit) {
   if (unit?.sourceType === "comparison") {
     const comparisonId = String(unit?.comparisonId || "").trim();
     const assistantMessageIndex = Number(unit?.assistantMessageIndex);
@@ -654,7 +1035,7 @@ function getSavedQuestionAnswerUnitKey(unit) {
   return `${threadId}:${Number.isInteger(assistantMessageIndex) ? assistantMessageIndex : ""}`;
 }
 
-function renderMessageText(element, message) {
+function renderMessageText(element, message, options = {}, cleanupCallbacks = []) {
   if (message.pending) {
     element.classList.add("pending-text");
     element.setAttribute("aria-live", "polite");
@@ -663,11 +1044,162 @@ function renderMessageText(element, message) {
   }
 
   if (message.role === "assistant") {
-    renderMarkdownInto(element, normalizeAiResponseMarkdown(message.text));
+    renderMarkdownInto(element, normalizeAiResponseMarkdown(message.text), {
+      citationCatalog: message.citationCatalog
+    });
+    wireCitationNavigation(element, message.citationCatalog, options.onNavigateCitation, cleanupCallbacks);
     return;
   }
 
-  element.textContent = message.text;
+  const questionLabel = document.createElement("span");
+  questionLabel.className = "conversation-question-label";
+  questionLabel.textContent = message.text;
+  element.append(questionLabel);
+}
+
+function wireCitationNavigation(textElement, citationCatalog, onNavigateCitation, cleanupCallbacks) {
+  if (typeof onNavigateCitation !== "function") {
+    return;
+  }
+
+  const papers = new Map(
+    (Array.isArray(citationCatalog?.papers) ? citationCatalog.papers : [])
+      .map((paper) => [String(paper?.id || "").toLowerCase(), paper])
+  );
+
+  textElement.querySelectorAll(".paper-context-citation").forEach((citation) => {
+    const popover = citation.querySelector(".paper-context-citation-popover");
+    const rows = [...citation.querySelectorAll(".paper-context-citation-label[data-citation-paper-id]")];
+    if (!popover || !rows.length) {
+      return;
+    }
+
+    document.body.append(popover);
+    let pinnedOpen = false;
+    let hideTimer = null;
+
+    const positionPopover = () => {
+      if (!popover.classList.contains("citation-popover-visible")) {
+        return;
+      }
+      const citationRect = citation.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const viewportPadding = 6;
+      const gap = 5;
+      const leftCandidate = citationRect.left - popoverRect.width - gap;
+      const rightCandidate = citationRect.right + gap;
+      const left = leftCandidate >= viewportPadding
+        ? leftCandidate
+        : rightCandidate + popoverRect.width <= window.innerWidth - viewportPadding
+          ? rightCandidate
+          : Math.min(
+            Math.max(viewportPadding, citationRect.left - (popoverRect.width / 2)),
+            window.innerWidth - popoverRect.width - viewportPadding
+          );
+      const top = Math.max(6, citationRect.top - popoverRect.height - 4);
+      popover.style.left = `${left}px`;
+      popover.style.top = `${top}px`;
+    };
+    const showPopover = () => {
+      window.clearTimeout(hideTimer);
+      popover.classList.add("citation-popover-visible");
+      window.requestAnimationFrame(positionPopover);
+    };
+    const hidePopover = () => {
+      if (pinnedOpen) {
+        return;
+      }
+      popover.classList.remove("citation-popover-visible");
+    };
+    const scheduleHidePopover = () => {
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(hidePopover, 70);
+    };
+
+    const navigate = (row) => {
+      const paperId = String(row.dataset.citationPaperId || "").toLowerCase();
+      const paper = papers.get(paperId);
+      if (!paper) {
+        return;
+      }
+      pinnedOpen = false;
+      popover.classList.remove("citation-popover-visible");
+      citation.setAttribute("aria-expanded", "false");
+      Promise.resolve(onNavigateCitation(paper)).catch((error) => {
+        console.debug("[Paper Toaster] Could not open cited paper", error);
+      });
+    };
+
+    rows.forEach((row) => {
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      row.addEventListener("click", (event) => {
+        event.stopPropagation();
+        navigate(row);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        navigate(row);
+      });
+    });
+
+    citation.setAttribute("role", "button");
+    citation.tabIndex = 0;
+    citation.setAttribute("aria-expanded", "false");
+    citation.addEventListener("pointerenter", showPopover);
+    citation.addEventListener("pointerleave", scheduleHidePopover);
+    citation.addEventListener("focus", showPopover);
+    citation.addEventListener("blur", scheduleHidePopover);
+    popover.addEventListener("pointerenter", showPopover);
+    popover.addEventListener("pointerleave", scheduleHidePopover);
+    const activateCitation = () => {
+      if (rows.length === 1) {
+        navigate(rows[0]);
+        return;
+      }
+      pinnedOpen = !pinnedOpen;
+      citation.setAttribute("aria-expanded", String(pinnedOpen));
+      if (pinnedOpen) {
+        showPopover();
+      } else {
+        hidePopover();
+      }
+    };
+    citation.addEventListener("click", activateCitation);
+    citation.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      activateCitation();
+    });
+
+    if (rows.length > 1) {
+      const closeOnOutsidePointer = (event) => {
+        if (citation.contains(event.target) || popover.contains(event.target)) {
+          return;
+        }
+        pinnedOpen = false;
+        popover.classList.remove("citation-popover-visible");
+        citation.setAttribute("aria-expanded", "false");
+      };
+      document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+      cleanupCallbacks.push(() => document.removeEventListener("pointerdown", closeOnOutsidePointer, true));
+    }
+
+    window.addEventListener("resize", positionPopover);
+    document.addEventListener("scroll", positionPopover, true);
+    cleanupCallbacks.push(() => {
+      window.clearTimeout(hideTimer);
+      window.removeEventListener("resize", positionPopover);
+      document.removeEventListener("scroll", positionPopover, true);
+      popover.remove();
+    });
+  });
 }
 
 function registerHighlightEditBars(threadElement, editBars, cleanupCallbacks = []) {
@@ -1241,7 +1773,7 @@ function flashConversationActionButton(button) {
   window.setTimeout(() => button.classList.remove("failed"), 320);
 }
 
-function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDeleteUnit }) {
+function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDeleteUnit, onSaveLimitRejected }) {
   const row = document.createElement("div");
   row.className = "conversation-action-row";
 
@@ -1252,10 +1784,25 @@ function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDele
     pressed: Boolean(message.isSaved)
   });
   saveButton.classList.toggle("saved", Boolean(message.isSaved));
-  saveButton.addEventListener("click", () => {
-    Promise.resolve(onToggleSaved?.(messageIndex)).catch((error) => {
+  let savePending = false;
+  saveButton.addEventListener("click", async () => {
+    if (savePending) return;
+    savePending = true;
+    saveButton.setAttribute("aria-busy", "true");
+    saveButton.disabled = true;
+    try {
+      const result = await onToggleSaved?.(messageIndex);
+      if (result?.status === "limit-reached") {
+        flashSaveLimitRejection(saveButton);
+        onSaveLimitRejected?.(result);
+      }
+    } catch (error) {
       console.debug("[Paper Toaster] Could not update response saved state", error);
-    });
+    } finally {
+      savePending = false;
+      saveButton.disabled = false;
+      saveButton.removeAttribute("aria-busy");
+    }
   });
 
   const deleteButton = createConversationActionButton({
@@ -1277,7 +1824,7 @@ function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDele
   });
   copyButton.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(String(message.text || ""));
+      await navigator.clipboard.writeText(prepareAiResponseMarkdownForCopy(message.text));
       copyButton.classList.add("copied");
       window.setTimeout(() => copyButton.classList.remove("copied"), 700);
     } catch (error) {
@@ -1286,7 +1833,44 @@ function createAssistantActionRow({ message, messageIndex, onToggleSaved, onDele
   });
 
   row.append(saveButton, deleteButton, copyButton);
+  const signature = createModelSignature(message.model);
+  if (signature) {
+    row.append(signature);
+  }
   return row;
+}
+
+function flashSaveLimitRejection(button) {
+  button.classList.remove("limit-rejected");
+  void button.offsetWidth;
+  button.classList.add("limit-rejected");
+  window.setTimeout(() => button.classList.remove("limit-rejected"), 460);
+}
+
+function createModelSignature(model) {
+  const label = String(model || "").trim();
+  if (!label) {
+    return null;
+  }
+
+  const signature = document.createElement("span");
+  signature.className = `conversation-model-signature ${getModelSignatureClass(label)}`;
+  signature.textContent = `\u2014 ${label}`;
+  return signature;
+}
+
+function getModelSignatureClass(model) {
+  const normalized = String(model || "").toLowerCase();
+  if (/claude/.test(normalized)) {
+    return "model-signature-claude";
+  }
+  if (/gemini|antigravity/.test(normalized)) {
+    return "model-signature-gemini";
+  }
+  if (/codex|gpt|openai/.test(normalized)) {
+    return "model-signature-codex";
+  }
+  return "model-signature-default";
 }
 
 function isMessageSaved(message) {

@@ -1,5 +1,7 @@
 import { MessageType } from "../shared/messages.js";
 import { getComparisonSettings } from "../storage/comparison-settings-store.js";
+import { openExtensionPageInExistingTab } from "../browser/open-paper-tab.js";
+import { filterActiveLibraryDocumentKeys } from "../storage/library-store.js";
 
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
 const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
@@ -19,6 +21,18 @@ chrome.action.onClicked.addListener(async (tab) => {
   if (tab?.windowId) {
     await chrome.sidePanel.open({ windowId: tab.windowId });
   }
+});
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "open-dashboard") {
+    return;
+  }
+
+  openExtensionPageInExistingTab(
+    chrome.runtime.getURL("src/dashboard/dashboard.html")
+  ).catch((error) => {
+    console.error("Could not open Paper Toaster dashboard", error);
+  });
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -180,24 +194,34 @@ async function clearDashboardContext(message, sender) {
 }
 
 async function updateComparisonDraft(message, sender) {
+  const panelOpenPromise = sender?.tab && message.openPanel
+    ? openPanelForTab(sender.tab)
+    : Promise.resolve();
   const { paperLimit } = await getComparisonSettings();
-  const documentKeys = Array.isArray(message.documentKeys)
+  const incomingDocumentKeys = Array.isArray(message.documentKeys)
     ? message.documentKeys.map((key) => String(key || "").trim()).filter(Boolean)
     : [];
-  const uniqueDocumentKeys = [...new Set(documentKeys)];
+  const currentContext = message.append ? await getLibraryPaperContext() : null;
+  const currentDraftDocumentKeys = (
+    currentContext?.mode === "comparative-reading" &&
+    !currentContext?.comparisonId &&
+    Array.isArray(currentContext?.draftDocumentKeys)
+  ) ? currentContext.draftDocumentKeys : [];
+  const uniqueDocumentKeys = await filterActiveLibraryDocumentKeys([...new Set([
+    ...(message.append ? currentDraftDocumentKeys : []),
+    ...incomingDocumentKeys
+  ])]);
   const hasOverflow = Boolean(message.rejectOverflow) && uniqueDocumentKeys.length > paperLimit;
   const context = {
     comparisonId: "",
     mode: "comparative-reading",
     source: "dashboard",
-    draftDocumentKeys: hasOverflow ? [] : uniqueDocumentKeys.slice(0, paperLimit),
+    draftDocumentKeys: hasOverflow ? currentDraftDocumentKeys.slice(0, paperLimit) : uniqueDocumentKeys.slice(0, paperLimit),
     draftIssue: hasOverflow ? "too-many-papers" : "",
     selectedAt: Date.now()
   };
   await setLibraryPaperContext(context);
-  if (sender?.tab && message.openPanel) {
-    await openPanelForTab(sender.tab);
-  }
+  await panelOpenPromise;
   notifyLibraryPaperContextChanged(context);
   return { ok: true, context };
 }

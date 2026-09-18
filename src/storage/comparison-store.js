@@ -1,11 +1,13 @@
 import {
   COMPARISON_MESSAGE_STORE,
   COMPARISON_SESSION_STORE,
+  PAPER_STORE,
   openPaperDatabase,
   requestToPromise,
   transactionDone
 } from "./paper-database.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
+import { normalizeCitationCatalog } from "../ai/citation-catalog.js";
 
 const MAX_COMPARISON_MESSAGES = 80;
 const MAX_COMPARISON_MESSAGE_CHARS = 20000;
@@ -13,6 +15,7 @@ const DEFAULT_COMPARISON_TITLE = "Comparative reading";
 
 export async function createComparisonSession(documentKeys = [], options = {}) {
   const keys = normalizeDocumentKeys(documentKeys);
+  await assertPapersAvailableForNewComparison(keys);
   const now = Date.now();
   const session = {
     comparisonId: createComparisonId(),
@@ -23,7 +26,8 @@ export async function createComparisonSession(documentKeys = [], options = {}) {
     firstMessageCreatedAt: null,
     messageCount: 0,
     isStarred: false,
-    starredAt: null
+    starredAt: null,
+    archivedAt: null
   };
 
   const db = await openPaperDatabase();
@@ -48,8 +52,8 @@ export async function setComparisonSessionStarred(comparisonId, isStarred) {
   const now = Date.now();
   const next = {
     ...existing,
-    isStarred: Boolean(isStarred),
-    starredAt: isStarred ? now : null,
+    isStarred: normalizeArchivedAt(existing.archivedAt) ? false : Boolean(isStarred),
+    starredAt: normalizeArchivedAt(existing.archivedAt) || !isStarred ? null : now,
     updatedAt: existing.updatedAt || now
   };
   const transaction = db.transaction(COMPARISON_SESSION_STORE, "readwrite");
@@ -58,7 +62,29 @@ export async function setComparisonSessionStarred(comparisonId, isStarred) {
   return normalizeComparisonSession(next);
 }
 
-export async function listComparisonSessions() {
+export async function setComparisonSessionTitle(comparisonId, title) {
+  const normalizedId = String(comparisonId || "").trim();
+  if (!normalizedId) {
+    return null;
+  }
+
+  const db = await openPaperDatabase();
+  const existing = await getComparisonSessionRecord(db, normalizedId);
+  if (!existing) {
+    return null;
+  }
+
+  const next = {
+    ...existing,
+    title: normalizeComparisonTitle(title) || DEFAULT_COMPARISON_TITLE
+  };
+  const transaction = db.transaction(COMPARISON_SESSION_STORE, "readwrite");
+  transaction.objectStore(COMPARISON_SESSION_STORE).put(next);
+  await transactionDone(transaction);
+  return normalizeComparisonSession(next);
+}
+
+export async function listComparisonSessions(options = {}) {
   const db = await openPaperDatabase();
   const sessions = await requestToPromise(
     db.transaction(COMPARISON_SESSION_STORE, "readonly")
@@ -68,6 +94,9 @@ export async function listComparisonSessions() {
 
   return sessions
     .map(normalizeComparisonSession)
+    .filter((session) => options.view === "all"
+      ? true
+      : options.view === "archive" ? Boolean(session.archivedAt) : !session.archivedAt)
     .sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
 }
 
@@ -116,6 +145,7 @@ export async function appendComparisonMessage(comparisonId, message) {
   rewriteComparisonMessages(messageStore, {
     comparisonId: normalizedId,
     messages: nextMessages,
+    documentKeys: session.documentKeys,
     now
   });
 
@@ -154,6 +184,7 @@ export async function saveComparisonMessages(comparisonId, messages = []) {
   rewriteComparisonMessages(transaction.objectStore(COMPARISON_MESSAGE_STORE), {
     comparisonId: normalizedId,
     messages: normalizedMessages,
+    documentKeys: session.documentKeys,
     now,
     previousMessageCount: session.messageCount || 0
   });
@@ -222,6 +253,7 @@ export async function listSavedComparisonQuestionAnswerUnitsForDocument(document
         question: latestUser?.text || session.title || DEFAULT_COMPARISON_TITLE,
         selectionText: "",
         answer: message.text || "",
+        citationCatalog: normalizeCitationCatalog(message.citationCatalog),
         isPinned: false,
         createdAt: Number(message.createdAt || latestUser?.createdAt || session.updatedAt || session.createdAt) || Date.now(),
         questionCreatedAt: Number(latestUser?.createdAt) || null,
@@ -266,7 +298,7 @@ function getComparisonMessages(db, comparisonId) {
     .sort((left, right) => (left.sequence || 0) - (right.sequence || 0)));
 }
 
-function rewriteComparisonMessages(store, { comparisonId, messages, now, previousMessageCount = 0 }) {
+function rewriteComparisonMessages(store, { comparisonId, messages, documentKeys = [], now, previousMessageCount = 0 }) {
   messages.forEach((message, index) => {
     store.put({
       messageId: createComparisonMessageId(comparisonId, index),
@@ -275,8 +307,12 @@ function rewriteComparisonMessages(store, { comparisonId, messages, now, previou
       role: message.role,
       text: message.text,
       model: message.model || "",
+      citationCatalog: normalizeCitationCatalog(message.citationCatalog),
       citedDocumentKeys: message.citedDocumentKeys || [],
       isSaved: isComparisonMessageSaved(message),
+      savedDocumentKeys: isComparisonMessageSaved(message)
+        ? normalizeDocumentKeys(documentKeys)
+        : [],
       createdAt: message.createdAt || now + index,
       updatedAt: now
     });
@@ -297,8 +333,27 @@ function normalizeComparisonSession(session) {
     firstMessageCreatedAt: Number(session?.firstMessageCreatedAt) || null,
     messageCount: Number(session?.messageCount) || 0,
     isStarred: Boolean(session?.isStarred),
-    starredAt: Number(session?.starredAt) || null
+    starredAt: Number(session?.starredAt) || null,
+    archivedAt: normalizeArchivedAt(session?.archivedAt)
   };
+}
+
+async function assertPapersAvailableForNewComparison(documentKeys) {
+  if (!documentKeys.length) {
+    return;
+  }
+
+  const db = await openPaperDatabase();
+  const store = db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE);
+  const papers = await Promise.all(documentKeys.map((documentKey) => requestToPromise(store.get(documentKey))));
+  if (papers.some((paper) => normalizeArchivedAt(paper?.archivedAt))) {
+    throw new Error("Archived papers cannot be added to a new comparison.");
+  }
+}
+
+function normalizeArchivedAt(value) {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
 }
 
 function normalizeComparisonMessage(message) {
@@ -315,6 +370,7 @@ function normalizeComparisonMessage(message) {
     role,
     text,
     model: role === "assistant" ? normalizeMessageModel(message?.model) : "",
+    citationCatalog: role === "assistant" ? normalizeCitationCatalog(message?.citationCatalog) : null,
     citedDocumentKeys: normalizeDocumentKeys(message?.citedDocumentKeys || []),
     isSaved: isComparisonMessageSaved(message),
     sequence: Number(message?.sequence) || 0,

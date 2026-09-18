@@ -4,22 +4,23 @@ export async function generateLocalAgentText({
   localAgentProfile,
   model,
   reasoningEffort,
-  prompt,
   systemPrompt,
-  contextPack,
-  conversationMessages = [],
+  mode,
+  question,
+  selectionText = "",
+  papers,
   signal
 }) {
   const normalizedEndpoint = String(endpoint || "").trim();
   const normalizedAuthToken = String(authToken || "").trim();
-  const normalizedPrompt = String(prompt || "").trim();
+  const normalizedQuestion = String(question || "").trim();
 
   if (!normalizedEndpoint) {
     throw new Error("Local agent endpoint is not configured. Open extension Options to add it.");
   }
 
-  if (!normalizedPrompt) {
-    throw new Error("No prompt was provided for the local agent.");
+  if (!normalizedQuestion) {
+    throw new Error("No question was provided for the local agent.");
   }
 
   if (!normalizedAuthToken) {
@@ -33,15 +34,16 @@ export async function generateLocalAgentText({
       "Authorization": `Bearer ${normalizedAuthToken}`
     },
     body: JSON.stringify({
-      version: 1,
+      version: 2,
       source: "paper-toaster",
       localAgentProfile: String(localAgentProfile || "").trim(),
       model: String(model || "").trim(),
       reasoningEffort: String(reasoningEffort || "").trim(),
-      prompt: normalizedPrompt,
       systemPrompt: String(systemPrompt || "").trim(),
-      contextPack,
-      conversationMessages
+      mode,
+      question: normalizedQuestion,
+      selectionText: String(selectionText || ""),
+      papers
     }),
     signal
   });
@@ -61,6 +63,30 @@ export async function generateLocalAgentText({
     model: extractLocalAgentModel(data) || "local-agent",
     raw: data
   };
+}
+
+export async function testLocalAgentConnection({ endpoint, authToken, localAgentProfile, model, reasoningEffort, signal }) {
+  const url = new URL(String(endpoint || "").trim());
+  if (!/\/ask\/?$/.test(url.pathname)) throw new Error("Local agent endpoint must end with /ask.");
+  url.pathname = url.pathname.replace(/\/ask\/?$/, "/connection-test");
+  url.search = "";
+  url.hash = "";
+  const response = await fetch(url.href, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${String(authToken || "").trim()}`
+    },
+    body: JSON.stringify({
+      localAgentProfile: String(localAgentProfile || "").trim(),
+      model: String(model || "").trim(),
+      reasoningEffort: String(reasoningEffort || "").trim()
+    }),
+    signal
+  });
+  const data = await readLocalAgentResponse(response);
+  if (!response.ok) throw new Error(formatLocalAgentError(data, response));
+  return extractLocalAgentText(data);
 }
 
 export async function listLocalAgentModels({ endpoint, authToken, signal }) {

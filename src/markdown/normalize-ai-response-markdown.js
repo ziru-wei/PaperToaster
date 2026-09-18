@@ -1,36 +1,85 @@
 export function normalizeAiResponseMarkdown(markdownText) {
-  return stripMarkdownBoldMarkers(String(markdownText || ""));
+  return normalizePlainTextSegments(String(markdownText || ""));
 }
 
-function stripMarkdownBoldMarkers(markdownText) {
+export function prepareAiResponseMarkdownForCopy(markdownText) {
+  return normalizeAiResponseMarkdown(unwrapNonHighlightAnnotations(String(markdownText || "")));
+}
+
+function normalizePlainTextSegments(markdownText) {
   const source = String(markdownText || "");
-  if (!source.includes("**") && !source.includes("__")) {
+  if (!/[*_（）]|<br\s*\/?>/i.test(source)) {
     return source;
   }
 
-  const codeRanges = collectCodeRanges(source);
+  const protectedRanges = collectProtectedRanges(source);
   let output = "";
   let cursor = 0;
-  for (const range of codeRanges) {
-    output += stripBoldMarkersInPlainText(source.slice(cursor, range.start));
+  for (const range of protectedRanges) {
+    output += normalizePlainText(source.slice(cursor, range.start));
     output += source.slice(range.start, range.end);
     cursor = range.end;
   }
-  output += stripBoldMarkersInPlainText(source.slice(cursor));
+  output += normalizePlainText(source.slice(cursor));
   return output;
 }
 
-function stripBoldMarkersInPlainText(text) {
-  return String(text || "")
-    .replace(/(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/g, "$2")
-    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, "$2");
+function normalizePlainText(text) {
+  return normalizeChineseParenthesesInPlainText(
+    stripEmphasisMarkersInPlainText(text)
+  );
 }
 
-function collectCodeRanges(markdownText) {
+function stripEmphasisMarkersInPlainText(text) {
+  return String(text || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/g, "$2")
+    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, "$2")
+    .replace(/(?<!\*)\*(?!\*)(?=\S)([^\n*]*?\S)\*(?!\*)/g, "$1")
+    .replace(/(?<![\w_])_(?!_)(?=\S)([^\n_]*?\S)_(?![\w_])/g, "$1");
+}
+
+function normalizeChineseParenthesesInPlainText(text) {
+  return String(text || "")
+    .replace(/[ \t]*（[ \t]*/g, " (")
+    .replace(/[ \t]*）[ \t]*/g, ") ");
+}
+
+function collectProtectedRanges(markdownText) {
   return mergeRanges([
     ...collectRegexRanges(markdownText, /(^|\n)(```|~~~)[\s\S]*?(?:\n\2|$)/g),
-    ...collectRegexRanges(markdownText, /`+[^`\n]*?`+/g)
+    ...collectRegexRanges(markdownText, /`+[^`\n]*?`+/g),
+    ...collectRegexRanges(markdownText, /\{\{(?:hide(?:64)?|highlight64|circle64):[\s\S]*?\}\}/g)
   ]);
+}
+
+function unwrapNonHighlightAnnotations(markdownText) {
+  return String(markdownText || "")
+    .replace(/\{\{(?:hide64|circle64):([^{}]*)\}\}/g, (_match, payload) => (
+      decodeAnnotationContent(stripAnnotationGroupId(payload))
+    ))
+    .replace(/\{\{hide:([\s\S]*?)\}\}/g, "$1");
+}
+
+function stripAnnotationGroupId(payload) {
+  const value = String(payload || "");
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex <= 0 || !/^[a-z0-9-]+$/i.test(value.slice(0, separatorIndex))) {
+    return value;
+  }
+  return value.slice(separatorIndex + 1);
+}
+
+function decodeAnnotationContent(encodedText) {
+  try {
+    const base64 = String(encodedText || "").replaceAll("-", "+").replaceAll("_", "/");
+    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+    const binary = atob(padded);
+    const bytes = new Uint8Array(Array.from(binary, (character) => character.charCodeAt(0)));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
 }
 
 function collectRegexRanges(source, pattern) {

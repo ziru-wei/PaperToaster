@@ -10,17 +10,8 @@
   <body>
     <main class="dashboard-shell">
       <header class="dashboard-header">
-        <div class="dashboard-title-row">
-          <h1 class="dashboard-title-icon" aria-label="Reading Dashboard">
-            <span class="icon-mask dashboard-brand-icon" aria-hidden="true"></span>
-          </h1>
-          <p id="librarySummary" class="muted">Loading local papers...</p>
-        </div>
         <div class="dashboard-controls">
-          <input id="paperSearch" type="search" placeholder="Search papers and URLs" aria-label="Search papers">
-          <button id="paperImportButton" class="dashboard-icon-button" type="button" aria-label="Import archive">
-            <span class="icon-mask import-icon" aria-hidden="true"></span>
-          </button>
+          <input id="paperSearch" type="search" placeholder="Loading local papers..." aria-label="Search papers">
           <button id="paperManageButton" class="dashboard-icon-button" type="button" aria-label="Select papers" aria-pressed="false">
             <span class="icon-mask manage-icon" aria-hidden="true"></span>
           </button>
@@ -33,26 +24,45 @@
           <button id="paperGroupLayoutButton" class="dashboard-icon-button" type="button" aria-label="Group papers by latest conversation" aria-pressed="false">
             <span class="icon-mask group-layout-icon" aria-hidden="true"></span>
           </button>
+          <button id="paperMessageRingButton" class="dashboard-icon-button" type="button" aria-label="Hide message rings" aria-pressed="false">
+            <span class="icon-mask message-ring-toggle-icon" aria-hidden="true"></span>
+          </button>
+          <button id="libraryViewSwitch" class="dashboard-icon-button" type="button" aria-label="Open Archive">
+            <span class="icon-mask library-view-switch-icon" aria-hidden="true"></span>
+          </button>
         </div>
+        <p id="librarySummary" class="dashboard-status" aria-live="polite"></p>
       </header>
 
-      <input id="paperImportFile" type="file" accept="application/json,.json" hidden>
-      <section id="bulkActions" class="bulk-actions" aria-live="polite" hidden>
+      <section id="bulkActions" class="bulk-actions is-hidden" aria-live="polite" aria-hidden="true">
         <span id="selectionSummary" class="selection-summary">0 selected</span>
         <button id="selectAllButton" class="bulk-button" type="button">Select all</button>
-        <button id="backupSelectedButton" class="bulk-button" type="button" disabled>Backup</button>
-        <button id="archiveSelectedButton" class="bulk-button" type="button" disabled>Archive</button>
-        <button id="deleteSelectedButton" class="bulk-button danger" type="button" disabled>Delete</button>
+        <button id="archiveSelectedButton" class="bulk-button with-icon" type="button" disabled>
+          <span class="icon-mask bulk-action-icon archive-icon" aria-hidden="true"></span>
+          <span>Archive</span>
+        </button>
+        <button id="restoreSelectedButton" class="bulk-button with-icon" type="button" aria-label="Restore selected records" disabled hidden>
+          <span class="icon-mask bulk-action-icon restore-icon" aria-hidden="true"></span>
+          <span>Restore</span>
+        </button>
+        <button id="exportSelectedButton" class="bulk-button with-icon" type="button" aria-label="Export selected records" disabled hidden>
+          <span class="icon-mask bulk-action-icon export-icon" aria-hidden="true"></span>
+          <span>Export</span>
+        </button>
+        <button id="deleteSelectedButton" class="bulk-button with-icon danger" type="button" disabled>
+          <span class="icon-mask bulk-action-icon delete-icon" aria-hidden="true"></span>
+          <span>Delete</span>
+        </button>
       </section>
       <section id="paperList" class="paper-list" aria-label="Local papers"></section>
       <div id="emptyState" class="empty-state" hidden>
-        <h2>No local papers yet</h2>
-        <p>Open a PDF with the side panel once, then it will appear here.</p>
+        <p id="emptyStateMessage">open a PDF to kick off</p>
       </div>
     </main>
     <button id="sendToMachineButton" class="dashboard-send-machine" type="button" aria-label="Send selected papers to Comparative Reading" hidden>
       <span class="icon-mask send-to-machine-icon" aria-hidden="true"></span>
     </button>
+    <p id="dashboardKeyboardHint" class="dashboard-keyboard-hint" aria-live="polite" hidden></p>
     <script type="module" src="./dashboard.js"></script>
   </body>
 </html>

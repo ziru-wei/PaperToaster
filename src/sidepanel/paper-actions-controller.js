@@ -36,9 +36,11 @@ export function createPaperActionsController({
     let paper = null;
     let papers = [];
     try {
+      paper = await getLibraryPaperSummary(documentKey);
+      const scope = paper?.archivedAt ? "archive" : "board";
       [paper, papers] = await Promise.all([
-        getLibraryPaperSummary(documentKey),
-        listLibraryPaperGroups()
+        Promise.resolve(paper),
+        listLibraryPaperGroups({ scope })
       ]);
       if (getCurrentDocument()?.documentKey !== documentKey) {
         return;
@@ -53,9 +55,12 @@ export function createPaperActionsController({
       currentDocument.isStarred = isStarred;
       currentDocument.group = paper?.group || "";
       currentDocument.groupTone = paper?.groupTone ?? null;
+      currentDocument.labelState = paper?.labelState || "live";
+      currentDocument.archivedAt = paper?.archivedAt || null;
     }
 
-    setDocumentStarState(isStarred, false);
+    starElement.hidden = Boolean(paper?.archivedAt);
+    setDocumentStarState(isStarred, Boolean(paper?.archivedAt));
     renderDocumentLabel(currentDocument, paper, papers);
   }
 
@@ -70,7 +75,7 @@ export function createPaperActionsController({
 
   async function toggleCurrentDocumentStar() {
     const document = getCurrentDocument();
-    if (!document?.documentKey || starSavePending) {
+    if (!document?.documentKey || document.archivedAt || starSavePending) {
       return;
     }
 
@@ -105,25 +110,31 @@ export function createPaperActionsController({
       title: paper?.title || document.title || "",
       titleSource: paper?.titleSource || document.titleSource || "",
       group: paper?.group || document.group || "",
-      groupTone: paper?.groupTone ?? document.groupTone ?? null
+      groupTone: paper?.groupTone ?? document.groupTone ?? null,
+      labelState: paper?.labelState || document.labelState || "live"
     };
-    const groupOptions = getPaperLabelOptions(papers);
+    const scope = paper?.archivedAt ? "archive" : "board";
+    const gray = scope === "archive" || labelPaper.labelState === "dead";
+    const groupOptions = getPaperLabelOptions(papers, { appearance: scope === "archive" ? "gray" : "colored" });
     labelElement.replaceChildren(createPaperLabelControl({
       paper: labelPaper,
       groupOptions,
       onUpdatePaperGroup: updatePaperGroup,
       onRenamePaperGroup: renamePaperGroup,
-      onDeletePaperGroup: deletePaperGroup
+      onDeletePaperGroup: deletePaperGroup,
+      appearance: gray ? "gray" : "colored",
+      enforceLimit: scope !== "archive"
     }));
   }
 
   async function updatePaperGroup(paper, group) {
     try {
+      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
       await setLibraryPaperGroup(paper.documentKey, group, {
         canonicalUrl: paper.canonicalUrl,
         title: paper.title,
         titleSource: paper.titleSource
-      });
+      }, { scope });
       notifyLibraryPaperActivityChanged(paper.documentKey);
       await refresh();
     } catch (error) {
@@ -134,7 +145,8 @@ export function createPaperActionsController({
 
   async function renamePaperGroup(oldGroup, newGroup) {
     try {
-      const documentKeys = await renameLibraryPaperGroup(oldGroup, newGroup);
+      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
+      const documentKeys = await renameLibraryPaperGroup(oldGroup, newGroup, { scope });
       documentKeys.forEach(notifyLibraryPaperActivityChanged);
       await refresh();
     } catch (error) {
@@ -145,7 +157,8 @@ export function createPaperActionsController({
 
   async function deletePaperGroup(group) {
     try {
-      const documentKeys = await deleteLibraryPaperGroup(group);
+      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
+      const documentKeys = await deleteLibraryPaperGroup(group, { scope });
       documentKeys.forEach(notifyLibraryPaperActivityChanged);
       await refresh();
     } catch (error) {
@@ -158,8 +171,8 @@ export function createPaperActionsController({
     currentPaperIsStarred = Boolean(isStarred);
     starElement.disabled = Boolean(disabled);
     starElement.classList.toggle("starred", currentPaperIsStarred);
-    starElement.title = currentPaperIsStarred ? "Unstar paper" : "Star paper";
-    starElement.setAttribute("aria-label", starElement.title);
+    starElement.removeAttribute("title");
+    starElement.setAttribute("aria-label", currentPaperIsStarred ? "Unstar paper" : "Star paper");
     starElement.setAttribute("aria-pressed", String(currentPaperIsStarred));
   }
 

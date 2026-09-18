@@ -1,5 +1,5 @@
 export const DB_NAME = "pdf-ai-inspector";
-export const DB_VERSION = 5;
+export const DB_VERSION = 7;
 
 export const PAPER_STORE = "papers";
 export const DOCUMENT_STORE = "documents";
@@ -8,6 +8,8 @@ export const CONVERSATION_MESSAGE_STORE = "conversationMessages";
 export const DOCUMENT_ALIAS_STORE = "documentAliases";
 export const COMPARISON_SESSION_STORE = "comparisonSessions";
 export const COMPARISON_MESSAGE_STORE = "comparisonMessages";
+export const PAPER_NOTE_STORE = "paperNotes";
+export const PAPER_NOTE_ASSET_STORE = "paperNoteAssets";
 
 const OBSOLETE_STORES = ["labels", "paperLabels"];
 
@@ -28,6 +30,7 @@ export function openPaperDatabase() {
       const papers = ensureStore(db, transaction, PAPER_STORE, { keyPath: "documentKey" });
       ensureIndex(papers, "byUpdatedAt", "updatedAt", { unique: false });
       ensureIndex(papers, "byTitle", "title", { unique: false });
+      ensureIndex(papers, "byArchivedAt", "archivedAt", { unique: false });
 
       const documents = ensureStore(db, transaction, DOCUMENT_STORE, { keyPath: "key" });
       ensureIndex(documents, "byNormalizedUrl", "normalizedUrl", { unique: false });
@@ -43,6 +46,7 @@ export function openPaperDatabase() {
       ensureIndex(messages, "byThreadId", "threadId", { unique: false });
       ensureIndex(messages, "byDocumentKey", "documentKey", { unique: false });
       ensureIndex(messages, "byThreadCreatedAt", ["threadId", "createdAt"], { unique: false });
+      ensureIndex(messages, "bySavedDocumentKey", "savedDocumentKey", { unique: false });
 
       const aliases = ensureStore(db, transaction, DOCUMENT_ALIAS_STORE, { keyPath: "aliasKey" });
       ensureIndex(aliases, "byDocumentKey", "documentKey", { unique: false });
@@ -56,10 +60,22 @@ export function openPaperDatabase() {
       const comparisonSessions = ensureStore(db, transaction, COMPARISON_SESSION_STORE, { keyPath: "comparisonId" });
       ensureIndex(comparisonSessions, "byUpdatedAt", "updatedAt", { unique: false });
       ensureIndex(comparisonSessions, "byCreatedAt", "createdAt", { unique: false });
+      ensureIndex(comparisonSessions, "byArchivedAt", "archivedAt", { unique: false });
+      ensureIndex(comparisonSessions, "byDocumentKey", "documentKeys", { unique: false, multiEntry: true });
 
       const comparisonMessages = ensureStore(db, transaction, COMPARISON_MESSAGE_STORE, { keyPath: "messageId" });
       ensureIndex(comparisonMessages, "byComparisonId", "comparisonId", { unique: false });
       ensureIndex(comparisonMessages, "byComparisonCreatedAt", ["comparisonId", "createdAt"], { unique: false });
+      ensureIndex(comparisonMessages, "bySavedDocumentKey", "savedDocumentKeys", { unique: false, multiEntry: true });
+
+      const paperNotes = ensureStore(db, transaction, PAPER_NOTE_STORE, { keyPath: "documentKey" });
+      ensureIndex(paperNotes, "byDocumentKey", "documentKey", { unique: false });
+      ensureIndex(paperNotes, "byUpdatedAt", "updatedAt", { unique: false });
+
+      const paperNoteAssets = ensureStore(db, transaction, PAPER_NOTE_ASSET_STORE, { keyPath: "assetId" });
+      ensureIndex(paperNoteAssets, "byDocumentKey", "documentKey", { unique: false });
+
+      backfillSavedDocumentKeys(transaction);
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -68,6 +84,55 @@ export function openPaperDatabase() {
   });
 
   return databasePromise;
+}
+
+function backfillSavedDocumentKeys(transaction) {
+  const conversationMessages = transaction.objectStore(CONVERSATION_MESSAGE_STORE);
+  const comparisonMessages = transaction.objectStore(COMPARISON_MESSAGE_STORE);
+  const comparisonSessions = transaction.objectStore(COMPARISON_SESSION_STORE);
+  const sessionsRequest = comparisonSessions.getAll();
+
+  const backfillConversationMessages = () => {
+    const request = conversationMessages.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const message = cursor.value;
+      const savedDocumentKey = message?.role === "assistant" && message?.isSaved
+        ? String(message.documentKey || "")
+        : "";
+      if (message.savedDocumentKey !== savedDocumentKey) {
+        cursor.update({ ...message, savedDocumentKey });
+      }
+      cursor.continue();
+    };
+  };
+
+  sessionsRequest.onsuccess = () => {
+    const documentKeysByComparisonId = new Map(
+      (sessionsRequest.result || []).map((session) => [
+        String(session?.comparisonId || ""),
+        Array.isArray(session?.documentKeys)
+          ? session.documentKeys.map((key) => String(key || "").trim()).filter(Boolean)
+          : []
+      ])
+    );
+    const request = comparisonMessages.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const message = cursor.value;
+      const savedDocumentKeys = message?.role === "assistant" && message?.isSaved
+        ? documentKeysByComparisonId.get(String(message.comparisonId || "")) || []
+        : [];
+      if (JSON.stringify(message.savedDocumentKeys || []) !== JSON.stringify(savedDocumentKeys)) {
+        cursor.update({ ...message, savedDocumentKeys });
+      }
+      cursor.continue();
+    };
+    backfillConversationMessages();
+  };
+  sessionsRequest.onerror = backfillConversationMessages;
 }
 
 export function requestToPromise(request) {

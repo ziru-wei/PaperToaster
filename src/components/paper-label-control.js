@@ -5,7 +5,9 @@ export function createPaperLabelControl({
   onUpdatePaperGroup,
   onRenamePaperGroup,
   onDeletePaperGroup,
-  groupOptions = []
+  groupOptions = [],
+  appearance = "colored",
+  enforceLimit = true
 }) {
   const group = normalizePaperLabel(paper.group);
   const control = document.createElement("div");
@@ -15,7 +17,8 @@ export function createPaperLabelControl({
   button.type = "button";
   button.className = [
     "paper-group-button",
-    group ? getPaperGroupToneClass(group, groupOptions, paper.groupTone) : ""
+    appearance === "gray" ? "paper-group-gray" : "",
+    appearance !== "gray" && group ? getPaperGroupToneClass(group, groupOptions, paper.groupTone) : ""
   ].filter(Boolean).join(" ");
   button.classList.toggle("empty", !group);
   button.textContent = group || "+";
@@ -31,7 +34,8 @@ export function createPaperLabelControl({
       groupOptions,
       onUpdatePaperGroup,
       onRenamePaperGroup,
-      onDeletePaperGroup
+      onDeletePaperGroup,
+      enforceLimit
     });
   });
 
@@ -39,7 +43,7 @@ export function createPaperLabelControl({
   return control;
 }
 
-export function getPaperLabelOptions(papers) {
+export function getPaperLabelOptions(papers, options = {}) {
   const optionsByName = new Map();
   for (const paper of papers || []) {
     const name = normalizePaperLabel(paper.group);
@@ -51,7 +55,9 @@ export function getPaperLabelOptions(papers) {
     if (!optionsByName.has(key)) {
       optionsByName.set(key, {
         name,
-        toneClass: getPaperGroupToneClass(name, [], paper.groupTone)
+        toneClass: options.appearance === "gray"
+          ? "paper-group-gray"
+          : getPaperGroupToneClass(name, [], paper.groupTone)
       });
     }
   }
@@ -75,7 +81,8 @@ function openPaperLabelEditor({
   groupOptions,
   onUpdatePaperGroup,
   onRenamePaperGroup,
-  onDeletePaperGroup
+  onDeletePaperGroup,
+  enforceLimit
 }) {
   closePaperLabelEditors();
   button.classList.add("editing");
@@ -83,6 +90,8 @@ function openPaperLabelEditor({
 
   const editor = document.createElement("div");
   editor.className = "paper-group-editor";
+  editor.dataset.keyboardScope = "paper-label";
+  editor.tabIndex = -1;
   editor.addEventListener("pointerdown", (event) => event.stopPropagation());
   editor.addEventListener("click", (event) => event.stopPropagation());
 
@@ -97,8 +106,9 @@ function openPaperLabelEditor({
   const options = document.createElement("div");
   options.className = "paper-group-options";
 
-  const actions = document.createElement("div");
-  actions.className = "paper-group-actions";
+  const prompt = document.createElement("div");
+  prompt.className = "paper-group-key-prompt";
+  let limitWarningActive = false;
 
   const saveGroup = async (value) => {
     const nextGroup = normalizePaperLabel(value);
@@ -106,7 +116,7 @@ function openPaperLabelEditor({
       closePaperLabelEditors();
       return;
     }
-    if (!canUsePaperGroup(nextGroup, groupOptions)) {
+    if (enforceLimit && !canUsePaperGroup(nextGroup, groupOptions)) {
       renderOptions();
       return;
     }
@@ -154,8 +164,22 @@ function openPaperLabelEditor({
     }
   };
 
+  const toggleEditMode = () => {
+    const focusedRenameInput = editor.querySelector(".paper-group-edit-input:focus");
+    focusedRenameInput?.blur();
+    editMode = !editMode;
+    input.value = "";
+    renderOptions();
+    if (editMode) {
+      input.focus();
+    } else {
+      editor.focus({ preventScroll: true });
+    }
+  };
+
   const renderOptions = () => {
     const normalizedOptions = groupOptions.filter((option) => option.name);
+    editor.classList.toggle("edit-mode", editMode);
     input.hidden = !editMode;
     const children = editMode
       ? normalizedOptions.map((option) => createEditablePaperGroupOption({
@@ -174,11 +198,23 @@ function openPaperLabelEditor({
       }));
     const typedGroup = normalizePaperLabel(input.value);
     const hasExactMatch = groupOptions.some((option) => option.name.toLowerCase() === typedGroup.toLowerCase());
-    const hasAvailableTone = groupOptions.length < PAPER_LABEL_TONE_COUNT;
-    if (editMode && typedGroup && !hasExactMatch && !hasAvailableTone) {
+    const hasAvailableTone = !enforceLimit || groupOptions.length < PAPER_LABEL_TONE_COUNT;
+    const limitExceeded = Boolean(editMode && typedGroup && !hasExactMatch && !hasAvailableTone);
+    if (limitExceeded && !limitWarningActive) {
+      input.classList.add("limit-shake");
+    } else if (!limitExceeded) {
+      input.classList.remove("limit-shake");
+    }
+    limitWarningActive = limitExceeded;
+    if (limitExceeded) {
       const limit = document.createElement("div");
-      limit.className = "paper-group-empty";
-      limit.textContent = `${PAPER_LABEL_TONE_COUNT} label limit`;
+      limit.className = "paper-group-limit-warning";
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = "⚠";
+      const text = document.createElement("span");
+      text.textContent = "That's too much!";
+      limit.append(icon, text);
       children.unshift(limit);
     }
     if (!children.length) {
@@ -189,26 +225,7 @@ function openPaperLabelEditor({
     }
     options.replaceChildren(...children);
 
-    const actionChildren = [];
-    if (group && !editMode) {
-      actionChildren.push(createPaperGroupOption({
-        label: "Clear label",
-        danger: true,
-        onSelect: () => saveGroup("")
-      }));
-    }
-    actionChildren.push(createPaperGroupEditButton({
-      active: editMode,
-      onToggle: () => {
-        editMode = !editMode;
-        input.value = "";
-        renderOptions();
-        if (editMode) {
-          input.focus();
-        }
-      }
-    }));
-    actions.replaceChildren(...actionChildren);
+    prompt.replaceChildren(createPaperGroupKeyPrompt(editMode, Boolean(group)));
   };
 
   input.addEventListener("input", renderOptions);
@@ -222,16 +239,41 @@ function openPaperLabelEditor({
       }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      editMode = false;
-      input.value = "";
-      renderOptions();
+      toggleEditMode();
     }
   });
   input.addEventListener("click", (event) => event.stopPropagation());
 
-  editor.append(input, options, actions);
+  editor.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusAdjacentPaperGroupLabel(editor, editMode, event.key === "ArrowDown" ? 1 : -1);
+      return;
+    }
+    if (!editMode && event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleEditMode();
+      return;
+    }
+    if (!editMode && group && event.key === "Backspace") {
+      event.preventDefault();
+      event.stopPropagation();
+      saveGroup("");
+      return;
+    }
+    if (editMode && event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleEditMode();
+    }
+  }, true);
+
+  editor.append(input, options, prompt);
   control.append(editor);
   renderOptions();
+  editor.focus({ preventScroll: true });
 
   const closeOnOutside = (event) => {
     if (!control.contains(event.target)) {
@@ -287,6 +329,51 @@ function createPaperGroupOption({
   return option;
 }
 
+function createPaperGroupKeyPrompt(editMode, hasGroup) {
+  const prompt = document.createElement("span");
+  prompt.className = "paper-group-key-prompt-content";
+  if (editMode) {
+    prompt.append(
+      createPaperGroupKeyPromptRow("←", "Back"),
+      createPaperGroupKeyPromptRow("↵", "Confirm")
+    );
+  } else {
+    prompt.append(createPaperGroupKeyPromptRow("↵", "to edit"));
+    if (hasGroup) {
+      prompt.append(createPaperGroupKeyPromptRow("⌫", "to clear"));
+    }
+  }
+  return prompt;
+}
+
+function createPaperGroupKeyPromptRow(symbol, label) {
+  const row = document.createElement("span");
+  row.className = "paper-group-key-prompt-row";
+  const prefix = document.createElement("span");
+  prefix.textContent = "Press";
+  const key = document.createElement("kbd");
+  key.textContent = symbol;
+  const text = document.createElement("span");
+  text.textContent = label;
+  row.append(prefix, key, text);
+  return row;
+}
+
+function focusAdjacentPaperGroupLabel(editor, editMode, direction) {
+  const selector = editMode
+    ? ".paper-group-input, .paper-group-edit-input"
+    : ".paper-group-option";
+  const candidates = [...editor.querySelectorAll(selector)].filter((element) => !element.hidden);
+  if (!candidates.length) {
+    return;
+  }
+  const currentIndex = candidates.indexOf(document.activeElement);
+  const nextIndex = currentIndex < 0
+    ? direction > 0 ? 0 : candidates.length - 1
+    : (currentIndex + direction + candidates.length) % candidates.length;
+  candidates[nextIndex].focus({ preventScroll: true });
+}
+
 function createEditablePaperGroupOption({ option, active = false, onRename, onDelete }) {
   const chip = document.createElement("span");
   chip.className = ["paper-group-edit-chip", option.toneClass || ""].filter(Boolean).join(" ");
@@ -340,23 +427,6 @@ function createEditablePaperGroupOption({ option, active = false, onRename, onDe
   });
   chip.append(input, deleteButton);
   return chip;
-}
-
-function createPaperGroupEditButton({ active = false, onToggle }) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "paper-group-edit-button";
-  button.classList.toggle("active", active);
-  button.setAttribute("aria-label", active ? "Done editing labels" : "Edit labels");
-  const icon = document.createElement("span");
-  icon.className = "paper-group-edit-icon";
-  button.append(icon);
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onToggle();
-  });
-  return button;
 }
 
 function closePaperLabelEditors() {

@@ -1,11 +1,78 @@
-const DEFAULT_CHUNK_CHARS = 4200;
+const DEFAULT_CHUNK_CHARS = 5000;
 const DEFAULT_OVERLAP_CHARS = 500;
+
+export function createMarkdownSourceSpans(markdown, options = {}) {
+  const text = String(markdown || "");
+  const maxChars = options.maxChars || DEFAULT_CHUNK_CHARS;
+  const spans = [];
+  let sectionState = createSectionState();
+  let start = 0;
+
+  while (start < text.length) {
+    const end = findSourceSpanEnd(text, start, maxChars);
+    const spanText = text.slice(start, end);
+    const section = getSectionForChunk(spanText, 0, sectionState);
+    sectionState = section.state;
+    spans.push({
+      id: `source-span-${spans.length + 1}`,
+      index: spans.length + 1,
+      markdownStart: start,
+      markdownEnd: end,
+      pageStart: null,
+      pageEnd: null,
+      section: section.section
+    });
+    start = end;
+  }
+
+  return spans;
+}
+
+function findSourceSpanEnd(text, start, maxChars) {
+  const hardEnd = Math.min(start + maxChars, text.length);
+  if (hardEnd >= text.length) {
+    return text.length;
+  }
+
+  const headingPattern = /^#{1,6}\s+.+?\s*#*\s*$/gm;
+  headingPattern.lastIndex = start + 1;
+  const nextHeading = headingPattern.exec(text);
+  if (nextHeading && nextHeading.index <= hardEnd) {
+    return nextHeading.index;
+  }
+
+  const minimumEnd = start + Math.floor(maxChars * 0.55);
+  const paragraphEnd = text.lastIndexOf("\n\n", hardEnd);
+  if (paragraphEnd >= minimumEnd) {
+    return paragraphEnd + 2;
+  }
+
+  const lineEnd = text.lastIndexOf("\n", hardEnd);
+  if (lineEnd >= minimumEnd) {
+    return lineEnd + 1;
+  }
+
+  const sentenceEnd = Math.max(
+    text.lastIndexOf(". ", hardEnd),
+    text.lastIndexOf("? ", hardEnd),
+    text.lastIndexOf("! ", hardEnd)
+  );
+  if (sentenceEnd >= minimumEnd) {
+    return sentenceEnd + 2;
+  }
+
+  const wordEnd = text.lastIndexOf(" ", hardEnd);
+  return wordEnd >= minimumEnd ? wordEnd + 1 : hardEnd;
+}
 
 export function chunkDocument(document, options = {}) {
   const chunkSize = options.chunkSize || DEFAULT_CHUNK_CHARS;
   const overlap = options.overlap || DEFAULT_OVERLAP_CHARS;
   const chunks = [];
   let sectionState = createSectionState();
+  const citationSectionKeys = new Map();
+  const citationBaseCounts = new Map();
+  const chunkCountsBySection = new Map();
 
   for (const page of document.pages) {
     const text = page.text.trim();
@@ -14,10 +81,13 @@ export function chunkDocument(document, options = {}) {
     }
 
     const blocks = splitPageIntoSectionBlocks(text, sectionState);
-    let index = 1;
-
     for (const block of blocks) {
       sectionState = block.state;
+      const citationSectionKey = getCitationSectionKey(
+        block.section,
+        citationSectionKeys,
+        citationBaseCounts
+      );
       let start = 0;
 
       while (start < block.text.length) {
@@ -25,14 +95,15 @@ export function chunkDocument(document, options = {}) {
         const chunkText = block.text.slice(start, end).trim();
 
         if (chunkText) {
+          const chunkIndex = (chunkCountsBySection.get(citationSectionKey) || 0) + 1;
+          chunkCountsBySection.set(citationSectionKey, chunkIndex);
           chunks.push({
-            id: `p${page.pageNumber}-c${index}`,
+            id: `${citationSectionKey}-c${chunkIndex}`,
             pageStart: page.pageNumber,
             pageEnd: page.pageNumber,
             section: block.section,
             text: chunkText
           });
-          index += 1;
         }
 
         if (end >= block.text.length) {
@@ -45,6 +116,30 @@ export function chunkDocument(document, options = {}) {
   }
 
   return chunks;
+}
+
+function getCitationSectionKey(section, sectionKeys, baseCounts) {
+  const sectionIdentity = section?.key || "section-0";
+  if (sectionKeys.has(sectionIdentity)) {
+    return sectionKeys.get(sectionIdentity);
+  }
+
+  const base = slugifyCitationPart(section?.title || section?.kind || "opening") || "opening";
+  const count = (baseCounts.get(base) || 0) + 1;
+  baseCounts.set(base, count);
+  const key = count === 1 ? base : `${base}-${count}`;
+  sectionKeys.set(sectionIdentity, key);
+  return key;
+}
+
+function slugifyCitationPart(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
 }
 
 function splitPageIntoSectionBlocks(text, initialState) {

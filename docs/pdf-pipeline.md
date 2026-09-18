@@ -1,6 +1,6 @@
 # PDF Pipeline
 
-Last updated: 2026-09-07
+Last updated: 2026-09-18
 
 Status: implemented and browser-validated.
 
@@ -19,7 +19,7 @@ embedded outline, or deterministic inferred outline
         ↓
 outline-constrained Markdown reconstruction
         ↓
-canonical document, RAG chunks, and IndexedDB
+canonical Markdown, citation source spans, SHA-256 document reference, and IndexedDB
 ```
 
 `outline-guided-markdown` is the only production parser. Small and large PDFs use the same path. The former pdf2md parser, plain PDF.js parser adapters, 15 MB gate, and legacy Markdown cleaner were removed.
@@ -47,11 +47,13 @@ The accepted outline controls Markdown heading hierarchy. LiteParse heading leve
 The stored document includes:
 
 - final Markdown
+- `agentDocumentRef` (`sha256-` of the final Markdown's UTF-8 bytes)
+- contiguous source-span offsets and section labels used for per-request citations
 - parser metadata and warnings
 - `outline.json`-compatible data
 - `debug.json`-compatible diagnostics
 
-Raw LiteParse blocks, PDF.js text items, derived chunks, and generated prompt context are not persisted. The single-paper header can download one ZIP containing `outline.json`, `debug.json`, and `output.md` without reparsing.
+Raw LiteParse blocks, PDF.js text items, derived retrieval chunks, overview text, and generated prompt context are not persisted. The final Markdown and source spans stay in IndexedDB until the first question lazily uploads them to the Local Agent Server's managed document store. Later questions send only the document reference and citation map. The single-paper header can download one ZIP containing `outline.json`, `debug.json`, and `output.md` without reparsing.
 
 Cache version `v16` separates new parser output from old cached documents while retaining the canonical `documentKey`, conversations, stars, Labels, notes, and comparison references.
 
