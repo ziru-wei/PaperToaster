@@ -2,7 +2,6 @@ export const AI_SETTINGS_KEY = "aiSettingsV1";
 export const CURRENT_AI_MODEL_KEY = "currentAiModelV1";
 export const AI_PROVIDER_LOCAL = "local";
 export const LOCAL_AGENT_PROFILE_CODEX = "codex";
-export const LOCAL_AGENT_PROFILE_ANTIGRAVITY = "antigravity";
 
 export const DEFAULT_LOCAL_ENDPOINT = "http://127.0.0.1:32177/ask";
 export const DEFAULT_LOCAL_AUTH_TOKEN = "paper-chat-local";
@@ -43,6 +42,9 @@ export async function getEffectiveAiSettings() {
   const settings = await getAiSettings();
   const data = await chrome.storage.session.get(CURRENT_AI_MODEL_KEY);
   const selection = normalizeModelSelection(data[CURRENT_AI_MODEL_KEY]);
+  if (data[CURRENT_AI_MODEL_KEY] && !selection) {
+    await chrome.storage.session.remove(CURRENT_AI_MODEL_KEY);
+  }
   if (!selection || !isModelEnabled(settings.enabledChatModels, selection)) {
     return settings;
   }
@@ -66,12 +68,10 @@ export async function setCurrentAiModelSelection(selection) {
 
 export function normalizeAiSettings(settings) {
   const provider = AI_PROVIDER_LOCAL;
-  const localAgentProfile = normalizeLocalAgentProfile(
-    settings?.localAgentProfile,
-    settings?.provider
-  );
-  const model = normalizeModel(settings?.model);
-  const reasoningEffort = normalizeReasoningEffort(settings?.reasoningEffort);
+  const localAgentProfile = LOCAL_AGENT_PROFILE_CODEX;
+  const unsupportedProfile = ["antigravity", "gemini"].includes(String(settings?.localAgentProfile || settings?.provider || "").trim().toLowerCase());
+  const model = unsupportedProfile ? "" : normalizeModel(settings?.model);
+  const reasoningEffort = unsupportedProfile ? "" : normalizeReasoningEffort(settings?.reasoningEffort);
   const enabledChatModels = normalizeEnabledChatModels(settings?.enabledChatModels);
   const localEndpoint = normalizeLocalEndpoint(settings?.localEndpoint) || DEFAULT_AI_SETTINGS.localEndpoint;
   const localAuthToken = normalizeLocalAuthToken(settings?.localAuthToken) || DEFAULT_AI_SETTINGS.localAuthToken;
@@ -92,7 +92,8 @@ export function normalizeAiSettings(settings) {
 }
 
 export function normalizeModelSelection(selection) {
-  const profile = normalizeLocalAgentProfile(selection?.profile);
+  if (selection?.profile && selection.profile !== LOCAL_AGENT_PROFILE_CODEX) return null;
+  const profile = LOCAL_AGENT_PROFILE_CODEX;
   const model = normalizeModel(selection?.model);
   const reasoningEffort = normalizeReasoningEffort(selection?.reasoningEffort);
   return model ? { profile, model, reasoningEffort } : null;
@@ -131,17 +132,6 @@ export function hasConfiguredAiProvider(settings) {
 
 export function usesDebugAiMode(settings) {
   return Boolean(settings?.debugMode);
-}
-
-function normalizeLocalAgentProfile(profile, legacyProvider) {
-  const value = String(profile || "").trim().toLowerCase();
-  if (value === LOCAL_AGENT_PROFILE_CODEX || value === LOCAL_AGENT_PROFILE_ANTIGRAVITY) {
-    return value;
-  }
-
-  return String(legacyProvider || "").trim().toLowerCase() === "gemini"
-    ? LOCAL_AGENT_PROFILE_ANTIGRAVITY
-    : DEFAULT_AI_SETTINGS.localAgentProfile;
 }
 
 function normalizeModel(model) {

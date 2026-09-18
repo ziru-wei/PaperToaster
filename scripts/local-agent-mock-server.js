@@ -1,15 +1,23 @@
 import http from "node:http";
 import { createHash } from "node:crypto";
+import { computePaperFingerprint, validateConversationIdentity } from "./local-agent-session-store.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PAPER_CHAT_LOCAL_AGENT_PORT) || 32177;
 const AUTH_TOKEN = String(process.env.PAPER_CHAT_LOCAL_AGENT_TOKEN || "").trim();
 const documents = new Map();
+const sessions = new Map();
 
 const server = http.createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
     writeCors(response, request, 204);
     response.end();
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/models") {
+    if (!isAuthorized(request)) return writeJson(response, request, 401, { error: "Unauthorized local agent request." });
+    writeJson(response, request, 200, { models: [{ profile: "codex", id: "mock-codex", label: "Mock Codex", reasoningEffort: "", isProviderDefault: true }] });
     return;
   }
 
@@ -50,6 +58,22 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "DELETE" && request.url === "/sessions") {
+    if (!isAuthorized(request)) return writeJson(response, request, 401, { error: "Unauthorized local agent request." });
+    try {
+      const body = JSON.parse(await readRequestBody(request));
+      if (body.version !== 1 || !Number.isSafeInteger(body.requestedAt)
+        || body.requestedAt <= 0 || body.requestedAt > Date.now() + 60_000) throw new Error("Invalid session deletion request.");
+      validateConversationIdentity(body.mode, body.conversationKey);
+      const key = `${body.mode}\0${body.conversationKey}`;
+      if (sessions.get(key)?.createdAt <= body.requestedAt) sessions.delete(key);
+      writeEmpty(response, request, 204);
+    } catch (error) {
+      writeJson(response, request, 400, { error: error.message || String(error) });
+    }
+    return;
+  }
+
   if (request.method !== "POST" || !["/ask", "/connection-test"].includes(request.url)) {
     writeJson(response, request, 404, { error: "Not found" });
     return;
@@ -63,14 +87,16 @@ const server = http.createServer(async (request, response) => {
   try {
     const body = JSON.parse(await readRequestBody(request));
     const profile = String(body.localAgentProfile || "codex");
+    if (profile !== "codex") throw new Error("Unsupported local agent profile.");
     if (request.url === "/connection-test") {
       writeJson(response, request, 200, { profile, model: `local-agent-mock:${profile}`, text: "Local agent connection OK." });
       return;
     }
-    if (body.version !== 2 || body.source !== "paper-toaster") throw new Error("Unsupported /ask contract version.");
-    const allowed = new Set(["version", "source", "localAgentProfile", "model", "reasoningEffort", "systemPrompt", "mode", "question", "selectionText", "papers"]);
+    if (body.version !== 3 || body.source !== "paper-toaster") throw new Error("Unsupported /ask contract version.");
+    const allowed = new Set(["version", "source", "localAgentProfile", "model", "reasoningEffort", "systemPrompt", "mode", "question", "selectionText", "papers", "conversationKey"]);
     if (Object.keys(body).some((key) => !allowed.has(key))) throw new Error("Unexpected /ask field.");
     if (!["single-paper", "comparative-reading"].includes(body.mode)) throw new Error("Invalid reading mode.");
+    validateConversationIdentity(body.mode, body.conversationKey);
     if (typeof body.question !== "string" || !body.question.trim() || body.question.length > 12000) throw new Error("Invalid question.");
     if (body.selectionText !== undefined && (typeof body.selectionText !== "string" || body.selectionText.length > 8000)) throw new Error("Invalid selected text.");
     if (body.systemPrompt !== undefined && (typeof body.systemPrompt !== "string" || body.systemPrompt.length > 20000)) throw new Error("Invalid system prompt.");
@@ -97,12 +123,21 @@ const server = http.createServer(async (request, response) => {
       }
     }
 
+    const key = `${body.mode}\0${body.conversationKey}`;
+    const fingerprint = computePaperFingerprint(body.mode, body.papers);
+    const previous = sessions.get(key);
+    const resumed = previous?.fingerprint === fingerprint;
+    const state = resumed ? previous : { createdAt: Date.now(), fingerprint, turns: 0 };
+    state.turns += 1;
+    sessions.set(key, state);
     writeJson(response, request, 200, {
       profile,
       model: `local-agent-mock:${profile}`,
+      sessionState: resumed ? "resumed" : "created",
       text: [
         "Local agent mock response.",
         "",
+        `Agent session: ${resumed ? "resumed" : "created"}; turn ${state.turns}`,
         `CLI profile: ${profile}`,
         `Papers: ${body.papers.length}`,
         `Paper files available: ${body.papers.length}`,

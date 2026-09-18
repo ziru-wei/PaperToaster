@@ -14,6 +14,7 @@ import {
 } from "./paper-database.js";
 import { getAiSettings } from "./ai-settings-store.js";
 import { deleteAgentDocument } from "../ai/local-agent-document-client.js";
+import { deleteLocalAgentSessions } from "../ai/local-agent-session-client.js";
 
 export const LIBRARY_ARCHIVE_SCHEMA = "pdf-ai-inspector.library-archive";
 export const LIBRARY_ARCHIVE_VERSION = 5;
@@ -103,7 +104,8 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
     return {
       paperCount: 0,
       comparisonCount: 0,
-      managedDocumentCleanupFailures: []
+      managedDocumentCleanupFailures: [],
+      agentSessionCleanupFailures: []
     };
   }
 
@@ -114,6 +116,19 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
   const selectedRefs = [...new Set(selectedDocumentRecords
     .map((record) => String(record.agentDocumentRef || ""))
     .filter((ref) => /^sha256-[a-f0-9]{64}$/.test(ref)))];
+  const selectedThreadRecords = (await Promise.all(keys.map((documentKey) =>
+    getRecordsByDocumentKey(db, CONVERSATION_THREAD_STORE, documentKey)
+  ))).flat();
+  const deletedKeySet = new Set(keys);
+  const affectedComparisonIds = (await getAllFromStore(db, COMPARISON_SESSION_STORE))
+    .filter((session) => selectedComparisonIds.includes(session.comparisonId)
+      || (session.documentKeys || []).some((documentKey) => deletedKeySet.has(documentKey)))
+    .map((session) => session.comparisonId);
+  const agentSessionTargets = [
+    ...selectedThreadRecords.map((thread) => ({ mode: "single-paper", conversationKey: thread.threadId })),
+    ...[...new Set([...selectedComparisonIds, ...affectedComparisonIds])]
+      .map((conversationKey) => ({ mode: "comparative-reading", conversationKey }))
+  ];
   const transaction = db.transaction(DELETE_TRANSACTION_STORES, "readwrite");
   const comparisonSessionStore = transaction.objectStore(COMPARISON_SESSION_STORE);
   const comparisonMessageStore = transaction.objectStore(COMPARISON_MESSAGE_STORE);
@@ -135,6 +150,7 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
   pruneComparisonRecordsForDeletedPapers(transaction, new Set(keys));
 
   await transactionDone(transaction);
+  const agentSessionCleanupFailures = await deleteAgentSessionsBestEffort(agentSessionTargets);
   let managedDocumentCleanupFailures = [];
   try {
     const retainedRefs = new Set(selectedRefs.length
@@ -151,8 +167,20 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
   return {
     paperCount: keys.length,
     comparisonCount: selectedComparisonIds.length,
-    managedDocumentCleanupFailures
+    managedDocumentCleanupFailures,
+    agentSessionCleanupFailures
   };
+}
+
+async function deleteAgentSessionsBestEffort(targets) {
+  let failures;
+  try {
+    ({ failures } = await deleteLocalAgentSessions(targets));
+  } catch (error) {
+    failures = targets.map((target) => `${target.conversationKey}: ${error.message || String(error)}`);
+  }
+  for (const failure of failures) console.warn("[Paper Toaster] Agent session cleanup pending:", failure);
+  return failures;
 }
 
 async function deleteManagedDocumentsBestEffort(documentRefs) {

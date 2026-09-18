@@ -1,7 +1,7 @@
 import { generateLocalAgentText } from "./local-agent-client.js";
 import { AI_PROVIDER_LOCAL, DEFAULT_AI_SETTINGS } from "../storage/ai-settings-store.js";
 
-export async function answerSelectionQuestion({ aiSettings, question, selectionText = "", papers, signal }) {
+export async function answerSelectionQuestion({ aiSettings, question, selectionText = "", papers, conversationKey, signal }) {
   const provider = aiSettings?.provider || AI_PROVIDER_LOCAL;
 
   if (aiSettings?.debugMode) {
@@ -25,6 +25,7 @@ export async function answerSelectionQuestion({ aiSettings, question, selectionT
       question,
       selectionText,
       papers,
+      conversationKey,
       signal
     });
   }

@@ -1,9 +1,20 @@
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { loadPaperReadingSkillPrompt } from "./paper-reading-skill.js";
+import { deleteCodexSession, runCodex } from "./local-agent-codex-runner.js";
+import {
+  cleanupSessionTempFiles,
+  computePaperFingerprint,
+  deleteSessionRecord,
+  getSessionDirectory,
+  hashText,
+  readSessionRecord,
+  validateConversationIdentity,
+  withConversationLock,
+  writeSessionRecord
+} from "./local-agent-session-store.js";
 import {
   cleanupStaleRequestDirectories,
   deleteManagedDocument,
@@ -16,12 +27,11 @@ import {
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PAPER_CHAT_LOCAL_AGENT_PORT) || 32177;
 const CODEX_BIN = process.env.PAPER_CHAT_CODEX_BIN || "codex";
-const ANTIGRAVITY_BIN = process.env.PAPER_CHAT_ANTIGRAVITY_BIN || "agy";
 const AGENT_WORKDIR = process.env.PAPER_CHAT_LOCAL_AGENT_WORKDIR
   || process.env.PAPER_CHAT_CODEX_WORKDIR
   || os.tmpdir();
 const CODEX_MODEL = process.env.PAPER_CHAT_CODEX_MODEL || "";
-const ANTIGRAVITY_MODEL = process.env.PAPER_CHAT_ANTIGRAVITY_MODEL || "";
+const SESSION_DIR = getSessionDirectory();
 const CODEX_MODEL_CACHE = process.env.PAPER_CHAT_CODEX_MODEL_CACHE
   || path.join(os.homedir(), ".codex", "models_cache.json");
 const AUTH_TOKEN = String(process.env.PAPER_CHAT_LOCAL_AGENT_TOKEN || "").trim();
@@ -31,7 +41,6 @@ const REQUEST_TIMEOUT_MS = Number(process.env.PAPER_CHAT_LOCAL_AGENT_TIMEOUT_MS)
 const MAX_REQUEST_BYTES = Number(process.env.PAPER_CHAT_MAX_REQUEST_BYTES) || 10_000_000;
 const MAX_DOCUMENT_BYTES = Number(process.env.PAPER_CHAT_MAX_DOCUMENT_BYTES) || 25_000_000;
 const PROFILE_CODEX = "codex";
-const PROFILE_ANTIGRAVITY = "antigravity";
 let modelCatalogCache = null;
 let modelCatalogCachedAt = 0;
 
@@ -95,6 +104,30 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "DELETE" && request.url === "/sessions") {
+    if (!isAuthorized(request)) {
+      writeJson(response, request, 401, { error: "Unauthorized local agent request." });
+      return;
+    }
+    try {
+      const body = JSON.parse(await readRequestBody(request));
+      if (body?.version !== 1 || !Number.isSafeInteger(body.requestedAt) || body.requestedAt <= 0
+        || body.requestedAt > Date.now() + 60_000
+        || Object.keys(body).some((key) => !["version", "mode", "conversationKey", "requestedAt"].includes(key))) {
+        throw httpError("Invalid session deletion request.", 400);
+      }
+      validateConversationIdentity(body.mode, body.conversationKey);
+      await withConversationLock(body.mode, body.conversationKey, async () => {
+        const record = await readSessionRecord(SESSION_DIR, body.mode, body.conversationKey);
+        if (record && record.createdAt <= body.requestedAt) await retireSession(record);
+      });
+      writeEmpty(response, request, 204);
+    } catch (error) {
+      writeJson(response, request, error.status || 500, { error: error.message || String(error) });
+    }
+    return;
+  }
+
   if (request.method !== "POST" || !["/ask", "/connection-test"].includes(request.url)) {
     writeJson(response, request, 404, { error: "Not found" });
     return;
@@ -114,29 +147,21 @@ const server = http.createServer(async (request, response) => {
     const profile = normalizeProfile(body?.localAgentProfile);
     if (request.url === "/connection-test") {
       const prompt = "Reply with exactly: Local agent connection OK.";
-      const result = profile === PROFILE_ANTIGRAVITY
-        ? await runAntigravity(prompt, body, requestAbort.signal)
-        : await runCodex(prompt, body, requestAbort.signal);
+      const result = await callCodex(prompt, body, requestAbort.signal, { ephemeral: true });
       if (!response.destroyed) writeJson(response, request, 200, { profile, model: result.model, text: result.text });
       return;
     }
     validateAskBody(body);
-    let materialized = null;
-    let result;
-    try {
-      materialized = await materializeRequestDocuments({
-        agentWorkdir: AGENT_WORKDIR,
-        papers: body.papers
-      });
+    await withConversationLock(body.mode, body.conversationKey, async () => {
       requestAbort.signal.throwIfAborted();
-      const prompt = await buildFileReadingPrompt(body, materialized.files);
-      result = profile === PROFILE_ANTIGRAVITY
-        ? await runAntigravity(prompt, body, requestAbort.signal)
-        : await runCodex(prompt, body, requestAbort.signal);
-    } finally {
-      await removeRequestDocuments(materialized?.requestDirectory);
-    }
-    if (!response.destroyed) writeJson(response, request, 200, { profile, model: result.model, text: result.text });
+      const result = await runTrackedAsk(body, requestAbort.signal, response);
+      if (response.destroyed) {
+        const record = await readSessionRecord(SESSION_DIR, body.mode, body.conversationKey);
+        if (record) await retireSession(record);
+        return;
+      }
+      writeJson(response, request, 200, { profile, model: result.model, text: result.text });
+    });
   } catch (error) {
     if (!response.destroyed) writeJson(response, request, error.status || 500, {
       error: error.message || String(error)
@@ -150,14 +175,85 @@ try {
 } catch (error) {
   console.warn(`[Paper Toaster] Stale request cleanup failed: ${error.message || String(error)}`);
 }
+try {
+  await cleanupSessionTempFiles(SESSION_DIR);
+} catch (error) {
+  console.error(`[Paper Toaster] Session directory unavailable: ${error.message || String(error)}`);
+  process.exit(1);
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`Paper Toaster local agent bridge listening at http://${HOST}:${PORT}/ask`);
-  console.log(`Codex: ${CODEX_BIN}; Antigravity: ${ANTIGRAVITY_BIN}; workdir: ${AGENT_WORKDIR}`);
+  console.log(`Codex: ${CODEX_BIN}; workdir: ${AGENT_WORKDIR}; sessions: ${SESSION_DIR}`);
 });
 
-async function buildFileReadingPrompt(body, files) {
-  const skillPrompt = await loadPaperReadingSkillPrompt({ mode: body.mode });
+async function runTrackedAsk(body, signal, response) {
+  const { mode, conversationKey } = body;
+  const fingerprint = computePaperFingerprint(mode, body.papers);
+  const skillPrompt = await loadPaperReadingSkillPrompt({ mode });
+  const skillHash = hashText(skillPrompt);
+  const systemPromptHash = hashText(body.systemPrompt || "");
+  let record = await readSessionRecord(SESSION_DIR, mode, conversationKey);
+  if (record && (record.paperFingerprint !== fingerprint || record.skillHash !== skillHash)) {
+    await retireSession(record);
+    record = null;
+  }
+  let materialized = null;
+  try {
+    materialized = await materializeRequestDocuments({ agentWorkdir: AGENT_WORKDIR, papers: body.papers });
+    signal.throwIfAborted();
+    const prompt = record
+      ? buildResumePrompt(body, materialized.files, record.systemPromptHash !== systemPromptHash)
+      : buildFileReadingPrompt(body, materialized.files, skillPrompt);
+    let result;
+    try {
+      result = await callCodex(prompt, body, signal, { agentSessionId: record?.agentSessionId || "" });
+      if (response.destroyed || signal.aborted) throw new Error("Client disconnected before the answer was delivered.");
+      const now = Math.max(Date.now(), record?.createdAt || 0);
+      await writeSessionRecord(SESSION_DIR, {
+        version: 1, mode, conversationKey,
+        agentSessionId: result.agentSessionId,
+        paperFingerprint: fingerprint, skillHash, systemPromptHash,
+        createdAt: record?.createdAt || now,
+        lastUsedAt: now
+      });
+      return result;
+    } catch (error) {
+      if (error.cliStarted || result) {
+        await deleteSessionRecord(SESSION_DIR, mode, conversationKey);
+        const ids = new Set([error.startedSessionId, result?.agentSessionId, record?.agentSessionId].filter(Boolean));
+        for (const id of ids) {
+          await deleteCodexSession(id, { binary: CODEX_BIN, cwd: AGENT_WORKDIR }).catch((cleanupError) => {
+            console.warn(`[Paper Toaster] Failed to delete an invalidated Codex session: ${cleanupError.message || cleanupError}`);
+          });
+        }
+      }
+      throw error;
+    }
+  } finally {
+    await removeRequestDocuments(materialized?.requestDirectory);
+  }
+}
+
+async function retireSession(record) {
+  await deleteCodexSession(record.agentSessionId, { binary: CODEX_BIN, cwd: AGENT_WORKDIR });
+  await deleteSessionRecord(SESSION_DIR, record.mode, record.conversationKey);
+}
+
+async function callCodex(prompt, body, signal, { agentSessionId = "", ephemeral = false } = {}) {
+  const result = await runCodex({
+    prompt, agentSessionId, ephemeral,
+    model: body?.model || CODEX_MODEL,
+    reasoningEffort: body?.reasoningEffort,
+    signal, binary: CODEX_BIN, cwd: AGENT_WORKDIR, timeoutMs: REQUEST_TIMEOUT_MS
+  });
+  return {
+    ...result,
+    model: formatAnsweredByModel(normalizeModelLabel(body?.model, CODEX_MODEL) || "codex", body?.reasoningEffort)
+  };
+}
+
+function buildFileReadingPrompt(body, files, skillPrompt) {
   return [
     "You are serving as paper reading assistant.",
     "Return only the answer to the user's question.",
@@ -172,16 +268,29 @@ async function buildFileReadingPrompt(body, files) {
   ].join("\n");
 }
 
+function buildResumePrompt(body, files, systemPromptChanged) {
+  return [
+    "Continue this paper-reading conversation. Return only the answer to the current question.",
+    "Read the current paper file(s) below; prior request-scoped paths no longer exist. Use their citation IDs when citing evidence.",
+    ...(systemPromptChanged ? ["Updated additional answer instructions (supersede all prior additional answer instructions):", body.systemPrompt || "(none)"] : []),
+    `Mode: ${body.mode}`,
+    ...files.flatMap((file) => [`Paper title: ${JSON.stringify(file.title)}`, `Paper file: ${file.relativePath}`]),
+    ...(body.selectionText ? [`Selected text: ${body.selectionText}`] : []),
+    `Current question: ${body.question}`
+  ].join("\n");
+}
+
 function validateAskBody(body) {
   const invalid = (message) => {
     const error = new Error(message);
     error.status = 400;
     throw error;
   };
-  if (!body || body.version !== 2 || body.source !== "paper-toaster") invalid("Unsupported /ask contract version.");
-  const allowed = new Set(["version", "source", "localAgentProfile", "model", "reasoningEffort", "systemPrompt", "mode", "question", "selectionText", "papers"]);
+  if (!body || body.version !== 3 || body.source !== "paper-toaster") invalid("Unsupported /ask contract version.");
+  const allowed = new Set(["version", "source", "localAgentProfile", "model", "reasoningEffort", "systemPrompt", "mode", "question", "selectionText", "papers", "conversationKey"]);
   if (Object.keys(body).some((key) => !allowed.has(key))) invalid("Unexpected /ask field.");
   if (!["single-paper", "comparative-reading"].includes(body.mode)) invalid("Invalid reading mode.");
+  validateConversationIdentity(body.mode, body.conversationKey);
   if (typeof body.question !== "string" || !body.question.trim() || body.question.length > 12000) invalid("Question must be 1–12000 characters.");
   if (body.selectionText !== undefined && (typeof body.selectionText !== "string" || body.selectionText.length > 8000)) invalid("Selected text is too long.");
   if (body.systemPrompt !== undefined && (typeof body.systemPrompt !== "string" || body.systemPrompt.length > 20000)) invalid("System prompt is too long.");
@@ -200,11 +309,7 @@ async function listAvailableModels() {
   if (modelCatalogCache && Date.now() - modelCatalogCachedAt < 60_000) {
     return modelCatalogCache;
   }
-  const [codexModels, antigravityModels] = await Promise.all([
-    listCodexModels(),
-    listAntigravityModels()
-  ]);
-  modelCatalogCache = [...codexModels, ...antigravityModels];
+  modelCatalogCache = await listCodexModels();
   modelCatalogCachedAt = Date.now();
   return modelCatalogCache;
 }
@@ -230,25 +335,6 @@ async function listCodexModels() {
     });
 }
 
-async function listAntigravityModels() {
-  const output = await spawnForText(ANTIGRAVITY_BIN, ["models"], "", "Antigravity model discovery");
-  return output.split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("Fetching "))
-    .map((line) => {
-      const [id, ...labelParts] = line.split(/\t+/);
-      return {
-        profile: PROFILE_ANTIGRAVITY,
-        id: String(id || "").trim(),
-        label: labelParts.join(" ").trim() || String(id || "").trim(),
-        description: "",
-        reasoningEffort: "",
-        isProviderDefault: false
-      };
-    })
-    .filter((model) => model.id);
-}
-
 function formatEffort(effort) {
   return String(effort).charAt(0).toUpperCase() + String(effort).slice(1);
 }
@@ -256,142 +342,6 @@ function formatEffort(effort) {
 function formatAnsweredByModel(model, reasoningEffort) {
   const effort = String(reasoningEffort || "").trim();
   return effort ? `${model} · ${formatEffort(effort)}` : model;
-}
-
-async function runCodex(prompt, body, signal) {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "paper-chat-codex-"));
-  const outputFile = path.join(tempDir, "answer.txt");
-
-  try {
-    await spawnCodex(prompt, outputFile, body, signal);
-    const text = (await readFile(outputFile, "utf8")).trim();
-    if (!text) {
-      throw new Error("Codex returned no final message.");
-    }
-
-    return {
-      model: formatAnsweredByModel(
-        normalizeModelLabel(body?.model, CODEX_MODEL) || "codex",
-        body?.reasoningEffort
-      ),
-      text
-    };
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
-}
-
-async function runAntigravity(prompt, body, signal) {
-  const model = normalizeModelLabel(body?.model, ANTIGRAVITY_MODEL);
-  const args = [
-    `--print=${prompt}`,
-    "--output-format",
-    "text",
-    "--disable-slash-commands",
-    "--sandbox",
-    ...(model ? ["--model", model] : [])
-  ];
-  const result = await spawnForText(ANTIGRAVITY_BIN, args, "", "Antigravity", signal);
-  return {
-    model: model || "antigravity",
-    text: result
-  };
-}
-
-function spawnCodex(prompt, outputFile, body, signal) {
-  return new Promise((resolve, reject) => {
-    const args = [
-      "exec",
-      "--ephemeral",
-      "--skip-git-repo-check",
-      "--sandbox",
-      "read-only",
-      "--color",
-      "never",
-      "--output-last-message",
-      outputFile,
-      ...getModelArgs(body?.model),
-      ...getReasoningEffortArgs(body?.reasoningEffort),
-      "-"
-    ];
-    const child = spawn(CODEX_BIN, args, {
-      cwd: AGENT_WORKDIR,
-      env: {
-        ...process.env,
-        NO_COLOR: "1"
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      signal
-    });
-    const stdout = [];
-    const stderr = [];
-    let settled = false;
-    let terminationError = null;
-    let forceKill = null;
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      terminationError = new Error(`Codex request timed out after ${REQUEST_TIMEOUT_MS}ms.`);
-      child.kill("SIGTERM");
-      forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
-    }, REQUEST_TIMEOUT_MS);
-
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
-    child.on("error", (error) => {
-      if (settled) {
-        return;
-      }
-      if (error.name === "AbortError") {
-        terminationError = error;
-        forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      clearTimeout(forceKill);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      clearTimeout(forceKill);
-      if (terminationError) {
-        reject(terminationError);
-        return;
-      }
-
-      if (code !== 0) {
-        reject(new Error([
-          `Codex exited with code ${code}.`,
-          Buffer.concat(stderr).toString("utf8").trim(),
-          Buffer.concat(stdout).toString("utf8").trim()
-        ].filter(Boolean).join("\n")));
-        return;
-      }
-
-      resolve();
-    });
-
-    child.stdin.end(prompt);
-  });
-}
-
-function getModelArgs(model) {
-  const normalized = normalizeModelLabel(model, CODEX_MODEL);
-  if (!normalized) {
-    return [];
-  }
-
-  return ["--model", normalized];
-}
-
-function getReasoningEffortArgs(reasoningEffort) {
-  const value = String(reasoningEffort || "").trim().toLowerCase();
-  if (!value) return [];
-  return ["-c", `model_reasoning_effort=${JSON.stringify(value)}`];
 }
 
 function normalizeModelLabel(model, fallback = "") {
@@ -402,7 +352,7 @@ function normalizeModelLabel(model, fallback = "") {
 
 function normalizeProfile(profile) {
   const value = String(profile || PROFILE_CODEX).trim().toLowerCase();
-  if (value === PROFILE_CODEX || value === PROFILE_ANTIGRAVITY) {
+  if (value === PROFILE_CODEX) {
     return value;
   }
   const error = new Error(`Unsupported local agent profile: ${value || "empty"}.`);
@@ -410,66 +360,10 @@ function normalizeProfile(profile) {
   throw error;
 }
 
-function spawnForText(command, args, input, label, signal) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: AGENT_WORKDIR,
-      env: { ...process.env, NO_COLOR: "1" },
-      stdio: ["pipe", "pipe", "pipe"],
-      signal
-    });
-    const stdout = [];
-    const stderr = [];
-    let settled = false;
-    let terminationError = null;
-    let forceKill = null;
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      terminationError = new Error(`${label} request timed out after ${REQUEST_TIMEOUT_MS}ms.`);
-      child.kill("SIGTERM");
-      forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
-    }, REQUEST_TIMEOUT_MS);
-
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
-    child.on("error", (error) => {
-      if (settled) return;
-      if (error.name === "AbortError") {
-        terminationError = error;
-        forceKill = setTimeout(() => child.kill("SIGKILL"), 5000);
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      clearTimeout(forceKill);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      clearTimeout(forceKill);
-      if (terminationError) {
-        reject(terminationError);
-        return;
-      }
-      const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code !== 0) {
-        reject(new Error([
-          `${label} exited with code ${code}.`,
-          Buffer.concat(stderr).toString("utf8").trim(),
-          output
-        ].filter(Boolean).join("\n")));
-        return;
-      }
-      if (!output) {
-        reject(new Error(`${label} returned no response.`));
-        return;
-      }
-      resolve(output);
-    });
-    child.stdin.end(input);
-  });
+function httpError(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
 }
 
 function readRequestBody(request, maxBytes = MAX_REQUEST_BYTES) {

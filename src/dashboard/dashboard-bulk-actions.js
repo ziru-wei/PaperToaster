@@ -212,8 +212,9 @@ export function createDashboardBulkActions({
 
     const result = await deleteLibraryRecords(selection);
     await afterDelete(selection);
-    if (result.managedDocumentCleanupFailures.length) {
-      elements.summary.textContent = `Papers deleted, but ${result.managedDocumentCleanupFailures.length} local Agent file cleanup(s) failed. Check the console.`;
+    const cleanupFailureCount = result.managedDocumentCleanupFailures.length + (result.agentSessionCleanupFailures?.length || 0);
+    if (cleanupFailureCount) {
+      elements.summary.textContent = `Records deleted, but ${cleanupFailureCount} local Agent cleanup(s) are pending or failed. Check the console.`;
     }
   }
 

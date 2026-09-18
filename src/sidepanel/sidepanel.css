@@ -2424,6 +2424,18 @@ body.comparative-mode .conversation-thread:not(.comparison-empty-thread) {
   display: block;
 }
 
+.conversation-thread.conversation-chronological-mode .conversation-message.user:has(.conversation-response-toggle[aria-expanded="true"]) .conversation-user-meta {
+  position: relative;
+  top: auto;
+  right: auto;
+  align-self: flex-end;
+  opacity: 1;
+}
+
+.conversation-thread.conversation-chronological-mode .conversation-message.user:not(:has(.conversation-response-toggle[aria-expanded="true"])) .conversation-user-meta {
+  display: none;
+}
+
 .conversation-thread.question-cloud-mode::after {
   display: block;
   width: 1px;

@@ -5,6 +5,7 @@ export async function answerComparisonQuestion({
   aiSettings,
   question,
   papers,
+  conversationKey,
   signal
 }) {
   const provider = aiSettings?.provider || AI_PROVIDER_LOCAL;
@@ -29,6 +30,7 @@ export async function answerComparisonQuestion({
       mode: "comparative-reading",
       question,
       papers,
+      conversationKey,
       signal
     });
   }

@@ -336,17 +336,15 @@ async function loadAvailableChatModels() {
 
 function renderChatModels() {
   elements.chatModelList.textContent = "";
-  for (const profile of ["codex", "antigravity"]) {
-    const models = availableChatModels.filter((model) => model.profile === profile);
-    if (!models.length) continue;
-    const group = document.createElement("div");
-    group.className = "model-profile-group";
-    const heading = document.createElement("h3");
-    heading.textContent = profile === "codex" ? "Codex" : "Antigravity / Gemini";
-    group.append(heading);
-    for (const model of models) group.append(createChatModelRow(model));
-    elements.chatModelList.append(group);
-  }
+  const models = availableChatModels.filter((model) => model.profile === "codex");
+  if (!models.length) return;
+  const group = document.createElement("div");
+  group.className = "model-profile-group";
+  const heading = document.createElement("h3");
+  heading.textContent = "Codex";
+  group.append(heading);
+  for (const model of models) group.append(createChatModelRow(model));
+  elements.chatModelList.append(group);
 }
 
 function createChatModelRow(model) {

@@ -1,3 +1,5 @@
+import { flushPendingLocalAgentSessionDeletes } from "./local-agent-session-client.js";
+
 const ensurePromises = new Map();
 
 export async function createAgentDocumentRef(markdown) {
@@ -25,8 +27,10 @@ export async function getAgentDocumentStatus({ endpoint, authToken, documentRef,
     headers: createHeaders(authToken, false),
     signal
   });
-  if (response.status === 204) return "available";
-  if (response.status === 404) return "missing";
+  if (response.status === 204 || response.status === 404) {
+    void flushPendingLocalAgentSessionDeletes().catch(() => {});
+    return response.status === 204 ? "available" : "missing";
+  }
   throw new Error(`Local agent document status failed: HTTP ${response.status} ${response.statusText}`.trim());
 }
 

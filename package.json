@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "test:pdf": "node scripts/test-pdf-pipeline.js",
+    "test:local-agent": "node --test scripts/test-local-agent-sessions.js scripts/test-local-agent-session-client.js",
     "build:liteparse": "mkdir -p vendor/liteparse && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm.js vendor/liteparse/liteparse_wasm.js && cp node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm_bg.wasm vendor/liteparse/liteparse_wasm_bg.wasm",
     "build:markdown": "mkdir -p vendor/markdown-renderer/fonts && esbuild src/vendor/markdown-renderer-entry.js --bundle --format=esm --platform=browser --outfile=vendor/markdown-renderer/markdown-renderer.mjs && cp node_modules/katex/dist/katex.min.css vendor/markdown-renderer/katex.min.css && cp -R node_modules/katex/dist/fonts/. vendor/markdown-renderer/fonts/",
     "build:lexical": "mkdir -p vendor/lexical && esbuild src/vendor/lexical-note-editor-entry.js --bundle --format=esm --platform=browser --outfile=vendor/lexical/lexical-note-editor.mjs",

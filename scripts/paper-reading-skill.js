@@ -13,8 +13,6 @@ const MODE_REFERENCES = Object.freeze({
   "comparative-reading": "comparative-reading.md"
 });
 
-const promptCache = new Map();
-
 export function inferPaperReadingMode(contextPack) {
   const mode = String(contextPack?.mode || "").trim();
   if (mode === "comparative-reading" || contextPack?.kind === "comparison-context-pack") {
@@ -25,10 +23,7 @@ export function inferPaperReadingMode(contextPack) {
 
 export async function loadPaperReadingSkillPrompt(contextPack) {
   const mode = inferPaperReadingMode(contextPack);
-  if (!promptCache.has(mode)) {
-    promptCache.set(mode, buildSkillPrompt(mode));
-  }
-  return promptCache.get(mode);
+  return buildSkillPrompt(mode);
 }
 
 async function buildSkillPrompt(mode) {

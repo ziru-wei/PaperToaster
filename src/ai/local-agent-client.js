@@ -1,3 +1,5 @@
+import { flushPendingLocalAgentSessionDeletes, hasPendingLocalAgentSessionDeletion } from "./local-agent-session-client.js";
+
 export async function generateLocalAgentText({
   endpoint,
   authToken,
@@ -9,6 +11,7 @@ export async function generateLocalAgentText({
   question,
   selectionText = "",
   papers,
+  conversationKey,
   signal
 }) {
   const normalizedEndpoint = String(endpoint || "").trim();
@@ -26,6 +29,14 @@ export async function generateLocalAgentText({
   if (!normalizedAuthToken) {
     throw new Error("Local agent token is not configured. Open extension Options to add it.");
   }
+  if (!String(conversationKey || "").trim()) {
+    throw new Error("Local Agent conversation ID is missing.");
+  }
+
+  await flushPendingLocalAgentSessionDeletes().catch(() => {});
+  if (await hasPendingLocalAgentSessionDeletion({ mode, conversationKey: String(conversationKey).trim() })) {
+    throw new Error("The previous Local Agent session is still pending deletion. Check the bridge and retry.");
+  }
 
   const response = await fetch(normalizedEndpoint, {
     method: "POST",
@@ -34,7 +45,7 @@ export async function generateLocalAgentText({
       "Authorization": `Bearer ${normalizedAuthToken}`
     },
     body: JSON.stringify({
-      version: 2,
+      version: 3,
       source: "paper-toaster",
       localAgentProfile: String(localAgentProfile || "").trim(),
       model: String(model || "").trim(),
@@ -43,7 +54,8 @@ export async function generateLocalAgentText({
       mode,
       question: normalizedQuestion,
       selectionText: String(selectionText || ""),
-      papers
+      papers,
+      conversationKey: String(conversationKey).trim()
     }),
     signal
   });
@@ -86,6 +98,7 @@ export async function testLocalAgentConnection({ endpoint, authToken, localAgent
   });
   const data = await readLocalAgentResponse(response);
   if (!response.ok) throw new Error(formatLocalAgentError(data, response));
+  void flushPendingLocalAgentSessionDeletes().catch(() => {});
   return extractLocalAgentText(data);
 }
 
@@ -102,9 +115,8 @@ export async function listLocalAgentModels({ endpoint, authToken, signal }) {
   if (!response.ok) {
     throw new Error(formatLocalAgentError(data, response));
   }
-  return (Array.isArray(data?.models) ? data.models : []).filter((model) => {
-    return model?.id && (model.profile === "codex" || model.profile === "antigravity");
-  });
+  void flushPendingLocalAgentSessionDeletes().catch(() => {});
+  return (Array.isArray(data?.models) ? data.models : []).filter((model) => model?.id && model.profile === "codex");
 }
 
 async function readLocalAgentResponse(response) {

@@ -1,6 +1,7 @@
 import { getDocumentMemoryKey, normalizeLegacyDocumentUrl } from "./document-key.js";
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 import { normalizeCitationCatalog } from "../ai/citation-catalog.js";
+import { createQuestionResponseMap } from "../conversation/message-state.js";
 import {
   CONVERSATION_MESSAGE_STORE,
   CONVERSATION_THREAD_STORE,
@@ -59,7 +60,7 @@ export async function getStoredChatThread(url) {
 export async function pruneActivePaperConversationHistory(url) {
   const documentKey = getDocumentMemoryKey(url);
   if (!documentKey) {
-    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+    return { deletedThreadCount: 0, deletedQuestionCount: 0, affectedThreadIds: [] };
   }
 
   const db = await openPaperDatabase();
@@ -68,7 +69,7 @@ export async function pruneActivePaperConversationHistory(url) {
     getThreadRecordsForDocument(db, documentKey)
   ]);
   if (!threads.length) {
-    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+    return { deletedThreadCount: 0, deletedQuestionCount: 0, affectedThreadIds: [] };
   }
 
   const plans = [];
@@ -85,7 +86,7 @@ export async function pruneActivePaperConversationHistory(url) {
     cleanedMessages.length > 0 && cleanedMessages.length !== messages.length
   ));
   if (!emptyPlans.length && !changedPlans.length) {
-    return { deletedThreadCount: 0, deletedQuestionCount: 0 };
+    return { deletedThreadCount: 0, deletedQuestionCount: 0, affectedThreadIds: [] };
   }
 
   const retainedPlans = plans.filter(({ cleanedMessages }) => cleanedMessages.length > 0);
@@ -125,7 +126,8 @@ export async function pruneActivePaperConversationHistory(url) {
   await transactionDone(transaction);
   return {
     deletedThreadCount: emptyPlans.length,
-    deletedQuestionCount
+    deletedQuestionCount,
+    affectedThreadIds: [...new Set([...emptyPlans, ...changedPlans].map(({ thread }) => thread.threadId))]
   };
 }
 
@@ -169,40 +171,54 @@ export async function saveStoredChatThread(url, thread, options = {}) {
   const now = Date.now();
   const shouldSetActive = options.setActive !== false;
   const transaction = db.transaction([PAPER_STORE, CONVERSATION_THREAD_STORE, CONVERSATION_MESSAGE_STORE], "readwrite");
+  let missingRequiredThread = false;
+  const write = (currentThread) => {
+    transaction.objectStore(PAPER_STORE).put({
+      ...(existingPaper || {}),
+      documentKey,
+      canonicalUrl: url || existingPaper?.canonicalUrl || "",
+      title: existingPaper?.title || "",
+      titleSource: existingPaper?.titleSource || "",
+      metadata: existingPaper?.metadata || null,
+      createdAt: existingPaper?.createdAt || now,
+      updatedAt: now,
+      activeThreadId: shouldSetActive ? threadId : existingPaper?.activeThreadId || threadId
+    });
 
-  transaction.objectStore(PAPER_STORE).put({
-    ...(existingPaper || {}),
-    documentKey,
-    canonicalUrl: url || existingPaper?.canonicalUrl || "",
-    title: existingPaper?.title || "",
-    titleSource: existingPaper?.titleSource || "",
-    metadata: existingPaper?.metadata || null,
-    createdAt: existingPaper?.createdAt || now,
-    updatedAt: now,
-    activeThreadId: shouldSetActive ? threadId : existingPaper?.activeThreadId || threadId
-  });
+    transaction.objectStore(CONVERSATION_THREAD_STORE).put({
+      ...(currentThread || {}),
+      threadId,
+      documentKey,
+      title: normalizedThread.title || currentThread?.title || DEFAULT_THREAD_TITLE,
+      createdAt: currentThread?.createdAt || now,
+      firstMessageCreatedAt: getFirstUserMessageCreatedAt(normalizedThread.messages) || currentThread?.firstMessageCreatedAt || null,
+      updatedAt: now,
+      messageCount: normalizedThread.messages.length
+    });
 
-  transaction.objectStore(CONVERSATION_THREAD_STORE).put({
-    ...(existingThread || {}),
-    threadId,
-    documentKey,
-    title: normalizedThread.title || existingThread?.title || DEFAULT_THREAD_TITLE,
-    createdAt: existingThread?.createdAt || now,
-    firstMessageCreatedAt: getFirstUserMessageCreatedAt(normalizedThread.messages) || existingThread?.firstMessageCreatedAt || null,
-    updatedAt: now,
-    messageCount: normalizedThread.messages.length
-  });
-
-  writeThreadMessages(transaction.objectStore(CONVERSATION_MESSAGE_STORE), {
-    threadId,
-    documentKey,
-    messages: normalizedThread.messages,
-    previousMessageCount: existingThread?.messageCount || 0,
-    now
-  });
+    writeThreadMessages(transaction.objectStore(CONVERSATION_MESSAGE_STORE), {
+      threadId,
+      documentKey,
+      messages: normalizedThread.messages,
+      previousMessageCount: currentThread?.messageCount || 0,
+      now
+    });
+  };
+  if (options.requireExisting) {
+    const request = transaction.objectStore(CONVERSATION_THREAD_STORE).get(threadId);
+    request.onsuccess = () => {
+      if (!request.result || request.result.documentKey !== documentKey) {
+        missingRequiredThread = true;
+        return;
+      }
+      write(request.result);
+    };
+  } else {
+    write(existingThread);
+  }
 
   await transactionDone(transaction);
-  return normalizedThread;
+  return missingRequiredThread ? null : normalizedThread;
 }
 
 export async function listStoredChatThreads(url) {
@@ -670,17 +686,7 @@ function getFirstUserMessageCreatedAt(messages) {
 }
 
 function removeUnansweredQuestions(messages) {
-  const pendingQuestionIndexes = [];
-  const answeredQuestionIndexes = new Set();
-  messages.forEach((message, messageIndex) => {
-    if (message?.role === "user") {
-      pendingQuestionIndexes.push(messageIndex);
-      return;
-    }
-    if (message?.role === "assistant" && pendingQuestionIndexes.length) {
-      answeredQuestionIndexes.add(pendingQuestionIndexes.shift());
-    }
-  });
+  const answeredQuestionIndexes = createQuestionResponseMap(messages);
   return messages.filter((message, messageIndex) => (
     message?.role !== "user" || answeredQuestionIndexes.has(messageIndex)
   ));

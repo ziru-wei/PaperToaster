@@ -6,6 +6,7 @@ import {
 import { annotate } from "../../vendor/rough-notation/rough-notation.mjs";
 import { createToasterEmptyState } from "./toaster-empty-state.js";
 import { createPaperNoteEditor, disposePaperNoteEditor } from "./paper-note-editor.js";
+import { createQuestionResponseMap, getChronologicalMessageEntries } from "../conversation/message-state.js";
 
 const highlightBarCleanups = new WeakMap();
 const questionCloudAnimationFrames = new WeakMap();
@@ -34,7 +35,10 @@ export function renderConversationMessages(threadElement, messages, options = {}
     : new Set();
   const responseMessageIndexesByQuestion = createQuestionResponseMap(messages);
 
-  messages.forEach((message, messageIndex) => {
+  const messageEntries = options.chronologicalMode
+    ? getChronologicalMessageEntries(messages)
+    : messages.map((message, messageIndex) => ({ message, messageIndex }));
+  messageEntries.forEach(({ message, messageIndex }) => {
     const item = document.createElement("article");
     item.className = `conversation-message ${message.role}`;
     item.dataset.messageIndex = String(messageIndex);
@@ -154,6 +158,20 @@ export function updatePendingConversationMessageText(threadElement, messageIndex
   if (!textElement) return false;
   textElement.textContent = String(text || "Toasting the pages...");
   return true;
+}
+
+export function orderConversationMessageElements(threadElement, messages, chronologicalMode = false) {
+  const elementsByIndex = new Map(
+    Array.from(threadElement.querySelectorAll(":scope > .conversation-message"))
+      .map((element) => [Number(element.dataset.messageIndex), element])
+  );
+  const entries = chronologicalMode
+    ? getChronologicalMessageEntries(messages)
+    : messages.map((message, messageIndex) => ({ message, messageIndex }));
+  entries.forEach(({ messageIndex }) => {
+    const element = elementsByIndex.get(messageIndex);
+    if (element) threadElement.append(element);
+  });
 }
 
 function schedulePendingResponseVisualState(threadElement, pending) {
@@ -538,20 +556,6 @@ function cloudRectsOverlap(left, right, gap) {
     left.y + left.height + gap <= right.y ||
     right.y + right.height + gap <= left.y
   );
-}
-
-function createQuestionResponseMap(messages) {
-  const pendingQuestions = [];
-  const responseIndexes = new Map();
-  messages.forEach((message, messageIndex) => {
-    if (message?.role === "user") {
-      pendingQuestions.push(messageIndex);
-      return;
-    }
-    if (message?.role !== "assistant" || !pendingQuestions.length) return;
-    responseIndexes.set(pendingQuestions.shift(), messageIndex);
-  });
-  return responseIndexes;
 }
 
 function createUserMessageMetaRow({ item, message, messageIndex, textElement, onEditUserMessage }) {

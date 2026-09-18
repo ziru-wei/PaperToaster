@@ -105,6 +105,7 @@ export function createAskFlowController({
         question,
         selectionText,
         papers,
+        conversationKey: askSnapshot.threadId,
         signal: currentAnswerAbortController.signal
       });
       loadingRotator?.stop();
