@@ -8,7 +8,10 @@
     "build:markdown": "mkdir -p vendor/markdown-renderer/fonts && esbuild src/vendor/markdown-renderer-entry.js --bundle --format=esm --platform=browser --outfile=vendor/markdown-renderer/markdown-renderer.mjs && cp node_modules/katex/dist/katex.min.css vendor/markdown-renderer/katex.min.css && cp -R node_modules/katex/dist/fonts/. vendor/markdown-renderer/fonts/",
     "build:lexical": "mkdir -p vendor/lexical && esbuild src/vendor/lexical-note-editor-entry.js --bundle --format=esm --platform=browser --outfile=vendor/lexical/lexical-note-editor.mjs",
     "build:rough-notation": "esbuild node_modules/rough-notation/lib/rough-notation.esm.js --bundle --format=esm --platform=browser --outfile=vendor/rough-notation/rough-notation.mjs",
-    "build:vendors": "npm run build:liteparse && npm run build:markdown && npm run build:lexical && npm run build:rough-notation"
+    "build:vendors": "npm run build:liteparse && npm run build:markdown && npm run build:lexical && npm run build:rough-notation",
+    "firefox:run": "npx web-ext run",
+    "firefox:lint": "npx web-ext lint",
+    "firefox:build": "npx web-ext build"
   },
   "dependencies": {
     "@lexical/history": "^0.50.0",

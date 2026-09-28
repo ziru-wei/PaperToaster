@@ -1,10 +1,10 @@
 # Paper Toaster
 
-Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from a side panel.
+Firefox Manifest V3 extension for inspecting the active PDF from the browser sidebar.
 
 ## What Works
 
-- Opens as a browser side panel.
+- Opens in the Firefox sidebar (toolbar button, `Alt+S`, or View → Sidebar).
 - Reads the active tab URL.
 - Fetches the active PDF URL with browser credentials.
 - Falls back to fetching from the active tab context when publisher sites reject extension-origin requests.
@@ -28,26 +28,37 @@ Minimal Edge / Chromium Manifest V3 prototype for inspecting the active PDF from
 - Adds a fixed top conversation thread rail: the left button creates a new thread, older threads scroll horizontally to the right, and existing threads can be selected or deleted.
 - Supports slash prompt presets in the selected-text question box, backed by extension-local settings.
 - Supports Debug mode in Options, which returns deterministic placeholder answers without making AI API requests.
-- Provides an Options page for local AI provider settings. API keys are stored in `chrome.storage.local` and are not committed to the repo.
+- Provides an Options page for local AI provider settings. API keys are stored in extension-local storage and are not committed to the repo.
 - Provides parallel Board and Archive library views. Archive preserves local paper/comparison data, Restore returns records to the Board, and Archive View can export restorable JSON without deleting local records.
 - Keeps archived/dead Labels gray and outside the five colored Board Label slots.
 
 Whole-paper, selected-text, and comparative questions use managed outline-guided Markdown files; Saved Q&A remains stored in extension IndexedDB.
 
-## Load In Edge
+## Load In Firefox
 
-1. Open `edge://extensions`.
-2. Enable `Developer mode`.
-3. Choose `Load unpacked`.
-4. Select this folder:
+Requires Firefox 140 or later.
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Choose `Load Temporary Add-on…`.
+3. Select `manifest.json` in this folder:
 
    `/Users/ziru/Documents/GitHub/PaperToaster`
 
-5. Open a PDF, for example an arXiv PDF or the ACM test URL from `guideline.md`.
-6. Click the extension icon to open the side panel.
-7. The active PDF loads automatically. Click the reload icon in the upper-right corner only when you want to force a fresh parse.
-8. Select text in the PDF viewer, then use the right-click `------------------------------>` menu item.
-9. Enter a question, or type `/` to choose a prompt preset, then press Enter.
+   Or run `npm run firefox:run` to launch a fresh Firefox profile with the extension loaded and auto-reloaded on file changes.
+
+4. Open a PDF, for example an arXiv PDF or the ACM test URL from `guideline.md`.
+5. Click the Paper Toaster toolbar button to open the sidebar.
+6. The active PDF loads automatically. Click the reload icon in the upper-right corner only when you want to force a fresh parse.
+7. Select text in the PDF viewer, then use the right-click `------------------------------>` menu item.
+8. Enter a question, or type `/` to choose a prompt preset, then press Enter.
+
+`npm run firefox:lint` validates the extension with Mozilla's `web-ext` linter, and `npm run firefox:build` packages it into `web-ext-artifacts/`.
+
+Firefox notes:
+
+- Host access for `http://*/*` and `https://*/*` is requested at install. If PDFs stop loading, check that the permission is still granted under `about:addons` → Paper Toaster → Permissions.
+- Firefox only opens the sidebar in direct response to a user action. Toolbar clicks, the context-menu item, and Dashboard clicks open it; selecting text in a page does not.
+- Firefox's built-in PDF viewer does not run extension content scripts, so selections in PDFs are captured through the right-click menu item.
 
 ## Notes
 
@@ -62,7 +73,7 @@ Whole-paper, selected-text, and comparative questions use managed outline-guided
 - Paper title extraction order is explicit: PDF metadata title, first usable raw Markdown H1, earliest usable raw Markdown heading, then manual editing. It does not read title from viewer DOM, tab title, or URL.
 - The bridge stores content-addressed Markdown files and builds request-scoped citation views. Questions send document references and the current question, not browser-retrieved passages or chat history.
 - Conversation history is stored by canonical paper key in IndexedDB. It reloads when that PDF link becomes active again.
-- Selection question presets are stored in `chrome.storage.local` and can be edited from the extension Options page.
+- Selection question presets are stored in extension-local storage and can be edited from the extension Options page.
 - Local-agent settings are local to the installed browser profile and auto-save from Options. AI Provider, Mode, and System Prompt are independent sections; the saved bearer token is not rendered back into the token field.
 - Debug mode still appends user and placeholder assistant messages to the active conversation thread, so it can be used to test tab switching and multi-thread storage without spending model tokens.
 - Single-paper and Comparative Reading answers use the token-protected local bridge with a selectable Codex CLI or Antigravity CLI profile.

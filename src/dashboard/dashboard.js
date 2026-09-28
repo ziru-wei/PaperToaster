@@ -17,6 +17,7 @@ import {
 } from "./dashboard-renderer.js";
 import { MessageType } from "../shared/messages.js";
 import { openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
+import { isSidebarActionAvailable, openSidePanel } from "../browser/side-panel.js";
 import { normalizeDocumentUrl } from "../storage/document-key.js";
 
 const SORT_OPTIONS = [
@@ -542,6 +543,8 @@ async function openPaperContextInSidePanel(documentKey) {
     return;
   }
 
+  openSidebarFromUserAction();
+
   bulkActions.clearSelection();
   state.activeDocumentKey = documentKey;
   state.activeComparisonId = "";
@@ -576,6 +579,8 @@ async function openComparisonContextInSidePanel(comparisonId) {
     return;
   }
 
+  openSidebarFromUserAction();
+
   bulkActions.clearSelection();
   state.activeDocumentKey = "";
   state.activeComparisonId = comparisonId;
@@ -604,6 +609,10 @@ async function refreshActivePaperContext() {
 }
 
 async function clearDashboardContext(options = {}) {
+  if (options.openPanel) {
+    openSidebarFromUserAction();
+  }
+
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.CLEAR_DASHBOARD_CONTEXT,
@@ -612,6 +621,14 @@ async function clearDashboardContext(options = {}) {
     applyActiveDashboardContext(response?.context);
   } catch (error) {
     console.debug("[PDF AI] Could not clear dashboard context", error);
+  }
+}
+
+// Firefox only opens the sidebar from the extension page's own user action; the
+// background script cannot do it after receiving a message. Must run before any await.
+function openSidebarFromUserAction() {
+  if (isSidebarActionAvailable()) {
+    openSidePanel().catch(() => {});
   }
 }
 
@@ -728,6 +745,7 @@ async function handlePapersDeleted(selection) {
 }
 
 async function sendSelectedPapersToMachine(documentKeys) {
+  openSidebarFromUserAction();
   const response = await chrome.runtime.sendMessage({
     type: MessageType.UPDATE_COMPARISON_DRAFT,
     documentKeys,

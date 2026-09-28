@@ -1,6 +1,7 @@
 import { MessageType } from "../shared/messages.js";
 import { getComparisonSettings } from "../storage/comparison-settings-store.js";
 import { openExtensionPageInExistingTab } from "../browser/open-paper-tab.js";
+import { configureSidePanelBehavior, openSidePanel, toggleSidePanel } from "../browser/side-panel.js";
 import {
   filterActiveLibraryDocumentKeys,
   listLibraryPaperTitleUrlMappings
@@ -17,18 +18,29 @@ const selectionsByTab = new Map();
 let fallbackLibraryPaperContext = null;
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  chrome.contextMenus.create({
-    id: CAPTURE_SELECTION_MENU_ID,
-    title: "------------------------------>",
-    contexts: ["selection"]
-  });
+  configureSidePanelBehavior().catch(() => {});
+  registerContextMenus();
 });
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab?.windowId) {
-    await chrome.sidePanel.open({ windowId: tab.windowId });
-  }
+// Firefox background scripts are non-persistent pages; re-register menus on startup
+// so they survive browser restarts.
+chrome.runtime.onStartup.addListener(registerContextMenus);
+
+function registerContextMenus() {
+  chrome.contextMenus.removeAll().then(() => {
+    chrome.contextMenus.create({
+      id: CAPTURE_SELECTION_MENU_ID,
+      title: "------------------------------>",
+      contexts: ["selection"]
+    });
+  }).catch((error) => {
+    console.error("Could not register Paper Toaster context menus", error);
+  });
+}
+
+chrome.action.onClicked.addListener((tab) => {
+  // Must run synchronously: Firefox rejects sidebarAction calls after an await.
+  toggleSidePanel(tab?.windowId).catch(() => {});
 });
 
 chrome.commands.onCommand.addListener((command) => {
@@ -104,7 +116,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
 async function handleExternalMessage(message, sender) {
   if (!sender?.id || sender.id === chrome.runtime.id) {
-    return createExternalApiError("extension-only", "Only another Chrome extension can use this API.");
+    return createExternalApiError("extension-only", "Only another browser extension can use this API.");
   }
   if (message?.apiVersion !== PAPER_TOASTER_EXTERNAL_API_VERSION) {
     return createExternalApiError("unsupported-version", `Use API version ${PAPER_TOASTER_EXTERNAL_API_VERSION}.`);
@@ -342,7 +354,7 @@ async function openPanelForTab(tab) {
     return;
   }
 
-  await chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {
+  await openSidePanel(tab.windowId).catch(() => {
     // Opening the panel is best-effort from user-triggered capture actions.
   });
 }

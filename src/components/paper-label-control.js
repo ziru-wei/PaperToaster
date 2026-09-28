@@ -102,6 +102,7 @@ function openPaperLabelEditor({
   input.placeholder = "Label";
   input.setAttribute("aria-label", "Paper label");
   input.hidden = true;
+  fitInputToContent(input);
 
   const options = document.createElement("div");
   options.className = "paper-group-options";
@@ -374,6 +375,19 @@ function focusAdjacentPaperGroupLabel(editor, editMode, direction) {
   candidates[nextIndex].focus({ preventScroll: true });
 }
 
+// Firefox lacks CSS field-sizing: content; approximate it with the size attribute.
+function fitInputToContent(input) {
+  if (globalThis.CSS?.supports?.("field-sizing", "content")) {
+    return;
+  }
+
+  const update = () => {
+    input.size = Math.max(1, (input.value || input.placeholder || "").length);
+  };
+  update();
+  input.addEventListener("input", update);
+}
+
 function createEditablePaperGroupOption({ option, active = false, onRename, onDelete }) {
   const chip = document.createElement("span");
   chip.className = ["paper-group-edit-chip", option.toneClass || ""].filter(Boolean).join(" ");
@@ -384,6 +398,7 @@ function createEditablePaperGroupOption({ option, active = false, onRename, onDe
   input.type = "text";
   input.value = option.name;
   input.setAttribute("aria-label", `Rename label ${option.name}`);
+  fitInputToContent(input);
   const saveRename = () => onRename(option.name, input.value);
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("pointerdown", (event) => event.stopPropagation());

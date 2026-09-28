@@ -1,13 +1,13 @@
 # External title–URL API
 
-Paper Toaster exposes a read-only Chrome cross-extension messaging API for its recorded paper title–URL mappings. It does not expose notes, conversations, labels, document keys, or write operations.
+Paper Toaster exposes a read-only cross-extension messaging API for its recorded paper title–URL mappings. It does not expose notes, conversations, labels, document keys, or write operations.
 
 ## Request
 
-Send the request from the consuming extension's service worker or another extension page. Replace `PAPER_TOASTER_EXTENSION_ID` with the ID shown for Paper Toaster at `chrome://extensions`.
+Send the request from the consuming extension's background script or another extension page. In Firefox, Paper Toaster's ID is fixed by `browser_specific_settings.gecko.id` in its manifest (`paper-toaster@ziru-wei`); it is also shown at `about:debugging#/runtime/this-firefox`.
 
 ```js
-const PAPER_TOASTER_EXTENSION_ID = "replace-with-paper-toaster-extension-id";
+const PAPER_TOASTER_EXTENSION_ID = "paper-toaster@ziru-wei";
 
 export async function getPaperToasterMappings(scope = "all") {
   const response = await chrome.runtime.sendMessage(
@@ -32,7 +32,7 @@ export async function getPaperToasterMappings(scope = "all") {
 - `"board"`: Dashboard records only.
 - `"archive"`: Archive records only.
 
-No additional permission is required in the consuming extension's manifest. Paper Toaster must be installed and enabled. The call rejects through `chrome.runtime.lastError`/the returned promise when the target extension ID is wrong or Paper Toaster is unavailable.
+No additional permission is required in the consuming extension's manifest. Paper Toaster must be installed and enabled. The returned promise rejects when the target extension ID is wrong or Paper Toaster is unavailable.
 
 ## Successful response
 
@@ -50,4 +50,4 @@ No additional permission is required in the consuming extension's manifest. Pape
 }
 ```
 
-The current development manifest accepts requests from any Chrome extension and does not accept requests from ordinary web pages. Once the consuming extension has a stable ID, replace `"*"` in Paper Toaster's `externally_connectable.ids` with that ID to restrict access.
+Firefox does not support the `externally_connectable` manifest key, so Paper Toaster accepts requests from any installed extension. Ordinary web pages cannot send these messages. To restrict access to a specific consumer, check `sender.id` in `handleExternalMessage` in `src/background/background.js`.

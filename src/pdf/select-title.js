@@ -1,7 +1,7 @@
 const GENERIC_TITLE_PATTERNS = [
   /^pdf(?: viewer)?$/i,
   /^google scholar pdf reader$/i,
-  /^chrome-extension:\/\//i,
+  /^(?:chrome|moz)-extension:\/\//i,
   /^https?:\/\//i,
   /^abstract$/i,
   /^introduction$/i,
