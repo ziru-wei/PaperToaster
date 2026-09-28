@@ -10,11 +10,13 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   computePaperFingerprint,
+  hashText,
   readSessionRecord,
   withConversationLock,
   writeSessionRecord
 } from "./local-agent-session-store.js";
 import { buildCodexArgs, createCodexEventParser } from "./local-agent-codex-runner.js";
+import { getManagedRoots } from "./local-agent-document-store.js";
 
 const serverFile = fileURLToPath(new URL("./local-agent-server.js", import.meta.url));
 const mockServerFile = fileURLToPath(new URL("./local-agent-mock-server.js", import.meta.url));
@@ -94,9 +96,23 @@ test("bridge resumes after restart without idle expiry, and retires changed pape
   const first = await ask(paper);
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.match(first.body.text, /turn 1/);
+  const recordAfterFirst = await readSessionRecord(sessionDir, "single-paper", key);
+  const rolloutAfterFirst = JSON.parse(
+    await readFile(path.join(fakeState, `${recordAfterFirst.agentSessionId}.json`), "utf8")
+  );
+  const paperFilePathAfterFirst = extractPaperFilePath(rolloutAfterFirst.prompt);
+  assert.ok(paperFilePathAfterFirst, "expected a Paper file path in the first-turn prompt");
   const second = await ask(paper);
   assert.equal(second.status, 200, JSON.stringify(second.body));
   assert.match(second.body.text, /turn 2/);
+  const rolloutAfterSecond = JSON.parse(
+    await readFile(path.join(fakeState, `${recordAfterFirst.agentSessionId}.json`), "utf8")
+  );
+  const paperFilePathAfterSecond = extractPaperFilePath(rolloutAfterSecond.prompt);
+  assert.equal(
+    paperFilePathAfterSecond, paperFilePathAfterFirst,
+    "resumed turns for the same conversation should reuse the same paper file path"
+  );
   const beforeRestart = await readSessionRecord(sessionDir, "single-paper", key);
   await writeSessionRecord(sessionDir, { ...beforeRestart, createdAt: 1, lastUsedAt: 1 });
   await stopBridge(bridge);
@@ -107,11 +123,17 @@ test("bridge resumes after restart without idle expiry, and retires changed pape
   const afterRestart = await readSessionRecord(sessionDir, "single-paper", key);
   assert.equal(afterRestart.agentSessionId, beforeRestart.agentSessionId);
   const fakeRollout = JSON.parse(await readFile(path.join(fakeState, `${afterRestart.agentSessionId}.json`), "utf8"));
-  assert.match(fakeRollout.prompt, /supersede all prior additional answer instructions/);
-  const fourth = await ask(paper, "Style B");
+  assert.doesNotMatch(fakeRollout.prompt, /Additional answer instructions/);
+  const agentsMarkdownAfterThird = await readFile(path.join(workdir, "AGENTS.md"), "utf8");
+  assert.match(agentsMarkdownAfterThird, /Paper-reading skill instructions/);
+  assert.match(agentsMarkdownAfterThird, /Style B/);
+  const fourth = await ask(paper, "Style C");
   assert.match(fourth.body.text, /turn 4/);
   const nextRollout = JSON.parse(await readFile(path.join(fakeState, `${afterRestart.agentSessionId}.json`), "utf8"));
-  assert.doesNotMatch(nextRollout.prompt, /supersede all prior additional answer instructions/);
+  assert.doesNotMatch(nextRollout.prompt, /Additional answer instructions/);
+  const agentsMarkdownAfterFourth = await readFile(path.join(workdir, "AGENTS.md"), "utf8");
+  assert.match(agentsMarkdownAfterFourth, /Style C/);
+  assert.doesNotMatch(agentsMarkdownAfterFourth, /Style B/);
 
   const changedPaper = await uploadPaper(endpoint, token, "# Revised paper\nEvidence B.");
   const afterReparse = await ask(changedPaper, "Style B");
@@ -157,6 +179,10 @@ test("bridge resumes after restart without idle expiry, and retires changed pape
   });
   assert.equal(deletion.status, 204);
   assert.equal(await readSessionRecord(sessionDir, "single-paper", key), null);
+  const deletedThreadDirectory = path.join(
+    getManagedRoots(workdir).threads, hashText(`single-paper\0${key}`)
+  );
+  await assert.rejects(readFile(path.join(deletedThreadDirectory, "p1--test-paper.annotated.md"), "utf8"), { code: "ENOENT" });
   await assert.rejects(readFile(path.join(fakeState, `${replacementRecord.agentSessionId}.json`), "utf8"), { code: "ENOENT" });
   const invalid = await ask(paper, "Style A", "missing-key");
   assert.equal(invalid.status, 400);
@@ -195,6 +221,10 @@ test("mock bridge enforces v3 and reports created/resumed turns", async (t) => {
   assert.equal(deletion.status, 204);
   assert.equal((await send(3)).body.sessionState, "created");
 });
+
+function extractPaperFilePath(prompt) {
+  return prompt.match(/^Paper file: (.+)$/m)?.[1];
+}
 
 async function uploadPaper(endpoint, token, markdown) {
   const documentRef = `sha256-${createHash("sha256").update(markdown, "utf8").digest("hex")}`;

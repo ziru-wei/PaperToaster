@@ -10,7 +10,7 @@ const DEFAULT_SYSTEM_PROMPT = [
   "Give the direct core answer first, then provide evidence.",
   "Use natural Chinese-English code-switching by default. Never translate or gloss either language in parentheses, and never restate the same idea in both languages.",
   // "Use English for academic terms or phrases while maintain the readibility.",
-  "Please remove all mannerd prose. Avoid chunky paragraphs, long-winded explanations, and verbose preambles. Use concise, direct, and clear language.",
+  "Use plain language. Please remove all mannerd prose. Avoid chunky paragraphs, long-winded explanations, and verbose preambles. ",
 ].join("\n\n");
 
 export const DEFAULT_AI_SETTINGS = Object.freeze({

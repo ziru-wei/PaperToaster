@@ -1,8 +1,11 @@
 import {
   createBlankPromptPreset,
+  getComparativePromptPresets,
   getSelectionPromptPresets,
   normalizePromptPresets,
+  resetComparativePromptPresets,
   resetSelectionPromptPresets,
+  saveComparativePromptPresets,
   saveSelectionPromptPresets
 } from "../storage/prompt-presets-store.js";
 import {
@@ -52,11 +55,15 @@ const elements = {
   addPreset: document.querySelector("#addPreset"),
   resetPresets: document.querySelector("#resetPresets"),
   savePresets: document.querySelector("#savePresets"),
+  addComparativePreset: document.querySelector("#addComparativePreset"),
+  resetComparativePresets: document.querySelector("#resetComparativePresets"),
+  saveComparativePresets: document.querySelector("#saveComparativePresets"),
   stripStoredEmphasisMarkers: document.querySelector("#stripStoredEmphasisMarkers"),
   importLibraryArchive: document.querySelector("#importLibraryArchive"),
   libraryArchiveFile: document.querySelector("#libraryArchiveFile"),
   libraryImportStatus: document.querySelector("#libraryImportStatus"),
   presetList: document.querySelector("#presetList"),
+  comparativePresetList: document.querySelector("#comparativePresetList"),
   presetTemplate: document.querySelector("#presetTemplate"),
   status: document.querySelector("#status")
 };
@@ -73,7 +80,14 @@ for (const [name, element] of Object.entries(elements)) {
 }
 
 elements.addPreset.addEventListener("click", () => {
-  renderPresets([...readPresetsFromForm({ includeEmpty: true }), createBlankPromptPreset()]);
+  renderPresets([...readPresetsFromForm(elements.presetList, { includeEmpty: true }), createBlankPromptPreset()], elements.presetList);
+  setStatus("");
+});
+elements.addComparativePreset.addEventListener("click", () => {
+  renderPresets([
+    ...readPresetsFromForm(elements.comparativePresetList, { includeEmpty: true }),
+    createBlankPromptPreset()
+  ], elements.comparativePresetList);
   setStatus("");
 });
 elements.aiLocalEndpoint.addEventListener("change", () => {
@@ -97,6 +111,8 @@ elements.copyLocalAgentCommand.addEventListener("click", copyLocalAgentCommand);
 elements.refreshChatModels.addEventListener("click", loadAvailableChatModels);
 elements.resetPresets.addEventListener("click", resetPresets);
 elements.savePresets.addEventListener("click", savePresets);
+elements.resetComparativePresets.addEventListener("click", resetComparativePresets);
+elements.saveComparativePresets.addEventListener("click", saveComparativePresets);
 elements.stripStoredEmphasisMarkers.addEventListener("click", stripStoredEmphasisMarkers);
 elements.saveComparisonSettings.addEventListener("click", saveComparativeReadingSettings);
 elements.importLibraryArchive.addEventListener("click", () => elements.libraryArchiveFile.click());
@@ -106,6 +122,7 @@ loadAiSettings();
 loadParsingSettings();
 loadSavedQaSettings();
 loadPresets();
+loadComparativePresets();
 loadComparisonSettings();
 
 async function importSelectedLibraryArchive() {
@@ -475,12 +492,20 @@ async function copyLocalAgentCommand() {
 }
 
 function buildLocalAgentCommand() {
-  return 'cd "/Users/ziru/Documents/GitHub/chromePaperChat" && PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js';
+  return 'cd "/Users/ziru/Documents/GitHub/PaperToaster" && PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js';
 }
 
 async function loadPresets() {
   try {
-    renderPresets(await getSelectionPromptPresets());
+    renderPresets(await getSelectionPromptPresets(), elements.presetList);
+  } catch (error) {
+    setStatus(error.message || String(error), true);
+  }
+}
+
+async function loadComparativePresets() {
+  try {
+    renderPresets(await getComparativePromptPresets(), elements.comparativePresetList);
   } catch (error) {
     setStatus(error.message || String(error), true);
   }
@@ -488,12 +513,12 @@ async function loadPresets() {
 
 async function savePresets() {
   try {
-    const presets = normalizePromptPresets(readPresetsFromForm({ includeEmpty: false }));
+    const presets = normalizePromptPresets(readPresetsFromForm(elements.presetList, { includeEmpty: false }));
     if (!presets.length) {
       throw new Error("Keep at least one prompt preset.");
     }
 
-    renderPresets(await saveSelectionPromptPresets(presets));
+    renderPresets(await saveSelectionPromptPresets(presets), elements.presetList);
     setStatus("Saved.");
   } catch (error) {
     setStatus(error.message || String(error), true);
@@ -502,7 +527,38 @@ async function savePresets() {
 
 async function resetPresets() {
   try {
-    renderPresets(await resetSelectionPromptPresets());
+    renderPresets(await resetSelectionPromptPresets(), elements.presetList);
+    setStatus("Reset to defaults.");
+  } catch (error) {
+    setStatus(error.message || String(error), true);
+  }
+}
+
+async function saveComparativePresets() {
+  try {
+    const presets = normalizePromptPresets(
+      readPresetsFromForm(elements.comparativePresetList, { includeEmpty: false })
+    );
+    if (!presets.length) {
+      throw new Error("Keep at least one Comparative Reading prompt preset.");
+    }
+
+    renderPresets(
+      await saveComparativePromptPresets(presets),
+      elements.comparativePresetList
+    );
+    setStatus("Saved.");
+  } catch (error) {
+    setStatus(error.message || String(error), true);
+  }
+}
+
+async function resetComparativePresets() {
+  try {
+    renderPresets(
+      await resetComparativePromptPresets(),
+      elements.comparativePresetList
+    );
     setStatus("Reset to defaults.");
   } catch (error) {
     setStatus(error.message || String(error), true);
@@ -532,8 +588,8 @@ async function stripStoredEmphasisMarkers() {
   }
 }
 
-function renderPresets(presets) {
-  elements.presetList.textContent = "";
+function renderPresets(presets, listElement) {
+  listElement.textContent = "";
 
   for (const preset of presets) {
     const fragment = elements.presetTemplate.content.cloneNode(true);
@@ -550,12 +606,12 @@ function renderPresets(presets) {
       setStatus("");
     });
 
-    elements.presetList.append(fragment);
+    listElement.append(fragment);
   }
 }
 
-function readPresetsFromForm({ includeEmpty }) {
-  return [...elements.presetList.querySelectorAll(".preset-row")]
+function readPresetsFromForm(listElement, { includeEmpty }) {
+  return [...listElement.querySelectorAll(".preset-row")]
     .map((row) => {
       const label = row.querySelector(".preset-label").value;
       const prompt = row.querySelector(".preset-prompt").value;

@@ -1,4 +1,5 @@
 export const PROMPT_PRESETS_KEY = "selectionPromptPresetsV1";
+export const COMPARATIVE_PROMPT_PRESETS_KEY = "comparativePromptPresetsV1";
 
 export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
   {
@@ -6,6 +7,23 @@ export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
     label: "Overview",
     prompt: "Give an overview of this paper, including the problem, motivation, approach, main findings, and conclusions."
   },
+  {
+    id: "research-process",
+    label: "Research Process",
+    prompt: "How was this research carried out from start to finish? Explain the major research stages and how each stage informed the next."
+  }
+]);
+
+export const DEFAULT_COMPARATIVE_PROMPT_PRESETS = Object.freeze([
+  {
+    id: "compare-contribution",
+    label: "Compare the Contribution",
+    prompt: "Compare the contributions of these papers, including what each paper adds, how their contributions differ, and where they overlap."
+  }
+]);
+
+const LEGACY_DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
+  ...DEFAULT_SELECTION_PROMPT_PRESETS.slice(0, 1),
   {
     id: "contribution",
     label: "Contribution",
@@ -16,11 +34,7 @@ export const DEFAULT_SELECTION_PROMPT_PRESETS = Object.freeze([
     label: "Technical Method",
     prompt: "Explain the technical method of this work, including the system, architecture, algorithm, implementation, or key technical components."
   },
-  {
-    id: "research-process",
-    label: "Research Process",
-    prompt: "How was this research carried out from start to finish? Explain the major research stages and how each stage informed the next."
-  },
+  ...DEFAULT_SELECTION_PROMPT_PRESETS.slice(1),
   {
     id: "evaluation",
     label: "Evaluation",
@@ -49,11 +63,15 @@ export async function getSelectionPromptPresets() {
   if (!normalized.length) {
     return cloneDefaultPresets();
   }
-  const migrated = replaceLegacyClarifyPreset(normalized);
+  const migrated = migrateLegacySelectionDefaults(normalized);
   if (migrated !== normalized) {
     await saveSelectionPromptPresets(migrated);
   }
   return migrated;
+}
+
+export async function getComparativePromptPresets() {
+  return getPromptPresets(COMPARATIVE_PROMPT_PRESETS_KEY, DEFAULT_COMPARATIVE_PROMPT_PRESETS);
 }
 
 function replaceLegacyClarifyPreset(presets) {
@@ -66,7 +84,7 @@ function replaceLegacyClarifyPreset(presets) {
     return presets;
   }
   const next = [...presets];
-  next.splice(legacyIndex, 1, { ...DEFAULT_SELECTION_PROMPT_PRESETS[1] });
+  next.splice(legacyIndex, 1, { ...LEGACY_DEFAULT_SELECTION_PROMPT_PRESETS[1] });
   return next;
 }
 
@@ -81,6 +99,16 @@ export async function saveSelectionPromptPresets(presets) {
 export async function resetSelectionPromptPresets() {
   const defaults = cloneDefaultPresets();
   await saveSelectionPromptPresets(defaults);
+  return defaults;
+}
+
+export async function saveComparativePromptPresets(presets) {
+  return savePromptPresets(COMPARATIVE_PROMPT_PRESETS_KEY, presets);
+}
+
+export async function resetComparativePromptPresets() {
+  const defaults = clonePresets(DEFAULT_COMPARATIVE_PROMPT_PRESETS);
+  await saveComparativePromptPresets(defaults);
   return defaults;
 }
 
@@ -132,7 +160,37 @@ function createPromptPresetId(label) {
 }
 
 function cloneDefaultPresets() {
-  return DEFAULT_SELECTION_PROMPT_PRESETS.map((preset) => ({ ...preset }));
+  return clonePresets(DEFAULT_SELECTION_PROMPT_PRESETS);
+}
+
+async function getPromptPresets(key, defaults) {
+  const data = await chrome.storage.local.get(key);
+  const normalized = normalizePromptPresets(data[key] || []);
+  return normalized.length ? normalized : clonePresets(defaults);
+}
+
+async function savePromptPresets(key, presets) {
+  const normalized = normalizePromptPresets(presets);
+  await chrome.storage.local.set({ [key]: normalized });
+  return normalized;
+}
+
+function clonePresets(presets) {
+  return presets.map((preset) => ({ ...preset }));
+}
+
+function migrateLegacySelectionDefaults(presets) {
+  const migrated = replaceLegacyClarifyPreset(presets);
+  if (
+    migrated.length === LEGACY_DEFAULT_SELECTION_PROMPT_PRESETS.length &&
+    migrated.every((preset, index) => {
+      const legacy = LEGACY_DEFAULT_SELECTION_PROMPT_PRESETS[index];
+      return preset.id === legacy.id && preset.label === legacy.label && preset.prompt === legacy.prompt;
+    })
+  ) {
+    return cloneDefaultPresets();
+  }
+  return migrated;
 }
 
 function indexSuffix(index) {

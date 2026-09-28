@@ -4,54 +4,51 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Paper Toaster</title>
-    <link rel="stylesheet" href="../components/paper-label-control.css">
+    <link rel="stylesheet" href="../components/click-menu.css">
+    <link rel="stylesheet" href="../components/glass-button.css">
+    <link rel="stylesheet" href="../components/import-destination-dialog.css">
     <link rel="stylesheet" href="./dashboard.css">
+    <link rel="stylesheet" href="../components/paper-label-control.css">
   </head>
   <body>
     <main class="dashboard-shell">
       <header class="dashboard-header">
         <div class="dashboard-controls">
-          <input id="paperSearch" type="search" placeholder="Loading local papers..." aria-label="Search papers">
-          <button id="paperManageButton" class="dashboard-icon-button" type="button" aria-label="Select papers" aria-pressed="false">
-            <span class="icon-mask manage-icon" aria-hidden="true"></span>
-          </button>
           <div class="sort-control">
-            <button id="paperSortButton" class="sort-button" type="button" title="Sort papers" aria-label="Sort papers" aria-expanded="false">
+            <button id="paperSortButton" class="glass-button sort-button" type="button" title="Sort papers" aria-label="Sort papers" aria-expanded="false">
               <span class="sort-icon" aria-hidden="true"></span>
             </button>
-            <div id="paperSortMenu" class="sort-menu" role="menu" hidden></div>
+            <div id="paperSortMenu" class="click-menu sort-menu" role="menu" hidden></div>
           </div>
-          <button id="paperGroupLayoutButton" class="dashboard-icon-button" type="button" aria-label="Group papers by latest conversation" aria-pressed="false">
+          <button id="paperGroupLayoutButton" class="glass-button dashboard-icon-button" type="button" aria-label="Group papers by latest conversation" aria-pressed="false">
             <span class="icon-mask group-layout-icon" aria-hidden="true"></span>
           </button>
-          <button id="paperMessageRingButton" class="dashboard-icon-button" type="button" aria-label="Hide message rings" aria-pressed="false">
+          <button id="paperMessageRingButton" class="glass-button dashboard-icon-button" type="button" aria-label="Hide message rings" aria-pressed="false">
             <span class="icon-mask message-ring-toggle-icon" aria-hidden="true"></span>
           </button>
-          <button id="libraryViewSwitch" class="dashboard-icon-button" type="button" aria-label="Open Archive">
-            <span class="icon-mask library-view-switch-icon" aria-hidden="true"></span>
-          </button>
+          <div class="dashboard-search-control">
+            <input id="paperSearch" type="search" placeholder="Loading local papers..." aria-label="Search papers">
+          </div>
         </div>
         <p id="librarySummary" class="dashboard-status" aria-live="polite"></p>
       </header>
 
       <section id="bulkActions" class="bulk-actions is-hidden" aria-live="polite" aria-hidden="true">
-        <span id="selectionSummary" class="selection-summary">0 selected</span>
-        <button id="selectAllButton" class="bulk-button" type="button">Select all</button>
-        <button id="archiveSelectedButton" class="bulk-button with-icon" type="button" disabled>
-          <span class="icon-mask bulk-action-icon archive-icon" aria-hidden="true"></span>
-          <span>Archive</span>
-        </button>
-        <button id="restoreSelectedButton" class="bulk-button with-icon" type="button" aria-label="Restore selected records" disabled hidden>
+        <div class="keyboard-prompts" aria-label="Selection shortcuts">
+          <p id="multiSelectKeyboardPrompt" hidden></p>
+          <p id="selectionSummary" class="selection-summary" hidden>0 selected</p>
+          <p id="sendToMachinePrompt" hidden></p>
+          <p id="archiveSelectedPrompt" hidden></p>
+          <p id="exportSelectedPrompt" hidden></p>
+          <p id="deleteSelectedPrompt" hidden></p>
+        </div>
+        <button id="restoreSelectedButton" class="glass-button bulk-button with-icon" type="button" aria-label="Restore selected records" disabled hidden>
           <span class="icon-mask bulk-action-icon restore-icon" aria-hidden="true"></span>
           <span>Restore</span>
         </button>
-        <button id="exportSelectedButton" class="bulk-button with-icon" type="button" aria-label="Export selected records" disabled hidden>
+        <button id="exportSelectedButton" class="glass-button bulk-button with-icon" type="button" aria-label="Export selected records" disabled hidden>
           <span class="icon-mask bulk-action-icon export-icon" aria-hidden="true"></span>
           <span>Export</span>
-        </button>
-        <button id="deleteSelectedButton" class="bulk-button with-icon danger" type="button" disabled>
-          <span class="icon-mask bulk-action-icon delete-icon" aria-hidden="true"></span>
-          <span>Delete</span>
         </button>
       </section>
       <section id="paperList" class="paper-list" aria-label="Local papers"></section>
@@ -59,10 +56,12 @@
         <p id="emptyStateMessage">open a PDF to kick off</p>
       </div>
     </main>
-    <button id="sendToMachineButton" class="dashboard-send-machine" type="button" aria-label="Send selected papers to Comparative Reading" hidden>
+    <button id="libraryViewSwitch" class="glass-button dashboard-icon-button" type="button" aria-label="Open Archive">
+      <span class="icon-mask library-view-switch-icon" aria-hidden="true"></span>
+    </button>
+    <button id="sendToMachineButton" class="glass-button dashboard-send-machine" type="button" aria-label="Send selected papers to Comparative Reading" hidden>
       <span class="icon-mask send-to-machine-icon" aria-hidden="true"></span>
     </button>
-    <p id="dashboardKeyboardHint" class="dashboard-keyboard-hint" aria-live="polite" hidden></p>
     <script type="module" src="./dashboard.js"></script>
   </body>
 </html>

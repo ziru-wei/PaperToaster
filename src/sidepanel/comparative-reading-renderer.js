@@ -8,7 +8,6 @@ export function renderComparativeReadingPanel({
   titleEditable = false,
   selectedPapers,
   messages,
-  chronologicalMode = false,
   status,
   emptySubtitle = "More toast is needed",
   busy,
@@ -58,7 +57,7 @@ export function renderComparativeReadingPanel({
   elements.comparisonStatus.hidden = !visibleStatus;
   elements.comparisonStatus.classList.toggle("error", Boolean(status));
   elements.comparisonContextBar.hidden = !visibleStatus;
-  elements.selectionQuestion.placeholder = allowRemovePapers ? "Press @ or @# to feed." : "";
+  elements.selectionQuestion.placeholder = allowRemovePapers ? "Start with /, @ or @#" : "";
 
   renderPaperChips({
     container: elements.comparisonPaperChips,
@@ -70,7 +69,6 @@ export function renderComparativeReadingPanel({
   });
   elements.conversationThread.classList.remove("comparison-empty-thread");
   renderConversationMessages(elements.conversationThread, messages, {
-    chronologicalMode,
     collapsedAssistantMessageIndexes,
     onAssistantResponseCollapseChange,
     onEditUserMessage,
@@ -99,7 +97,6 @@ export function clearComparativeReadingPanel(elements) {
   document.body.classList.remove("comparative-mode");
   document.body.classList.remove("comparison-empty-mode");
   elements.conversationThread.classList.remove("comparison-empty-thread");
-  elements.conversationThread.classList.remove("conversation-chronological-mode");
   elements.documentTitle.readOnly = false;
   elements.documentTitle.removeAttribute("tabindex");
   elements.documentTitle.removeAttribute("aria-readonly");

@@ -1,4 +1,7 @@
-import { getSelectionPromptPresets } from "../storage/prompt-presets-store.js";
+import {
+  getComparativePromptPresets,
+  getSelectionPromptPresets
+} from "../storage/prompt-presets-store.js";
 import {
   AI_SETTINGS_KEY,
   getAiSettings,
@@ -8,18 +11,32 @@ import {
 
 const MODEL_MENU_OPTION = Object.freeze({
   id: "model-menu",
-  label: "model",
-  type: "model-menu"
+  label: "Model",
+  command: "model",
+  icon: "model",
+  type: "command-menu"
 });
+
+const PROMPT_MENU_OPTION = Object.freeze({
+  id: "prompt-menu",
+  label: "Prompt",
+  command: "prompt",
+  icon: "prompt",
+  type: "command-menu"
+});
+
+const ROOT_MENU_OPTIONS = Object.freeze([PROMPT_MENU_OPTION, MODEL_MENU_OPTION]);
 
 export function createPromptPresetMenuController({
   textarea,
   menuElement,
   commandCompletionElement,
   modelIndicator,
+  isComparativeReading = () => false,
   onError
 }) {
-  let promptPresets = [];
+  let selectionPromptPresets = [];
+  let comparativePromptPresets = [];
   let enabledModels = [];
   let currentModel = null;
   let activeIndex = 0;
@@ -39,12 +56,14 @@ export function createPromptPresetMenuController({
 
   async function load() {
     try {
-      const [presets, settings, effectiveSettings] = await Promise.all([
+      const [selectionPresets, comparativePresets, settings, effectiveSettings] = await Promise.all([
         getSelectionPromptPresets(),
+        getComparativePromptPresets(),
         getAiSettings(),
         getEffectiveAiSettings()
       ]);
-      promptPresets = presets;
+      selectionPromptPresets = selectionPresets;
+      comparativePromptPresets = comparativePresets;
       enabledModels = settings.enabledChatModels;
       currentModel = {
         profile: effectiveSettings.localAgentProfile,
@@ -126,9 +145,13 @@ export function createPromptPresetMenuController({
       activeIndex = (activeIndex - 1 + options.length) % options.length;
       render(options, request);
       return true;
-    } else if (event.key === "ArrowRight" && options[activeIndex]?.type === "model-menu") {
+    } else if (event.key === "ArrowRight" && options[activeIndex]?.type === "command-menu") {
       event.preventDefault();
-      openModelMenu(request);
+      openCommandMenu(options[activeIndex], request);
+      return true;
+    } else if (event.key === "ArrowLeft" && (request.type === "prompt" || request.type === "model")) {
+      event.preventDefault();
+      openRootMenu(request);
       return true;
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -158,26 +181,29 @@ export function createPromptPresetMenuController({
     options.forEach((preset, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "prompt-preset-option";
+      button.className = "click-menu-item prompt-preset-option";
       button.classList.toggle("model-menu-option", request.type === "model");
-      button.classList.toggle("model-menu-entry", preset.type === "model-menu");
+      button.classList.toggle("command-menu-entry", preset.type === "command-menu");
       button.classList.toggle("active", index === activeIndex);
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", index === activeIndex ? "true" : "false");
+
+      if (preset.type === "command-menu") {
+        const icon = document.createElement("span");
+        icon.className = `command-menu-icon command-menu-icon-${preset.icon}`;
+        icon.setAttribute("aria-hidden", "true");
+        button.append(icon);
+      }
 
       const label = document.createElement(request.type === "model" ? "span" : "strong");
       if (request.type === "model") {
         label.className = "model-menu-label";
       }
-      label.textContent = request.type === "model" ? preset.label : `/${preset.label}`;
+      label.textContent = `/${preset.label}`;
       button.append(label);
-      if (preset.type === "model-menu") {
-        const arrow = document.createElement("span");
-        arrow.className = "model-menu-entry-arrow";
-        arrow.textContent = "\u203a";
-        button.append(arrow);
-      } else if (request.type !== "model") {
+      if (preset.type !== "command-menu" && request.type !== "model") {
         const prompt = document.createElement("span");
+        prompt.className = "prompt-preset-description";
         prompt.textContent = preset.prompt;
         button.append(prompt);
       }
@@ -193,19 +219,21 @@ export function createPromptPresetMenuController({
       menuElement.append(button);
     });
 
+    menuElement.append(createMenuKeyboardHint());
+
     menuElement.hidden = false;
     scrollActiveOptionIntoView();
   }
 
   function scrollActiveOptionIntoView() {
-    const activeOption = menuElement.querySelector(".prompt-preset-option.active");
+    const activeOption = menuElement.querySelector(".click-menu-item.active");
     activeOption?.scrollIntoView({
       block: "nearest"
     });
   }
 
   function updateActiveOption() {
-    menuElement.querySelectorAll(".prompt-preset-option").forEach((option, index) => {
+    menuElement.querySelectorAll(".click-menu-item").forEach((option, index) => {
       const active = index === activeIndex;
       option.classList.toggle("active", active);
       option.setAttribute("aria-selected", String(active));
@@ -213,6 +241,9 @@ export function createPromptPresetMenuController({
   }
 
   function filterPresets(query) {
+    const promptPresets = isComparativeReading()
+      ? comparativePromptPresets
+      : selectionPromptPresets;
     const normalizedQuery = normalizeQuery(query);
     if (!normalizedQuery) {
       return promptPresets;
@@ -225,17 +256,57 @@ export function createPromptPresetMenuController({
   }
 
   function getOptions(request) {
-    if (request.type !== "model") {
+    if (request.type === "root") {
       const query = normalizeQuery(request.query);
-      const presets = filterPresets(request.query);
-      return !query || "model".includes(query)
-        ? [...presets, MODEL_MENU_OPTION]
-        : presets;
+      if (!query) {
+        return ROOT_MENU_OPTIONS;
+      }
+      const promptMatches = filterPresets(query);
+      const modelMatches = filterModels(query);
+      return ROOT_MENU_OPTIONS.filter((option) => {
+        if (normalizeQuery(option.label).includes(query)) {
+          return true;
+        }
+        return option.command === "prompt" ? promptMatches.length > 0 : modelMatches.length > 0;
+      });
     }
-    const query = normalizeQuery(request.query);
+    if (request.type === "prompt") {
+      return filterPresets(request.query);
+    }
+    return filterModels(request.query);
+  }
+
+  function filterModels(query) {
+    const normalizedQuery = normalizeQuery(query);
     return enabledModels
       .map((model) => ({ ...model, id: `${model.profile}:${model.model}:${model.reasoningEffort || ""}` }))
-      .filter((model) => !query || normalizeQuery(`${model.label} ${model.model} ${model.profile}`).includes(query));
+      .filter((model) => !normalizedQuery
+        || normalizeQuery(`${model.label} ${model.model} ${model.profile}`).includes(normalizedQuery));
+  }
+
+  function getImplicitChildType(query) {
+    const normalizedQuery = normalizeQuery(query);
+    if (!normalizedQuery) {
+      return null;
+    }
+
+    const promptMatches = filterPresets(normalizedQuery);
+    const modelMatches = filterModels(normalizedQuery);
+    if (promptMatches.length && !modelMatches.length) {
+      return "prompt";
+    }
+    if (modelMatches.length && !promptMatches.length) {
+      return "model";
+    }
+
+    const promptDirectMatch = promptMatches.some((preset) =>
+      normalizeQuery(preset.label).includes(normalizedQuery));
+    const modelDirectMatch = modelMatches.some((model) =>
+      normalizeQuery(`${model.label} ${model.model}`).includes(normalizedQuery));
+    if (promptDirectMatch !== modelDirectMatch) {
+      return promptDirectMatch ? "prompt" : "model";
+    }
+    return null;
   }
 
   function getRequest() {
@@ -270,11 +341,21 @@ export function createPromptPresetMenuController({
     }
 
     const modelMatch = linePrefix.match(/^\/model(?:\s+(.*))?$/i);
+    const promptMatch = linePrefix.match(/^\/prompt(?:\s+(.*))?$/i);
+    const rootQuery = linePrefix.slice(1);
     return {
-      type: modelMatch ? "model" : "preset",
+      type: modelMatch
+        ? "model"
+        : promptMatch
+          ? "prompt"
+          : getImplicitChildType(rootQuery) || "root",
       lineStart,
       cursor,
-      query: modelMatch ? (modelMatch[1] || "") : linePrefix.slice(1)
+      query: modelMatch
+        ? (modelMatch[1] || "")
+        : promptMatch
+          ? (promptMatch[1] || "")
+          : rootQuery
     };
   }
 
@@ -330,8 +411,8 @@ export function createPromptPresetMenuController({
   }
 
   function selectOption(option, request) {
-    if (option?.type === "model-menu") {
-      openModelMenu(request);
+    if (option?.type === "command-menu") {
+      openCommandMenu(option, request);
       return;
     }
     if (request.type === "model") {
@@ -341,15 +422,27 @@ export function createPromptPresetMenuController({
     insert(option, request);
   }
 
-  function openModelMenu(request) {
+  function openCommandMenu(option, request) {
     const value = textarea.value;
-    const replacement = "/model ";
+    const replacement = `/${option.command} `;
     textarea.value = `${value.slice(0, request.lineStart)}${replacement}${value.slice(request.cursor)}`;
     const nextCursor = request.lineStart + replacement.length;
     textarea.setSelectionRange(nextCursor, nextCursor);
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
     textarea.focus();
     activeIndex = 0;
+    update();
+  }
+
+  function openRootMenu(request) {
+    const value = textarea.value;
+    const replacement = "/";
+    textarea.value = `${value.slice(0, request.lineStart)}${replacement}${value.slice(request.cursor)}`;
+    const nextCursor = request.lineStart + replacement.length;
+    textarea.setSelectionRange(nextCursor, nextCursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.focus();
+    activeIndex = request.type === "model" ? 1 : 0;
     update();
   }
 
@@ -426,4 +519,33 @@ function normalizeQuery(query) {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function createMenuKeyboardHint() {
+  const hint = document.createElement("div");
+  hint.className = "prompt-menu-keyboard-hint";
+  hint.setAttribute("aria-hidden", "true");
+  hint.append(
+    createMenuHintKey("↑"),
+    createMenuHintKey("↓"),
+    createMenuHintText("Move"),
+    createMenuHintText("｜", "prompt-menu-keyboard-separator"),
+    createMenuHintKey("←"),
+    createMenuHintKey("→"),
+    createMenuHintText("Navigate")
+  );
+  return hint;
+}
+
+function createMenuHintKey(symbol) {
+  const key = document.createElement("kbd");
+  key.textContent = symbol;
+  return key;
+}
+
+function createMenuHintText(label, className = "") {
+  const text = document.createElement("span");
+  text.className = className;
+  text.textContent = label;
+  return text;
 }

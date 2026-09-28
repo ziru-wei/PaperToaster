@@ -1,7 +1,15 @@
 import { MessageType } from "../shared/messages.js";
 import { getComparisonSettings } from "../storage/comparison-settings-store.js";
 import { openExtensionPageInExistingTab } from "../browser/open-paper-tab.js";
-import { filterActiveLibraryDocumentKeys } from "../storage/library-store.js";
+import {
+  filterActiveLibraryDocumentKeys,
+  listLibraryPaperTitleUrlMappings
+} from "../storage/library-store.js";
+import {
+  PAPER_TOASTER_EXTERNAL_API_VERSION,
+  PaperToasterExternalMessageType,
+  PaperToasterLibraryScope
+} from "../shared/external-api.js";
 
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
 const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
@@ -75,6 +83,60 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  handleExternalMessage(message, sender)
+    .then(sendResponse)
+    .catch((error) => {
+      console.error("Paper Toaster external API request failed", error);
+      sendResponse({
+        ok: false,
+        apiVersion: PAPER_TOASTER_EXTERNAL_API_VERSION,
+        error: {
+          code: "internal-error",
+          message: error.message || String(error)
+        }
+      });
+    });
+
+  return true;
+});
+
+async function handleExternalMessage(message, sender) {
+  if (!sender?.id || sender.id === chrome.runtime.id) {
+    return createExternalApiError("extension-only", "Only another Chrome extension can use this API.");
+  }
+  if (message?.apiVersion !== PAPER_TOASTER_EXTERNAL_API_VERSION) {
+    return createExternalApiError("unsupported-version", `Use API version ${PAPER_TOASTER_EXTERNAL_API_VERSION}.`);
+  }
+  if (message?.type !== PaperToasterExternalMessageType.GET_PAPER_TITLE_URL_MAPPINGS) {
+    return createExternalApiError("unsupported-request", "The external API request type is not supported.");
+  }
+
+  const scope = normalizeExternalLibraryScope(message.scope);
+  const mappings = await listLibraryPaperTitleUrlMappings({ scope });
+  return {
+    ok: true,
+    apiVersion: PAPER_TOASTER_EXTERNAL_API_VERSION,
+    scope,
+    mappings
+  };
+}
+
+function createExternalApiError(code, message) {
+  return {
+    ok: false,
+    apiVersion: PAPER_TOASTER_EXTERNAL_API_VERSION,
+    error: { code, message }
+  };
+}
+
+function normalizeExternalLibraryScope(scope) {
+  if (scope === PaperToasterLibraryScope.BOARD || scope === PaperToasterLibraryScope.ARCHIVE) {
+    return scope;
+  }
+  return PaperToasterLibraryScope.ALL;
+}
 
 async function handleMessage(message, sender) {
   switch (message?.type) {

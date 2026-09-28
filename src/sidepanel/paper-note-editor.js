@@ -7,16 +7,25 @@ import {
   $getNodeByKey,
   $getRoot,
   $insertNodes,
+  $isListItemNode,
   $isRangeSelection,
   $patchStyleText,
   $setSelection,
   COMMAND_PRIORITY_HIGH,
   DecoratorNode,
   FORMAT_TEXT_COMMAND,
+  INDENT_CONTENT_COMMAND,
+  KEY_TAB_COMMAND,
+  ListItemNode,
+  ListNode,
+  OUTDENT_CONTENT_COMMAND,
   PASTE_COMMAND,
+  UNORDERED_LIST,
   createEditor,
   createEmptyHistoryState,
   registerHistory,
+  registerList,
+  registerMarkdownShortcuts,
   registerRichText
 } from "../../vendor/lexical/lexical-note-editor.mjs";
 
@@ -138,8 +147,15 @@ export function createPaperNoteEditor({ noteDocument, onChange, onCommit, onErro
 
   const editor = createEditor({
     namespace: "PaperToasterUserNote",
-    nodes: [ImageNode],
+    nodes: [ImageNode, ListNode, ListItemNode],
     theme: {
+      list: {
+        listitem: "paper-note-list-item",
+        nested: {
+          listitem: "paper-note-nested-list-item"
+        },
+        ul: "paper-note-bullet-list"
+      },
       text: {
         bold: "paper-note-bold-text",
         highlight: "paper-highlight-text"
@@ -154,6 +170,19 @@ export function createPaperNoteEditor({ noteDocument, onChange, onCommit, onErro
   cleanups.push(() => selectionToolbar.element.remove());
   cleanups.push(registerRichText(editor));
   cleanups.push(registerHistory(editor, createEmptyHistoryState(), 300));
+  cleanups.push(registerList(editor));
+  cleanups.push(registerMarkdownShortcuts(editor, [UNORDERED_LIST]));
+  cleanups.push(editor.registerCommand(KEY_TAB_COMMAND, (event) => {
+    const selection = $getSelection();
+    if (!$isRangeSelection(selection) || !selectionHasListItem(selection)) {
+      return false;
+    }
+    event.preventDefault();
+    return editor.dispatchCommand(
+      event.shiftKey ? OUTDENT_CONTENT_COMMAND : INDENT_CONTENT_COMMAND,
+      undefined
+    );
+  }, COMMAND_PRIORITY_HIGH));
   editor.setRootElement(editorElement);
   editorsByRoot.set(editorElement, editor);
   initializeEditorState(editor, noteDocument, onError);
@@ -221,6 +250,17 @@ export function createPaperNoteEditor({ noteDocument, onChange, onCommit, onErro
   });
   editorCleanups.set(note, () => cleanups.splice(0).reverse().forEach((cleanup) => cleanup?.()));
   return note;
+}
+
+function selectionHasListItem(selection) {
+  return selection.getNodes().some((node) => {
+    let current = node;
+    while (current) {
+      if ($isListItemNode(current)) return true;
+      current = current.getParent();
+    }
+    return false;
+  });
 }
 
 function createSelectionToolbar() {
@@ -340,38 +380,16 @@ function hideSelectionToolbar(toolbar) {
 
 function setupPaperNoteFrameSizing(editorElement) {
   let frame = 0;
-  let collapsedForPageScroll = false;
-  const getPageScrollTop = () => Math.max(
-    0,
-    document.scrollingElement?.scrollTop || 0,
-    document.documentElement?.scrollTop || 0,
-    document.body?.scrollTop || 0,
-    window.scrollY || 0
-  );
   const update = () => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       const style = window.getComputedStyle(editorElement);
       const minimumHeight = Number.parseFloat(style.minHeight) || 100;
-      const maximumHeight = Number.parseFloat(style.maxHeight) || minimumHeight * 2;
-      const contentHeight = Math.min(maximumHeight, Math.max(minimumHeight, editorElement.scrollHeight));
-      if (getPageScrollTop() > 0) collapsedForPageScroll = true;
-      const renderedHeight = collapsedForPageScroll ? minimumHeight : contentHeight;
-      editorElement.style.height = `${Math.round(renderedHeight)}px`;
+      editorElement.style.height = `${Math.round(minimumHeight)}px`;
     });
-  };
-  const handlePageWheel = (event) => {
-    if (editorElement.contains(event.target)) return;
-    if (event.deltaY > 0) {
-      collapsedForPageScroll = true;
-    } else if (event.deltaY < 0 && getPageScrollTop() <= 2) {
-      collapsedForPageScroll = false;
-    }
-    update();
   };
   window.addEventListener("scroll", update, { passive: true });
   document.addEventListener("scroll", update, { capture: true, passive: true });
-  document.addEventListener("wheel", handlePageWheel, { capture: true, passive: true });
   window.addEventListener("resize", update);
   editorElement.addEventListener("load", update, true);
   update();
@@ -381,7 +399,6 @@ function setupPaperNoteFrameSizing(editorElement) {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", update);
       document.removeEventListener("scroll", update, true);
-      document.removeEventListener("wheel", handlePageWheel, true);
       window.removeEventListener("resize", update);
       editorElement.removeEventListener("load", update, true);
     }

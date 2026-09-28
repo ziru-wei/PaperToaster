@@ -129,8 +129,6 @@ function validateRecord(record, mode, conversationKey) {
   validateConversationIdentity(mode, conversationKey);
   if (!record || record.version !== 1 || record.mode !== mode || record.conversationKey !== conversationKey
     || !/^[0-9a-f]{64}$/.test(record.paperFingerprint || "")
-    || !/^[0-9a-f]{64}$/.test(record.skillHash || "")
-    || !/^[0-9a-f]{64}$/.test(record.systemPromptHash || "")
     || !Number.isSafeInteger(record.createdAt) || record.createdAt <= 0
     || !Number.isSafeInteger(record.lastUsedAt) || record.lastUsedAt < record.createdAt) {
     throw storeError("Invalid local Agent session record.", 409);

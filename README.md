@@ -41,7 +41,7 @@ Whole-paper, selected-text, and comparative questions use managed outline-guided
 3. Choose `Load unpacked`.
 4. Select this folder:
 
-   `/Users/ziru/Documents/GitHub/chromePaperChat`
+   `/Users/ziru/Documents/GitHub/PaperToaster`
 
 5. Open a PDF, for example an arXiv PDF or the ACM test URL from `guideline.md`.
 6. Click the extension icon to open the side panel.

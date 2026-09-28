@@ -1,0 +1,102 @@
+:root {
+  --click-menu-surface: rgba(250, 250, 250, 0.72);
+  --click-menu-item-hover: rgba(240, 240, 240, 0.84);
+  --click-menu-item-selected: rgba(236, 236, 236, 0.92);
+  --click-menu-border: rgba(82, 82, 82, 0.14);
+  --click-menu-shadow: 0 6px 18px rgba(24, 24, 24, 0.075);
+  --click-menu-backdrop-filter: blur(14px) saturate(108%);
+  --click-menu-scrollbar-color: rgba(82, 82, 82, 0.1);
+  --click-menu-scrollbar-size: 3px;
+  --click-menu-radius: 12px;
+  --click-menu-item-radius: 8px;
+  --click-menu-padding: 4px;
+  --click-menu-gap: 2px;
+  --click-menu-item-min-height: 22px;
+  --click-menu-item-padding: 3px 9px;
+  --click-menu-item-content-gap: 7px;
+  --click-menu-font-size: 11px;
+  --click-menu-line-height: 1.2;
+}
+
+.click-menu {
+  z-index: 30;
+  display: flex;
+  overflow: auto;
+  max-height: 184px;
+  flex-direction: column;
+  gap: var(--click-menu-gap);
+  border: 1px solid var(--click-menu-border);
+  border-radius: var(--click-menu-radius);
+  padding: var(--click-menu-padding);
+  background: var(--click-menu-surface);
+  box-shadow: var(--click-menu-shadow);
+  font-size: var(--click-menu-font-size);
+  font-weight: 400;
+  line-height: var(--click-menu-line-height);
+  scrollbar-color: var(--click-menu-scrollbar-color) transparent;
+  scrollbar-width: thin;
+  backdrop-filter: var(--click-menu-backdrop-filter);
+  -webkit-backdrop-filter: var(--click-menu-backdrop-filter);
+}
+
+.click-menu[hidden] {
+  display: none;
+}
+
+.click-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: var(--click-menu-item-min-height);
+  align-items: center;
+  gap: var(--click-menu-item-content-gap);
+  border: 0;
+  border-radius: var(--click-menu-item-radius);
+  padding: var(--click-menu-item-padding);
+  color: #5b5b5b;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  text-align: left;
+  transition: color 110ms ease, background 110ms ease, box-shadow 110ms ease;
+}
+
+.click-menu-item strong,
+.click-menu-item span {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.click-menu-item:hover {
+  color: #262626;
+  background: var(--click-menu-item-hover);
+  box-shadow: none;
+}
+
+.click-menu-item.active,
+.click-menu-item[aria-selected="true"],
+.click-menu-item[aria-checked="true"] {
+  color: #262626;
+  background: var(--click-menu-item-selected);
+  box-shadow: none;
+}
+
+.click-menu-item:disabled {
+  cursor: default;
+}
+
+.click-menu::-webkit-scrollbar {
+  width: var(--click-menu-scrollbar-size);
+  height: var(--click-menu-scrollbar-size);
+}
+
+.click-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.click-menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--click-menu-scrollbar-color);
+}

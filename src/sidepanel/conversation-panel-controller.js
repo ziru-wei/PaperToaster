@@ -19,8 +19,6 @@ import {
   getSavedQuestionAnswerCollapsedUnitKeys,
   renderSavedQuestionAnswerUnits,
   renderConversationMessages,
-  orderConversationMessageElements,
-  scheduleConversationQuestionCloudLayout,
   toggleConversationSelection,
   updatePendingConversationMessageText
 } from "./conversation-message-renderer.js";
@@ -35,7 +33,7 @@ import {
 import { normalizeAiResponseMarkdown } from "../markdown/normalize-ai-response-markdown.js";
 import { normalizeCitationCatalog } from "../ai/citation-catalog.js";
 import { createThreadWheelController } from "./thread-wheel-controller.js";
-import { scrollToConversationMessagePair } from "./conversation-navigation.js";
+import { createQuestionScrollScheduler, scrollToConversationMessagePair } from "./conversation-navigation.js";
 import { getHistoricalAssistantMessageIndexes } from "../conversation/message-state.js";
 import { deleteLocalAgentSession, queueLocalAgentSessionDeletion, flushPendingLocalAgentSessionDeletes } from "../ai/local-agent-session-client.js";
 
@@ -67,8 +65,8 @@ export function createConversationPanelController({
   let paperUserNoteSaveTimer = null;
   let pendingPaperUserNote = null;
   let savedQaPerPaperLimit = 20;
-  let newQuestionScrollFrame = 0;
-  let allExpandedChronological = false;
+  const scheduleNewQuestionAtTop = createQuestionScrollScheduler(threadElement);
+  let allAssistantResponsesExpanded = false;
   const collapsedAssistantResponsesByThread = new Map();
 
   const threadWheel = createThreadWheelController({
@@ -130,7 +128,7 @@ export function createConversationPanelController({
     savedQaCollapseInitialized = false;
 
     if (!threadUrl) {
-      allExpandedChronological = false;
+      allAssistantResponsesExpanded = false;
       messages = [];
       threadDocumentKey = "";
       activeThreadId = "";
@@ -195,7 +193,7 @@ export function createConversationPanelController({
     }
 
     if (role === "user") {
-      allExpandedChronological = false;
+      allAssistantResponsesExpanded = false;
       collapseHistoricalAssistantResponses();
     }
     const messageIndex = messages.length;
@@ -209,8 +207,7 @@ export function createConversationPanelController({
       isSaved: isMessageSaved(message)
     });
     render({
-      scrollToBottom: role !== "user",
-      preserveQuestionCloudLayout: role === "user"
+      scrollToBottom: role !== "user"
     });
     if (role === "user") scheduleNewQuestionAtTop(messageIndex);
     queueSave();
@@ -234,7 +231,7 @@ export function createConversationPanelController({
       transientId: id
     });
     collapseHistoricalAssistantResponses();
-    render({ scrollToBottom: false, preserveQuestionCloudLayout: true });
+    render({ scrollToBottom: false });
     if (messages.at(-2)?.role === "user") scheduleNewQuestionAtTop(messages.length - 2);
     onChange?.();
     return id;
@@ -245,37 +242,6 @@ export function createConversationPanelController({
     collapsedIndexes.clear();
     getHistoricalAssistantMessageIndexes(messages, exceptMessageIndex)
       .forEach((index) => collapsedIndexes.add(index));
-  }
-
-  function scheduleNewQuestionAtTop(messageIndex) {
-    if (newQuestionScrollFrame) window.cancelAnimationFrame(newQuestionScrollFrame);
-    newQuestionScrollFrame = window.requestAnimationFrame(() => {
-      // The message renderer positions cloud bubbles in its own animation frame.
-      // Measure on the following frame so this uses the bubble's final packed position.
-      newQuestionScrollFrame = window.requestAnimationFrame(() => {
-        newQuestionScrollFrame = 0;
-        const question = threadElement.querySelector(
-          `.conversation-message.user[data-message-index="${Number(messageIndex)}"]`
-        );
-        if (!question) return;
-
-        const rootStyle = window.getComputedStyle(document.documentElement);
-        const topFadeHeight = Number.parseFloat(rootStyle.getPropertyValue("--chat-top-fade-height")) || 0;
-        const topClearance = topFadeHeight + 12;
-        const threadRect = threadElement.getBoundingClientRect();
-        const questionRect = question.getBoundingClientRect();
-        const questionTopInViewport = questionRect.top - threadRect.top;
-        const requestedTop = threadElement.scrollTop + questionTopInViewport - topClearance;
-        const maximumTop = Math.max(0, threadElement.scrollHeight - threadElement.clientHeight);
-        const nextTop = Math.min(maximumTop, Math.max(0, requestedTop));
-        if (Math.abs(nextTop - threadElement.scrollTop) < 1) return;
-
-        threadElement.scrollTo({
-          top: nextTop,
-          behavior: "smooth"
-        });
-      });
-    });
   }
 
   function updateTransientMessage(transientId, updates = {}) {
@@ -320,7 +286,7 @@ export function createConversationPanelController({
       isSaved: isMessageSaved(message)
     });
     if (role === "assistant") {
-      if (allExpandedChronological) {
+      if (allAssistantResponsesExpanded) {
         getCollapsedAssistantMessageIndexes().clear();
       } else {
         collapseHistoricalAssistantResponses(index);
@@ -328,8 +294,7 @@ export function createConversationPanelController({
       }
     }
     render({
-      scrollToBottom: role !== "assistant",
-      preserveQuestionCloudLayout: role === "assistant"
+      scrollToBottom: role !== "assistant"
     });
     queueSave();
     onChange?.();
@@ -366,6 +331,9 @@ export function createConversationPanelController({
       return result;
     }
     applyThread(await getStoredChatThreadById(threadUrl, activeThreadId));
+    if (!savedViewActive) {
+      render({ scrollToBottom: false });
+    }
     if (nextSaved) onMessageSaved?.();
     await refreshThreadList();
     if (savedViewActive) {
@@ -688,7 +656,7 @@ export function createConversationPanelController({
   async function deleteCurrentThreadAfterLastMessage() {
     window.clearTimeout(saveTimer);
     const requestId = documentRequestId;
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
 
     if (threadUrl && activeThreadId) {
       const deletedThreadId = activeThreadId;
@@ -728,7 +696,7 @@ export function createConversationPanelController({
     }
 
     applyThread(thread);
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     await refreshThreadList(requestId);
     threadWheel.close();
     if (savedViewActive) {
@@ -786,7 +754,7 @@ export function createConversationPanelController({
     }
 
     applyThread(thread);
-    if (deletingCurrentThread) allExpandedChronological = false;
+    if (deletingCurrentThread) allAssistantResponsesExpanded = false;
     await refreshThreadList(requestId);
     if (savedViewActive) {
       await loadSavedQuestionAnswerUnits(requestId);
@@ -865,7 +833,7 @@ export function createConversationPanelController({
       const wasCurrentAnswerCollapsed = messages.at(-1)?.role === "assistant" &&
         getCollapsedAssistantMessageIndexes().has(messages.length - 1);
       applyThread(savedThread);
-      if (allExpandedChronological) {
+      if (allAssistantResponsesExpanded) {
         getCollapsedAssistantMessageIndexes().clear();
       } else {
         collapseHistoricalAssistantResponses(messages.length - 1);
@@ -877,7 +845,7 @@ export function createConversationPanelController({
       if (savedViewActive) {
         await loadSavedQuestionAnswerUnits();
       }
-      render({ scrollToBottom: false, preserveQuestionCloudLayout: true });
+      render({ scrollToBottom: false });
       onChange?.();
     }
 
@@ -1037,7 +1005,8 @@ export function createConversationPanelController({
     renderThreadList();
   }
 
-  function render({ scrollToBottom = true, preserveQuestionCloudLayout = false } = {}) {
+  function render({ scrollToBottom = true } = {}) {
+    syncThreadArchiveButtonVisibility();
     if (savedViewActive) {
       captureSavedCollapseState();
       renderSavedQuestionAnswerUnits(threadElement, savedQuestionAnswerUnits, {
@@ -1066,8 +1035,6 @@ export function createConversationPanelController({
     }
 
     renderConversationMessages(threadElement, messages, {
-      chronologicalMode: allExpandedChronological,
-      preserveQuestionCloudLayout,
       collapsedAssistantMessageIndexes: getCollapsedAssistantMessageIndexes(),
       onAssistantResponseCollapseChange: setAssistantResponseCollapsed,
       onEditUserMessage: editUserMessage,
@@ -1082,9 +1049,6 @@ export function createConversationPanelController({
       onRemoveAssistantCircle: removeAssistantCircle,
       onRemoveAssistantHiddenText: removeAssistantHiddenText
     });
-    const hasAssistantResponses = getAssistantMessageIndexes().length > 0;
-    threadElement.classList.toggle("conversation-chronological-mode", hasAssistantResponses && allExpandedChronological);
-    threadElement.classList.toggle("question-cloud-mode", hasAssistantResponses && !allExpandedChronological);
     if (scrollToBottom) {
       scrollToLatest.scrollToBottom();
     }
@@ -1123,7 +1087,31 @@ export function createConversationPanelController({
   }
 
   function renderThreadList() {
+    syncThreadArchiveButtonVisibility();
+    if (threadArchiveButton.hidden) {
+      return;
+    }
     threadWheel.render();
+  }
+
+  function syncThreadArchiveButtonVisibility() {
+    const shouldShow = Boolean(threadUrl) && !savedViewActive && hasMultipleSinglePaperThreads();
+    threadArchiveButton.hidden = !shouldShow;
+    if (!shouldShow) {
+      threadWheel.close();
+    }
+  }
+
+  function hasMultipleSinglePaperThreads() {
+    const threadIds = new Set(
+      threadSummaries
+        .map((thread) => String(thread?.threadId || "").trim())
+        .filter(Boolean)
+    );
+    if (activeThreadId) {
+      threadIds.add(activeThreadId);
+    }
+    return threadIds.size > 1;
   }
 
   function hasScrollableMessages() {
@@ -1165,7 +1153,7 @@ export function createConversationPanelController({
   }
 
   function resetAssistantResponsesCollapsed() {
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     collapsedAssistantResponsesByThread.set(
       getAssistantCollapseScopeKey(),
       new Set(getAssistantMessageIndexes())
@@ -1179,12 +1167,14 @@ export function createConversationPanelController({
     } else {
       collapsedIndexes.delete(assistantMessageIndex);
     }
+    const indexes = getAssistantMessageIndexes();
+    allAssistantResponsesExpanded = indexes.length > 0 && indexes.every((index) => !collapsedIndexes.has(index));
     onChange?.();
   }
 
   function setAllAssistantResponsesCollapsed(collapsed) {
     const indexes = getAssistantMessageIndexes();
-    allExpandedChronological = !collapsed && indexes.length > 0;
+    allAssistantResponsesExpanded = !collapsed && indexes.length > 0;
     const collapsedIndexes = getCollapsedAssistantMessageIndexes();
     collapsedIndexes.clear();
     if (collapsed) {
@@ -1196,11 +1186,7 @@ export function createConversationPanelController({
     threadElement.querySelectorAll(".conversation-response-toggle").forEach((element) => {
       element.setAttribute("aria-expanded", String(!collapsed));
     });
-    threadElement.classList.toggle("conversation-chronological-mode", allExpandedChronological);
-    threadElement.classList.toggle("question-cloud-mode", indexes.length > 0 && !allExpandedChronological);
-    orderConversationMessageElements(threadElement, messages, allExpandedChronological);
-    scheduleConversationQuestionCloudLayout(threadElement);
-    if (allExpandedChronological) threadElement.scrollTop = 0;
+    if (allAssistantResponsesExpanded) threadElement.scrollTop = 0;
     window.requestAnimationFrame(scrollToLatest.update);
     onChange?.();
   }
@@ -1246,6 +1232,7 @@ export function createConversationPanelController({
     isSavedQuestionAnswerViewActive,
     setAllAssistantResponsesCollapsed,
     areAllAssistantResponsesCollapsed,
+    hasMultipleSinglePaperThreads,
     createThread,
     selectThread,
     deleteThread

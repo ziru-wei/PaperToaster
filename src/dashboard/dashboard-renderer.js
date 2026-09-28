@@ -3,6 +3,7 @@ import {
   getPaperLabelOptions,
   normalizePaperLabel
 } from "../components/paper-label-control.js";
+import { normalizeDocumentUrl } from "../storage/document-key.js";
 
 const FULL_MESSAGE_RING_COUNT = 10;
 const PAPER_CARD_DRAG_LONG_PRESS_MS = 500;
@@ -29,6 +30,7 @@ export function renderPaperList({
   activeDocumentKey,
   activeComparisonId = "",
   activeComparisonDocumentKeys = new Set(),
+  openPaperUrls = new Set(),
   manageMode,
   selectedDocumentKeys,
   selectedComparisonIds = new Set(),
@@ -76,6 +78,7 @@ export function renderPaperList({
         (comparisonMessageCountByDocumentKey.get(record.paper.documentKey) || 0),
       activeDocumentKey,
       activeComparisonDocumentKeys,
+      isOpenInBrowser: openPaperUrls.has(normalizeDocumentUrl(record.paper.canonicalUrl)),
       showMessageRings,
       manageMode,
       selectedDocumentKeys,
@@ -91,6 +94,7 @@ export function renderPaperList({
     });
 
     layout.append(createPaperGroups(paperRecords, createCard, paperGroupMode, {
+      sortId,
       manageMode,
       selectedDocumentKeys,
       onSetPaperGroupSelected,
@@ -135,6 +139,7 @@ function disposeDashboardDrags(container) {
 }
 
 function createPaperGroups(paperRecords, createCard, mode, {
+  sortId,
   manageMode,
   selectedDocumentKeys,
   onSetPaperGroupSelected,
@@ -146,7 +151,7 @@ function createPaperGroups(paperRecords, createCard, mode, {
   const container = document.createElement("div");
   container.className = "paper-card-groups";
   const groups = mode === "recent-conversation"
-    ? createRecentConversationGroups(paperRecords)
+    ? createTimelineGroups(paperRecords, sortId)
     : createLabelGroups(paperRecords, labelGroupOrder, groupOptions);
 
   groups.forEach((group) => {
@@ -896,7 +901,7 @@ function createLabelGroups(paperRecords, preferredOrder = [], groupOptions = [])
   });
 }
 
-function createRecentConversationGroups(paperRecords, now = new Date()) {
+function createTimelineGroups(paperRecords, sortId = "latestThread", now = new Date()) {
   const currentDate = new Date(now);
   const today = startOfLocalDay(currentDate);
   const yesterday = daysBefore(today, 1);
@@ -910,13 +915,18 @@ function createRecentConversationGroups(paperRecords, now = new Date()) {
     { id: "past-fourteen", label: "Past 14 days" },
     { id: "this-month", label: "This month" },
     { id: "earlier", label: "Earlier" },
-    { id: "no-conversations", label: "No conversations" }
+    {
+      id: "no-timestamp",
+      label: sortId === "latestAdded" ? "No added date" : "No conversations"
+    }
   ];
   const recordsByGroup = new Map(definitions.map((definition) => [definition.id, []]));
 
   paperRecords.forEach((record) => {
-    const timestamp = Number(record.paper.lastConversationAt || record.paper.lastThreadStartedAt) || 0;
-    let groupId = "no-conversations";
+    const timestamp = Number(sortId === "latestAdded"
+      ? record.paper.parsedAt
+      : record.paper.lastThreadStartedAt) || 0;
+    let groupId = "no-timestamp";
     if (timestamp >= today) {
       groupId = "today";
     } else if (timestamp >= yesterday) {
@@ -956,7 +966,6 @@ export function renderSortMenu({
   sortMenu,
   sortOptions,
   activeSort,
-  groupingCriterion,
   onSelectSort
 }) {
   const activeOption = sortOptions.find((option) => option.id === activeSort) || sortOptions[0];
@@ -964,14 +973,10 @@ export function renderSortMenu({
   sortMenu.replaceChildren(...sortOptions.map((option) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "sort-menu-option";
-    const isGroupingCriterion = option.id === groupingCriterion;
+    button.className = "click-menu-item sort-menu-option";
     button.classList.toggle("active", option.id === activeSort);
-    button.classList.toggle("grouping-criterion", isGroupingCriterion);
-    button.disabled = isGroupingCriterion;
     button.setAttribute("role", "menuitemradio");
     button.setAttribute("aria-checked", String(option.id === activeSort));
-    button.setAttribute("aria-disabled", String(isGroupingCriterion));
     button.textContent = option.label;
     button.addEventListener("click", () => onSelectSort(option));
     return button;
@@ -988,6 +993,7 @@ function createPaperCard({
   activityMessageCount,
   activeDocumentKey,
   activeComparisonDocumentKeys,
+  isOpenInBrowser,
   showMessageRings,
   manageMode,
   selectedDocumentKeys,
@@ -1029,7 +1035,7 @@ function createPaperCard({
       return;
     }
 
-    if (manageMode) {
+    if (event.shiftKey) {
       onTogglePaperSelection(paper.documentKey);
       return;
     }
@@ -1049,12 +1055,20 @@ function createPaperCard({
       return;
     }
 
+    if (event.key === "Enter" && manageMode && !event.shiftKey) {
+      return;
+    }
+
+    if (event.key === "Enter" && isActive && !manageMode && !event.shiftKey) {
+      return;
+    }
+
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
 
     event.preventDefault();
-    if (manageMode) {
+    if (event.shiftKey) {
       onTogglePaperSelection(paper.documentKey);
       return;
     }
@@ -1097,11 +1111,18 @@ function createPaperCard({
     enforceLimit: libraryView !== "archive"
   }));
   footer.append(meta);
+  const openIndicator = document.createElement("span");
+  openIndicator.className = "paper-open-indicator";
+  openIndicator.hidden = !isOpenInBrowser;
+  openIndicator.setAttribute("role", "img");
+  openIndicator.setAttribute("aria-label", "Paper is open in the browser");
+  footer.append(openIndicator);
 
   main.append(topRow, footer);
   card.append(main);
   return card;
 }
+
 
 function createComparisonRecordCard({
   comparison,
@@ -1135,7 +1156,7 @@ function createComparisonRecordCard({
       return;
     }
 
-    if (manageMode) {
+    if (event.shiftKey) {
       onToggleComparisonSelection(comparison.comparisonId);
       return;
     }
@@ -1147,12 +1168,20 @@ function createComparisonRecordCard({
       return;
     }
 
+    if (event.key === "Enter" && manageMode && !event.shiftKey) {
+      return;
+    }
+
+    if (event.key === "Enter" && isActive && !manageMode && !event.shiftKey) {
+      return;
+    }
+
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
 
     event.preventDefault();
-    if (manageMode) {
+    if (event.shiftKey) {
       onToggleComparisonSelection(comparison.comparisonId);
       return;
     }
@@ -1250,15 +1279,9 @@ function sortDashboardRecords(records, sortId, libraryView = "board") {
     if (libraryView === "archive") {
       return compareNumber(getRecordArchivedAt(right), getRecordArchivedAt(left)) || compareRecordTitle(left, right);
     }
-    if (sortId === "label" && left.type === "single-paper" && right.type === "single-paper") {
-      return compareRecordLabels(left, right) || compareRecordTitle(left, right);
-    }
-
-    if (sortId === "starred") {
-      return compareNumber(getRecordStarred(right), getRecordStarred(left)) || compareRecordTime(right, left) || compareRecordTitle(left, right);
-    }
-
-    return compareRecordTime(right, left) || compareRecordTitle(left, right);
+    return compareNumber(getRecordStarred(right), getRecordStarred(left))
+      || compareNumber(getRecordSortTime(right, sortId), getRecordSortTime(left, sortId))
+      || compareRecordTitle(left, right);
   });
 }
 
@@ -1266,22 +1289,6 @@ function getRecordArchivedAt(record) {
   return Number(record.type === "comparative-reading"
     ? record.comparison.archivedAt
     : record.paper.archivedAt) || 0;
-}
-
-function compareRecordLabels(left, right) {
-  const leftLabel = normalizePaperLabel(left.paper.group);
-  const rightLabel = normalizePaperLabel(right.paper.group);
-  if (!leftLabel && rightLabel) {
-    return 1;
-  }
-  if (leftLabel && !rightLabel) {
-    return -1;
-  }
-  return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
-}
-
-function compareRecordTime(left, right) {
-  return compareNumber(getRecordLatestTime(left), getRecordLatestTime(right));
 }
 
 function compareRecordTitle(left, right) {
@@ -1292,12 +1299,17 @@ function getRecordTitle(record) {
   return record.type === "comparative-reading" ? record.comparison.title : record.paper.title;
 }
 
-function getRecordLatestTime(record) {
+function getRecordSortTime(record, sortId) {
+  if (sortId === "latestAdded") {
+    return Number(record.type === "comparative-reading"
+      ? record.comparison.createdAt
+      : record.paper.parsedAt) || 0;
+  }
   if (record.type === "comparative-reading") {
     return Number(record.comparison.updatedAt) || 0;
   }
 
-  return Number(record.paper.lastThreadStartedAt || record.paper.updatedAt) || 0;
+  return Number(record.paper.lastThreadStartedAt) || 0;
 }
 
 function getRecordStarred(record) {

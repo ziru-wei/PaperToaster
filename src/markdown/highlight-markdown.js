@@ -49,6 +49,50 @@ export function removeMarkdownHiddenText(markdown, hiddenIndex, groupId = "") {
   return removeMarkdownAnnotation(markdown, hiddenIndex, collectMarkdownHiddenTextRanges, "hidden-text-not-found", groupId);
 }
 
+export function prepareAnnotatedMarkdownForExport(markdown) {
+  const source = String(markdown || "");
+  const annotations = [
+    ...collectMarkdownHiddenTextRanges(source).map((range) => ({ ...range, type: "hidden" })),
+    ...collectMarkdownHighlightRanges(source).map((range) => ({ ...range, type: "bold" })),
+    ...collectMarkdownCircleRanges(source).map((range) => ({ ...range, type: "bold" }))
+  ].sort((left, right) => left.start - right.start || annotationPriority(left) - annotationPriority(right));
+  if (!annotations.length) {
+    return source;
+  }
+
+  let output = "";
+  let cursor = 0;
+  for (const annotation of annotations) {
+    if (annotation.start < cursor) {
+      continue;
+    }
+    output += source.slice(cursor, annotation.start);
+    if (annotation.type === "bold") {
+      const content = annotation.encoded
+        ? annotation.replacementText
+        : source.slice(annotation.contentStart, annotation.contentEnd);
+      output += wrapExportedBold(content);
+    }
+    cursor = annotation.end;
+  }
+  output += source.slice(cursor);
+  return output;
+}
+
+function annotationPriority(annotation) {
+  return annotation.type === "hidden" ? 0 : 1;
+}
+
+function wrapExportedBold(content) {
+  const value = String(content || "");
+  const trimmed = value.trim();
+  if (/^\*\*[\s\S]*\*\*$/.test(trimmed)) {
+    return value;
+  }
+  const match = /^(\s*)([\s\S]*?\S)(\s*)$/.exec(value);
+  return match ? `${match[1]}**${match[2]}**${match[3]}` : value;
+}
+
 function applyPlainMarkdownHighlight(markdown, selectedText) {
   const source = String(markdown || "");
   const needle = String(selectedText || "").trim();

@@ -2,26 +2,25 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { loadPaperReadingSkillPrompt } from "./paper-reading-skill.js";
+import { ensureAgentsMarkdown } from "./local-agent-agents-file.js";
 import { deleteCodexSession, runCodex } from "./local-agent-codex-runner.js";
 import {
   cleanupSessionTempFiles,
   computePaperFingerprint,
   deleteSessionRecord,
   getSessionDirectory,
-  hashText,
   readSessionRecord,
   validateConversationIdentity,
   withConversationLock,
   writeSessionRecord
 } from "./local-agent-session-store.js";
 import {
-  cleanupStaleRequestDirectories,
   deleteManagedDocument,
   getManagedDocumentStatus,
-  materializeRequestDocuments,
+  materializeThreadDocuments,
   putManagedDocument,
-  removeRequestDocuments
+  removeThreadDocuments,
+  resetThreadDocumentsRoot
 } from "./local-agent-document-store.js";
 
 const HOST = "127.0.0.1";
@@ -170,10 +169,12 @@ const server = http.createServer(async (request, response) => {
 });
 
 try {
-  const removed = await cleanupStaleRequestDirectories(AGENT_WORKDIR);
-  if (removed) console.log(`[Paper Toaster] Removed ${removed} stale request director${removed === 1 ? "y" : "ies"}.`);
+  // Thread-scoped paper files persist for the life of this process (see
+  // materializeThreadDocuments); each bridge start gets a clean slate instead
+  // of carrying them across restarts indefinitely.
+  await resetThreadDocumentsRoot(AGENT_WORKDIR);
 } catch (error) {
-  console.warn(`[Paper Toaster] Stale request cleanup failed: ${error.message || String(error)}`);
+  console.warn(`[Paper Toaster] Thread document reset failed: ${error.message || String(error)}`);
 }
 try {
   await cleanupSessionTempFiles(SESSION_DIR);
@@ -190,54 +191,51 @@ server.listen(PORT, HOST, () => {
 async function runTrackedAsk(body, signal, response) {
   const { mode, conversationKey } = body;
   const fingerprint = computePaperFingerprint(mode, body.papers);
-  const skillPrompt = await loadPaperReadingSkillPrompt({ mode });
-  const skillHash = hashText(skillPrompt);
-  const systemPromptHash = hashText(body.systemPrompt || "");
   let record = await readSessionRecord(SESSION_DIR, mode, conversationKey);
-  if (record && (record.paperFingerprint !== fingerprint || record.skillHash !== skillHash)) {
+  if (record && record.paperFingerprint !== fingerprint) {
     await retireSession(record);
     record = null;
   }
-  let materialized = null;
+  const materialized = await materializeThreadDocuments({
+    agentWorkdir: AGENT_WORKDIR, mode, conversationKey, papers: body.papers
+  });
+  signal.throwIfAborted();
+  await ensureAgentsMarkdown({ agentWorkdir: AGENT_WORKDIR, systemPrompt: body.systemPrompt });
+  signal.throwIfAborted();
+  const prompt = record
+    ? buildResumePrompt(body, materialized.files)
+    : buildFileReadingPrompt(body, materialized.files);
+  let result;
   try {
-    materialized = await materializeRequestDocuments({ agentWorkdir: AGENT_WORKDIR, papers: body.papers });
-    signal.throwIfAborted();
-    const prompt = record
-      ? buildResumePrompt(body, materialized.files, record.systemPromptHash !== systemPromptHash)
-      : buildFileReadingPrompt(body, materialized.files, skillPrompt);
-    let result;
-    try {
-      result = await callCodex(prompt, body, signal, { agentSessionId: record?.agentSessionId || "" });
-      if (response.destroyed || signal.aborted) throw new Error("Client disconnected before the answer was delivered.");
-      const now = Math.max(Date.now(), record?.createdAt || 0);
-      await writeSessionRecord(SESSION_DIR, {
-        version: 1, mode, conversationKey,
-        agentSessionId: result.agentSessionId,
-        paperFingerprint: fingerprint, skillHash, systemPromptHash,
-        createdAt: record?.createdAt || now,
-        lastUsedAt: now
-      });
-      return result;
-    } catch (error) {
-      if (error.cliStarted || result) {
-        await deleteSessionRecord(SESSION_DIR, mode, conversationKey);
-        const ids = new Set([error.startedSessionId, result?.agentSessionId, record?.agentSessionId].filter(Boolean));
-        for (const id of ids) {
-          await deleteCodexSession(id, { binary: CODEX_BIN, cwd: AGENT_WORKDIR }).catch((cleanupError) => {
-            console.warn(`[Paper Toaster] Failed to delete an invalidated Codex session: ${cleanupError.message || cleanupError}`);
-          });
-        }
+    result = await callCodex(prompt, body, signal, { agentSessionId: record?.agentSessionId || "" });
+    if (response.destroyed || signal.aborted) throw new Error("Client disconnected before the answer was delivered.");
+    const now = Math.max(Date.now(), record?.createdAt || 0);
+    await writeSessionRecord(SESSION_DIR, {
+      version: 1, mode, conversationKey,
+      agentSessionId: result.agentSessionId,
+      paperFingerprint: fingerprint,
+      createdAt: record?.createdAt || now,
+      lastUsedAt: now
+    });
+    return result;
+  } catch (error) {
+    if (error.cliStarted || result) {
+      await deleteSessionRecord(SESSION_DIR, mode, conversationKey);
+      const ids = new Set([error.startedSessionId, result?.agentSessionId, record?.agentSessionId].filter(Boolean));
+      for (const id of ids) {
+        await deleteCodexSession(id, { binary: CODEX_BIN, cwd: AGENT_WORKDIR }).catch((cleanupError) => {
+          console.warn(`[Paper Toaster] Failed to delete an invalidated Codex session: ${cleanupError.message || cleanupError}`);
+        });
       }
-      throw error;
     }
-  } finally {
-    await removeRequestDocuments(materialized?.requestDirectory);
+    throw error;
   }
 }
 
 async function retireSession(record) {
   await deleteCodexSession(record.agentSessionId, { binary: CODEX_BIN, cwd: AGENT_WORKDIR });
   await deleteSessionRecord(SESSION_DIR, record.mode, record.conversationKey);
+  await removeThreadDocuments(AGENT_WORKDIR, record.mode, record.conversationKey);
 }
 
 async function callCodex(prompt, body, signal, { agentSessionId = "", ephemeral = false } = {}) {
@@ -253,14 +251,12 @@ async function callCodex(prompt, body, signal, { agentSessionId = "", ephemeral 
   };
 }
 
-function buildFileReadingPrompt(body, files, skillPrompt) {
+function buildFileReadingPrompt(body, files) {
   return [
     "You are serving as paper reading assistant.",
+    "Follow the paper-reading skill instructions and any additional answer instructions in this working directory's AGENTS.md.",
     "Return only the answer to the user's question.",
     "",
-    skillPrompt,
-    "",
-    ...(body.systemPrompt ? ["Additional answer instructions:", body.systemPrompt, ""] : []),
     `Mode: ${body.mode}`,
     ...files.flatMap((file) => [`Paper title: ${JSON.stringify(file.title)}`, `Paper file: ${file.relativePath}`]),
     ...(body.selectionText ? [`Selected text: ${body.selectionText}`] : []),
@@ -268,11 +264,10 @@ function buildFileReadingPrompt(body, files, skillPrompt) {
   ].join("\n");
 }
 
-function buildResumePrompt(body, files, systemPromptChanged) {
+function buildResumePrompt(body, files) {
   return [
     "Continue this paper-reading conversation. Return only the answer to the current question.",
     "Read the current paper file(s) below; prior request-scoped paths no longer exist. Use their citation IDs when citing evidence.",
-    ...(systemPromptChanged ? ["Updated additional answer instructions (supersede all prior additional answer instructions):", body.systemPrompt || "(none)"] : []),
     `Mode: ${body.mode}`,
     ...files.flatMap((file) => [`Paper title: ${JSON.stringify(file.title)}`, `Paper file: ${file.relativePath}`]),
     ...(body.selectionText ? [`Selected text: ${body.selectionText}`] : []),

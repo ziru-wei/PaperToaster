@@ -22224,7 +22224,7 @@ function $appendNodesToHTML(editor, currentNode, parentElementAppend, selection 
   const {
     element,
     after,
-    append,
+    append: append2,
     $getChildNodes
   } = exportProps;
   if (!element) {
@@ -22246,8 +22246,8 @@ function $appendNodesToHTML(editor, currentNode, parentElementAppend, selection 
   }
   if (shouldInclude && !shouldExclude) {
     if (isHTMLElement2(element) || isDocumentFragment2(element)) {
-      if (append) {
-        append(fragment);
+      if (append2) {
+        append2(fragment);
       } else {
         element.append(fragment);
       }
@@ -25564,6 +25564,6539 @@ var HistoryExtension2 = mod10.HistoryExtension;
 var SharedHistoryExtension2 = mod10.SharedHistoryExtension;
 var createEmptyHistoryState2 = mod10.createEmptyHistoryState;
 var registerHistory2 = mod10.registerHistory;
+
+// node_modules/@lexical/list/dist/LexicalList.dev.mjs
+var LexicalList_dev_exports = {};
+__export(LexicalList_dev_exports, {
+  $createListItemNode: () => $createListItemNode,
+  $createListNode: () => $createListNode,
+  $getListDepth: () => $getListDepth,
+  $handleListInsertParagraph: () => $handleListInsertParagraph,
+  $insertList: () => $insertList,
+  $isListItemNode: () => $isListItemNode,
+  $isListNode: () => $isListNode,
+  $removeList: () => $removeList,
+  CheckListExtension: () => CheckListExtension,
+  INSERT_CHECK_LIST_COMMAND: () => INSERT_CHECK_LIST_COMMAND,
+  INSERT_ORDERED_LIST_COMMAND: () => INSERT_ORDERED_LIST_COMMAND,
+  INSERT_UNORDERED_LIST_COMMAND: () => INSERT_UNORDERED_LIST_COMMAND,
+  ListExtension: () => ListExtension,
+  ListImportExtension: () => ListImportExtension,
+  ListImportRules: () => ListImportRules,
+  ListItemNode: () => ListItemNode,
+  ListNode: () => ListNode,
+  ListSchema: () => ListSchema,
+  REMOVE_LIST_COMMAND: () => REMOVE_LIST_COMMAND,
+  UPDATE_LIST_START_COMMAND: () => UPDATE_LIST_START_COMMAND,
+  WordListImportExtension: () => WordListImportExtension,
+  registerCheckList: () => registerCheckList,
+  registerList: () => registerList,
+  registerListStrictIndentTransform: () => registerListStrictIndentTransform
+});
+function formatDevErrorMessage7(message) {
+  throw new Error(message);
+}
+function $getListDepth(listNode) {
+  let depth = 1;
+  let parent = listNode.getParent();
+  while (parent != null) {
+    if ($isListItemNode(parent)) {
+      const parentList = parent.getParent();
+      if ($isListNode(parentList)) {
+        depth++;
+        parent = parentList.getParent();
+        continue;
+      }
+      {
+        formatDevErrorMessage7(`A ListItemNode must have a ListNode for a parent.`);
+      }
+    }
+    return depth;
+  }
+  return depth;
+}
+function $getTopListNode(listItem) {
+  const parentList = listItem.getParent();
+  if (!$isListNode(parentList)) {
+    {
+      formatDevErrorMessage7(`A ListItemNode must have a ListNode for a parent.`);
+    }
+  }
+  let list = parentList;
+  let parent = parentList;
+  while (parent !== null) {
+    parent = parent.getParent();
+    if ($isListNode(parent)) {
+      list = parent;
+    }
+  }
+  return list;
+}
+function $getAllListItems(node) {
+  let listItemNodes = [];
+  const listChildren = node.getChildren().filter($isListItemNode);
+  for (let i2 = 0; i2 < listChildren.length; i2++) {
+    const listItemNode = listChildren[i2];
+    const firstChild = listItemNode.getFirstChild();
+    if ($isListNode(firstChild)) {
+      listItemNodes = listItemNodes.concat($getAllListItems(firstChild));
+    } else {
+      listItemNodes.push(listItemNode);
+    }
+  }
+  return listItemNodes;
+}
+function $isNestedListNode(node) {
+  return $isListItemNode(node) && $isListNode(node.getFirstChild());
+}
+function $removeHighestEmptyListParent(sublist) {
+  let emptyListPtr = sublist;
+  while (emptyListPtr.getNextSibling() == null && emptyListPtr.getPreviousSibling() == null) {
+    const parent = emptyListPtr.getParent();
+    if (parent == null || !($isListItemNode(parent) || $isListNode(parent))) {
+      break;
+    }
+    emptyListPtr = parent;
+  }
+  emptyListPtr.remove();
+}
+function $getNewListStart(list, listItem) {
+  return listItem.getValue();
+}
+function $isSelectingEmptyListItem(anchorNode, nodes) {
+  return $isListItemNode(anchorNode) && (nodes.length === 0 || nodes.length === 1 && anchorNode.is(nodes[0]) && anchorNode.getChildrenSize() === 0);
+}
+function $newListFrom(list, listType) {
+  return $isListNode(list) ? $copyNode2(list).setListType(listType) : $createListNode(listType);
+}
+function $insertList(listType) {
+  const selection = $getSelection2();
+  if (selection !== null) {
+    let nodes = selection.getNodes();
+    if ($isRangeSelection2(selection)) {
+      const [anchor] = selection.getStartEndPoints();
+      const anchorNode = anchor.getNode();
+      const anchorNodeParent = anchorNode.getParent();
+      if ($isRootOrShadowRoot2(anchorNode)) {
+        const firstChild = anchorNode.getFirstChild();
+        if (firstChild) {
+          nodes = firstChild.selectStart().getNodes();
+        } else {
+          const paragraph = $createParagraphNode2();
+          anchorNode.append(paragraph);
+          nodes = paragraph.select().getNodes();
+        }
+      } else if ($isSelectingEmptyListItem(anchorNode, nodes)) {
+        if ($isRootOrShadowRoot2(anchorNodeParent)) {
+          const list = $createListNode(listType);
+          anchorNode.replace(list);
+          const listItem = $createListItemNode();
+          if ($isElementNode2(anchorNode)) {
+            listItem.setFormat(anchorNode.getFormatType());
+            listItem.setIndent(anchorNode.getIndent());
+          }
+          list.append(listItem);
+        } else if ($isListItemNode(anchorNode)) {
+          const parent = anchorNode.getParentOrThrow();
+          if ($getSlotHost2(parent) === null) {
+            const list = $newListFrom(parent, listType);
+            append(list, parent.getChildren());
+            parent.replace(list);
+          }
+        }
+        return;
+      }
+    }
+    const handled = /* @__PURE__ */ new Set();
+    for (let i2 = 0; i2 < nodes.length; i2++) {
+      const node = nodes[i2];
+      if ($isElementNode2(node) && node.isEmpty() && !$isListItemNode(node) && // A named-slot value's slot assignment is managed by the node or
+      // extension that owns the slot, so it is not eligible for list
+      // conversion (see $setBlocksType).
+      $getSlotHost2(node) === null && !handled.has(node.getKey())) {
+        $createListOrMerge(node, listType);
+        continue;
+      }
+      let parent = $isLeafNode2(node) ? node.getParent() : $isListItemNode(node) && node.isEmpty() ? node : null;
+      while (parent != null) {
+        const parentKey = parent.getKey();
+        if ($isListNode(parent)) {
+          if (!handled.has(parentKey) && $getSlotHost2(parent) === null) {
+            const newListNode = $newListFrom(parent, listType);
+            append(newListNode, parent.getChildren());
+            parent.replace(newListNode);
+            handled.add(parentKey);
+          }
+          break;
+        } else {
+          const nextParent = parent.getParent();
+          if ($isRootOrShadowRoot2(nextParent) && !handled.has(parentKey)) {
+            handled.add(parentKey);
+            $createListOrMerge(parent, listType);
+            break;
+          }
+          parent = nextParent;
+        }
+      }
+    }
+  }
+}
+function append(node, nodesToAppend) {
+  node.splice(node.getChildrenSize(), 0, nodesToAppend);
+}
+function $createListOrMerge(node, listType) {
+  if ($isListNode(node)) {
+    return node;
+  }
+  const previousSibling = node.getPreviousSibling();
+  const nextSibling = node.getNextSibling();
+  const listItem = $createListItemNode();
+  append(listItem, node.getChildren());
+  let targetList;
+  if ($isListNode(previousSibling) && listType === previousSibling.getListType()) {
+    previousSibling.append(listItem);
+    if ($isListNode(nextSibling) && listType === nextSibling.getListType()) {
+      append(previousSibling, nextSibling.getChildren());
+      nextSibling.remove();
+    }
+    targetList = previousSibling;
+  } else if ($isListNode(nextSibling) && listType === nextSibling.getListType()) {
+    nextSibling.getFirstChildOrThrow().insertBefore(listItem);
+    targetList = nextSibling;
+  } else {
+    const list = $createListNode(listType);
+    list.append(listItem);
+    node.replace(list);
+    targetList = list;
+  }
+  listItem.setFormat(node.getFormatType());
+  listItem.setIndent(node.getIndent());
+  const selection = $getSelection2();
+  if ($isRangeSelection2(selection)) {
+    if (targetList.getKey() === selection.anchor.key) {
+      selection.anchor.set(listItem.getKey(), selection.anchor.offset, "element");
+    }
+    if (targetList.getKey() === selection.focus.key) {
+      selection.focus.set(listItem.getKey(), selection.focus.offset, "element");
+    }
+  }
+  node.remove();
+  return targetList;
+}
+function mergeLists(list1, list2) {
+  const listItem1 = list1.getLastChild();
+  const listItem2 = list2.getFirstChild();
+  if (listItem1 && listItem2 && $isNestedListNode(listItem1) && $isNestedListNode(listItem2) && // A nested <ul> must not swallow a nested <ol>, same rule as
+  // mergeNextSiblingListIfSameType applies at the top level.
+  listItem1.getFirstChild().getListType() === listItem2.getFirstChild().getListType()) {
+    mergeLists(listItem1.getFirstChild(), listItem2.getFirstChild());
+    listItem2.remove();
+  }
+  const toMerge = list2.getChildren();
+  if (toMerge.length > 0) {
+    list1.append(...toMerge);
+  }
+  list2.remove();
+}
+function $removeList() {
+  const selection = $getSelection2();
+  if ($isRangeSelection2(selection)) {
+    const listNodes = /* @__PURE__ */ new Set();
+    const nodes = selection.getNodes();
+    const anchorNode = selection.anchor.getNode();
+    if ($isSelectingEmptyListItem(anchorNode, nodes)) {
+      listNodes.add($getTopListNode(anchorNode));
+    } else {
+      for (let i2 = 0; i2 < nodes.length; i2++) {
+        const node = nodes[i2];
+        if ($isLeafNode2(node)) {
+          const listItemNode = $getNearestNodeOfType2(node, ListItemNode);
+          if (listItemNode != null) {
+            listNodes.add($getTopListNode(listItemNode));
+          }
+        }
+      }
+    }
+    for (const listNode of listNodes) {
+      if ($getSlotHost2(listNode) !== null) {
+        continue;
+      }
+      let insertionPoint = listNode;
+      const listItems = $getAllListItems(listNode);
+      for (const listItemNode of listItems) {
+        const paragraph = $createParagraphNode2().setTextStyle(selection.style).setTextFormat(selection.format);
+        paragraph.setFormat(listItemNode.getFormatType()).setIndent(listItemNode.getIndent()).setDirection(listItemNode.getDirection()).setStyle(listItemNode.getStyle());
+        append(paragraph, listItemNode.getChildren());
+        insertionPoint.insertAfter(paragraph);
+        insertionPoint = paragraph;
+        if (listItemNode.__key === selection.anchor.key) {
+          $setPointFromCaret2(selection.anchor, $normalizeCaret2($getChildCaret2(paragraph, "next")));
+        }
+        if (listItemNode.__key === selection.focus.key) {
+          $setPointFromCaret2(selection.focus, $normalizeCaret2($getChildCaret2(paragraph, "next")));
+        }
+        listItemNode.remove();
+      }
+      listNode.remove();
+    }
+  }
+}
+function updateChildrenListItemValue(list) {
+  const isNotChecklist = list.getListType() !== "check";
+  let value = list.getStart();
+  for (const child of list.getChildren()) {
+    if ($isListItemNode(child)) {
+      if (child.getValue() !== value) {
+        child.setValue(value);
+      }
+      if (isNotChecklist && child.getLatest().__checked != null) {
+        child.setChecked(void 0);
+      }
+      if (!$isListNode(child.getFirstChild())) {
+        value++;
+      }
+    }
+  }
+}
+function mergeNextSiblingListIfSameType(list) {
+  const nextSibling = list.getNextSibling();
+  if ($isListNode(nextSibling) && list.getListType() === nextSibling.getListType()) {
+    mergeLists(list, nextSibling);
+  }
+}
+function $handleIndent(listItemNode) {
+  const removed = /* @__PURE__ */ new Set();
+  if ($isNestedListNode(listItemNode) || removed.has(listItemNode.getKey())) {
+    return;
+  }
+  const parent = listItemNode.getParent();
+  const nextSibling = listItemNode.getNextSibling();
+  const previousSibling = listItemNode.getPreviousSibling();
+  if ($isNestedListNode(nextSibling) && $isNestedListNode(previousSibling)) {
+    const innerList = previousSibling.getFirstChild();
+    if ($isListNode(innerList)) {
+      innerList.append(listItemNode);
+      const nextInnerList = nextSibling.getFirstChild();
+      if ($isListNode(nextInnerList)) {
+        const children = nextInnerList.getChildren();
+        append(innerList, children);
+        nextSibling.remove();
+        removed.add(nextSibling.getKey());
+      }
+    }
+  } else if ($isNestedListNode(nextSibling)) {
+    const innerList = nextSibling.getFirstChild();
+    if ($isListNode(innerList)) {
+      const firstChild = innerList.getFirstChild();
+      if (firstChild !== null) {
+        firstChild.insertBefore(listItemNode);
+      }
+    }
+  } else if ($isNestedListNode(previousSibling)) {
+    const innerList = previousSibling.getFirstChild();
+    if ($isListNode(innerList)) {
+      innerList.append(listItemNode);
+    }
+  } else {
+    if ($isListNode(parent)) {
+      const newListItem = $copyNode2(listItemNode);
+      const newList = $copyNode2(parent);
+      newListItem.append(newList);
+      newList.append(listItemNode);
+      if (previousSibling) {
+        previousSibling.insertAfter(newListItem);
+      } else if (nextSibling) {
+        nextSibling.insertBefore(newListItem);
+      } else {
+        parent.append(newListItem);
+      }
+    }
+  }
+}
+function $handleOutdent(listItemNode) {
+  if ($isNestedListNode(listItemNode)) {
+    return;
+  }
+  const parentList = listItemNode.getParent();
+  const grandparentListItem = parentList ? parentList.getParent() : void 0;
+  const greatGrandparentList = grandparentListItem ? grandparentListItem.getParent() : void 0;
+  if ($isListNode(greatGrandparentList) && $isListItemNode(grandparentListItem) && $isListNode(parentList)) {
+    const firstChild = parentList ? parentList.getFirstChild() : void 0;
+    const lastChild = parentList ? parentList.getLastChild() : void 0;
+    if (listItemNode.is(firstChild)) {
+      grandparentListItem.insertBefore(listItemNode);
+      if (parentList.isEmpty()) {
+        grandparentListItem.remove();
+      }
+    } else if (listItemNode.is(lastChild)) {
+      grandparentListItem.insertAfter(listItemNode);
+      if (parentList.isEmpty()) {
+        grandparentListItem.remove();
+      }
+    } else {
+      const previousSiblingsListItem = $copyNode2(listItemNode);
+      const previousSiblingsList = $copyNode2(parentList);
+      previousSiblingsListItem.append(previousSiblingsList);
+      listItemNode.getPreviousSiblings().forEach((sibling) => previousSiblingsList.append(sibling));
+      const nextSiblingsListItem = $copyNode2(listItemNode);
+      const nextSiblingsList = $copyNode2(parentList);
+      nextSiblingsListItem.append(nextSiblingsList);
+      append(nextSiblingsList, listItemNode.getNextSiblings());
+      grandparentListItem.insertBefore(previousSiblingsListItem);
+      grandparentListItem.insertAfter(nextSiblingsListItem);
+      grandparentListItem.replace(listItemNode);
+    }
+  }
+}
+function $handleListInsertParagraph(restoreNumbering = false) {
+  const selection = $getSelection2();
+  if (!$isRangeSelection2(selection) || !selection.isCollapsed()) {
+    return false;
+  }
+  const anchor = selection.anchor.getNode();
+  let listItem = null;
+  if ($isListItemNode(anchor) && anchor.getChildrenSize() === 0) {
+    listItem = anchor;
+  } else if ($isTextNode2(anchor)) {
+    const parentListItem = anchor.getParent();
+    if ($isListItemNode(parentListItem) && parentListItem.getChildren().every((node) => $isTextNode2(node) && node.getTextContent().trim() === "")) {
+      listItem = parentListItem;
+    }
+  }
+  if (listItem === null) {
+    return false;
+  }
+  const topListNode = $getTopListNode(listItem);
+  const parent = listItem.getParent();
+  if (!$isListNode(parent)) {
+    formatDevErrorMessage7(`A ListItemNode must have a ListNode for a parent.`);
+  }
+  const grandparent = parent.getParent();
+  let replacementNode;
+  if ($isRootOrShadowRoot2(grandparent)) {
+    replacementNode = $createParagraphNode2();
+    topListNode.insertAfter(replacementNode);
+  } else if ($isListItemNode(grandparent)) {
+    replacementNode = $copyNode2(grandparent);
+    grandparent.insertAfter(replacementNode);
+  } else {
+    return false;
+  }
+  replacementNode.setTextStyle(selection.style).setTextFormat(selection.format).select();
+  const nextSiblings = listItem.getNextSiblings();
+  if (nextSiblings.length > 0) {
+    const newStart = restoreNumbering ? $getNewListStart(parent, listItem) : 1;
+    const newList = $copyNode2(parent).setStart(newStart);
+    if ($isListItemNode(replacementNode)) {
+      const newListItem = $copyNode2(replacementNode);
+      newListItem.append(newList);
+      replacementNode.insertAfter(newListItem);
+    } else {
+      replacementNode.insertAfter(newList);
+    }
+    newList.append(...nextSiblings);
+  }
+  $removeHighestEmptyListParent(listItem);
+  return true;
+}
+function applyMarkerStyles(dom, node, prevNode) {
+  const nextTextStyle = node.__textStyle;
+  const prevTextStyle = prevNode ? prevNode.__textStyle : "";
+  if (prevNode !== null && prevTextStyle === nextTextStyle) {
+    return;
+  }
+  const styles = getStyleObjectFromCSS2(nextTextStyle);
+  for (const k in styles) {
+    dom.style.setProperty(`--listitem-marker-${k}`, styles[k]);
+  }
+  if (prevTextStyle !== "") {
+    for (const k in getStyleObjectFromCSS2(prevTextStyle)) {
+      if (!(k in styles)) {
+        dom.style.removeProperty(`--listitem-marker-${k}`);
+      }
+    }
+  }
+}
+var ListItemNode = class extends ElementNode2 {
+  /** @internal */
+  __value;
+  /** @internal */
+  __checked;
+  /** @internal */
+  $config() {
+    return this.config("listitem", {
+      $transform: (node) => {
+        const parent = node.getParent();
+        if ($isListNode(parent)) {
+          if (parent.getListType() !== "check" && node.getChecked() != null) {
+            node.setChecked(void 0);
+          }
+        } else if (parent) {
+          const newParent = node.createParentElementNode();
+          if (!$isListNode(newParent)) {
+            formatDevErrorMessage7(`ListItemNode.createParentElementNode() must return a ListNode`);
+          }
+          const children = [node];
+          for (const dir of ["previous", "next"]) {
+            children.reverse();
+            for (const {
+              origin
+            } of $getSiblingCaret2(node, dir)) {
+              if (!$isListItemNode(origin)) {
+                break;
+              }
+              children.push(origin);
+            }
+          }
+          node.insertBefore(newParent);
+          newParent.splice(0, 0, children);
+          if (!$isRootOrShadowRoot2(parent)) {
+            $insertNodeToNearestRootAtCaret2(newParent, $rewindSiblingCaret2($getSiblingCaret2(newParent, "next")), {
+              $shouldSplit: () => false,
+              removeEmptyDestination: true
+            });
+            if (parent.isEmpty() && parent.isAttached()) {
+              parent.remove();
+            }
+          }
+        }
+      },
+      extends: ElementNode2,
+      importDOM: buildImportMap2({
+        li: () => ({
+          conversion: $convertListItemElement,
+          priority: 0
+        })
+      })
+    });
+  }
+  constructor(value = 1, checked = void 0, key) {
+    super(key);
+    this.__value = value === void 0 ? 1 : value;
+    this.__checked = checked;
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__value = prevNode.__value;
+    this.__checked = prevNode.__checked;
+  }
+  createDOM(config) {
+    const element = $getDocument2().createElement("li");
+    this.updateListItemDOM(null, element, config);
+    return element;
+  }
+  updateListItemDOM(prevNode, dom, config) {
+    updateListItemChecked(dom, this);
+    dom.value = this.__value;
+    $setListItemThemeClassNames(dom, config.theme, this);
+    const prevStyle = prevNode ? prevNode.__style : "";
+    const nextStyle = this.__style;
+    if (prevStyle !== nextStyle) {
+      setDOMStyleFromCSS2(dom.style, nextStyle, prevStyle);
+    }
+    applyMarkerStyles(dom, this, prevNode);
+  }
+  updateDOM(prevNode, dom, config) {
+    const element = dom;
+    this.updateListItemDOM(prevNode, element, config);
+    return false;
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setValue(serializedNode.value).setChecked(serializedNode.checked);
+  }
+  exportDOM(editor) {
+    const element = this.createDOM(editor._config);
+    const formatType = this.getFormatType();
+    if (formatType) {
+      element.style.textAlign = formatType;
+    }
+    const direction = this.getDirection();
+    if (direction) {
+      element.dir = direction;
+    }
+    if ($isNestedListNode(this)) {
+      return {
+        after(containerElement) {
+          if (isHTMLElement2(containerElement)) {
+            const prevSibling = containerElement.previousElementSibling;
+            if (isHTMLElement2(prevSibling) && prevSibling.nodeName === "LI") {
+              while (containerElement.firstChild) {
+                prevSibling.append(containerElement.firstChild);
+              }
+              containerElement.remove();
+            }
+          }
+          return containerElement;
+        },
+        element
+      };
+    }
+    return {
+      element
+    };
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      checked: this.getChecked(),
+      value: this.getValue()
+    };
+  }
+  append(...nodes) {
+    for (let i2 = 0; i2 < nodes.length; i2++) {
+      const node = nodes[i2];
+      if ($isElementNode2(node) && this.canMergeWith(node)) {
+        const children = node.getChildren();
+        this.append(...children);
+        node.remove();
+      } else {
+        super.append(node);
+      }
+    }
+    return this;
+  }
+  replace(replaceWithNode, includeChildren) {
+    if ($isListItemNode(replaceWithNode)) {
+      return super.replace(replaceWithNode);
+    }
+    this.setIndent(0);
+    const list = this.getParentOrThrow();
+    if (!$isListNode(list)) {
+      return replaceWithNode;
+    }
+    if (list.__first === this.getKey()) {
+      list.insertBefore(replaceWithNode);
+    } else if (list.__last === this.getKey()) {
+      list.insertAfter(replaceWithNode);
+    } else {
+      const newList = $copyNode2(list);
+      let nextSibling = this.getNextSibling();
+      while (nextSibling) {
+        const nodeToAppend = nextSibling;
+        nextSibling = nextSibling.getNextSibling();
+        newList.append(nodeToAppend);
+      }
+      list.insertAfter(replaceWithNode);
+      replaceWithNode.insertAfter(newList);
+    }
+    const toReplaceKey = this.__key;
+    let prevSizeBeforeChildrenTransfer = 0;
+    if (includeChildren) {
+      if (!$isElementNode2(replaceWithNode)) {
+        formatDevErrorMessage7(`includeChildren should only be true for ElementNodes`);
+      }
+      prevSizeBeforeChildrenTransfer = replaceWithNode.getChildrenSize();
+      replaceWithNode.splice(prevSizeBeforeChildrenTransfer, 0, this.getChildren());
+    }
+    if (includeChildren && $isElementNode2(replaceWithNode)) {
+      const selection = $getSelection2();
+      if ($isRangeSelection2(selection)) {
+        for (const point of selection.getStartEndPoints()) {
+          if (point.key === toReplaceKey && point.type === "element") {
+            point.set(replaceWithNode.getKey(), prevSizeBeforeChildrenTransfer + point.offset, "element");
+          }
+        }
+      }
+    }
+    this.remove();
+    if (list.getChildrenSize() === 0) {
+      list.remove();
+    }
+    return replaceWithNode;
+  }
+  insertAfter(node, restoreSelection = true) {
+    const listNode = this.getParentOrThrow();
+    if (!$isListNode(listNode)) {
+      {
+        formatDevErrorMessage7(`insertAfter: list node is not parent of list item node`);
+      }
+    }
+    if ($isListItemNode(node)) {
+      return super.insertAfter(node, restoreSelection);
+    }
+    const siblings = this.getNextSiblings();
+    listNode.insertAfter(node, restoreSelection);
+    if (siblings.length !== 0) {
+      const newListNode = $copyNode2(listNode);
+      const firstSibling = siblings[0];
+      if (newListNode.getListType() === "number" && $isListItemNode(firstSibling)) {
+        newListNode.setStart($getNewListStart(listNode, firstSibling));
+      }
+      siblings.forEach((sibling) => newListNode.append(sibling));
+      node.insertAfter(newListNode, restoreSelection);
+    }
+    return node;
+  }
+  remove(preserveEmptyParent) {
+    const prevSibling = this.getPreviousSibling();
+    const nextSibling = this.getNextSibling();
+    super.remove(preserveEmptyParent);
+    if (prevSibling && nextSibling && $isNestedListNode(prevSibling) && $isNestedListNode(nextSibling) && // Only join the surrounding sublists when they are the same kind of
+    // list, otherwise the second one loses its listType.
+    prevSibling.getFirstChild().getListType() === nextSibling.getFirstChild().getListType()) {
+      mergeLists(prevSibling.getFirstChild(), nextSibling.getFirstChild());
+      nextSibling.remove();
+    }
+  }
+  resetOnCopyNodeFrom(original) {
+    super.resetOnCopyNodeFrom(original);
+    if (original.getChecked()) {
+      this.setChecked(false);
+    }
+  }
+  insertNewAfter(_2, restoreSelection = true) {
+    const newElement = $copyNode2(this);
+    this.insertAfter(newElement, restoreSelection);
+    return newElement;
+  }
+  collapseAtStart(selection) {
+    if ($isNestedListNode(this)) {
+      return false;
+    }
+    const listNode = this.getParentOrThrow();
+    const listNodeParent = listNode.getParentOrThrow();
+    if ($isListItemNode(listNodeParent)) {
+      $handleOutdent(this);
+      return true;
+    }
+    const paragraph = $createParagraphNode2().append(...this.getChildren());
+    const nextSiblings = this.getNextSiblings();
+    if (nextSiblings.length > 0) {
+      const newList = $copyNode2(listNode);
+      newList.append(...nextSiblings);
+      listNode.insertAfter(newList);
+    }
+    listNode.insertAfter(paragraph);
+    this.remove();
+    if (listNode.getChildrenSize() === 0) {
+      listNode.remove();
+    }
+    paragraph.selectStart();
+    return true;
+  }
+  getValue() {
+    const self = this.getLatest();
+    return self.__value;
+  }
+  setValue(value) {
+    const self = this.getWritable();
+    self.__value = value;
+    return self;
+  }
+  getChecked() {
+    const self = this.getLatest();
+    let listType;
+    const parent = this.getParent();
+    if ($isListNode(parent)) {
+      listType = parent.getListType();
+    }
+    return listType === "check" ? Boolean(self.__checked) : void 0;
+  }
+  setChecked(checked) {
+    const self = this.getWritable();
+    self.__checked = checked;
+    return self;
+  }
+  toggleChecked() {
+    const self = this.getWritable();
+    return self.setChecked(!self.__checked);
+  }
+  getIndent() {
+    const parent = this.getParent();
+    if (parent === null || !this.isAttached()) {
+      return this.getLatest().__indent;
+    }
+    let listNodeParent = parent.getParentOrThrow();
+    let indentLevel = 0;
+    while ($isListItemNode(listNodeParent)) {
+      listNodeParent = listNodeParent.getParentOrThrow().getParentOrThrow();
+      indentLevel++;
+    }
+    return indentLevel;
+  }
+  setIndent(indent) {
+    if (!(typeof indent === "number")) {
+      formatDevErrorMessage7(`Invalid indent value.`);
+    }
+    indent = Math.floor(indent);
+    if (!(indent >= 0)) {
+      formatDevErrorMessage7(`Indent value must be non-negative.`);
+    }
+    let currentIndent = this.getIndent();
+    while (currentIndent !== indent) {
+      if (currentIndent < indent) {
+        $handleIndent(this);
+        currentIndent++;
+      } else {
+        $handleOutdent(this);
+        currentIndent--;
+      }
+    }
+    return this;
+  }
+  /** @deprecated @internal */
+  canInsertAfter(node) {
+    return $isListItemNode(node);
+  }
+  /** @deprecated @internal */
+  canReplaceWith(replacement) {
+    return $isListItemNode(replacement);
+  }
+  canMergeWith(node) {
+    return $isListItemNode(node) || $isParagraphNode2(node);
+  }
+  extractWithChild(child, selection) {
+    if (!$isRangeSelection2(selection)) {
+      return false;
+    }
+    const anchorNode = selection.anchor.getNode();
+    const focusNode = selection.focus.getNode();
+    return this.isParentOf(anchorNode) && this.isParentOf(focusNode) && this.getTextContent().length === selection.getTextContent().length;
+  }
+  isParentRequired() {
+    return true;
+  }
+  createParentElementNode() {
+    return $createListNode("bullet");
+  }
+  canMergeWhenEmpty() {
+    return true;
+  }
+};
+function $setListItemThemeClassNames(dom, editorThemeClasses, node) {
+  const listTheme = editorThemeClasses.list;
+  if (!listTheme) {
+    return;
+  }
+  const listItemClassName = listTheme.listitem;
+  const nestedListItemClassName = listTheme.nested && listTheme.nested.listitem;
+  const parentNode = node.getParent();
+  const isCheckList = $isListNode(parentNode) && parentNode.getListType() === "check";
+  const checked = node.getChecked();
+  const isNested = node.getChildren().some((child) => $isListNode(child));
+  const classesToRemove = [];
+  if (listTheme.listitemChecked !== void 0) {
+    classesToRemove.push(listTheme.listitemChecked);
+  }
+  if (listTheme.listitemUnchecked !== void 0) {
+    classesToRemove.push(listTheme.listitemUnchecked);
+  }
+  if (nestedListItemClassName !== void 0) {
+    classesToRemove.push(...normalizeClassNames2(nestedListItemClassName));
+  }
+  if (classesToRemove.length > 0) {
+    removeClassNamesFromElement2(dom, ...classesToRemove);
+  }
+  const classesToAdd = [];
+  if (listItemClassName !== void 0) {
+    classesToAdd.push(...normalizeClassNames2(listItemClassName));
+  }
+  if (isCheckList) {
+    const checkClassName = checked ? listTheme.listitemChecked : listTheme.listitemUnchecked;
+    if (checkClassName !== void 0) {
+      classesToAdd.push(checkClassName);
+    }
+  }
+  if (nestedListItemClassName !== void 0 && isNested) {
+    classesToAdd.push(...normalizeClassNames2(nestedListItemClassName));
+  }
+  if (classesToAdd.length > 0) {
+    addClassNamesToElement2(dom, ...classesToAdd);
+  }
+}
+function updateListItemChecked(dom, listItemNode, prevListItemNode) {
+  const parent = listItemNode.getParent();
+  const isCheckbox = $isListNode(parent) && parent.getListType() === "check" && // Only add attributes for leaf list items
+  !$isListNode(listItemNode.getFirstChild());
+  if (!isCheckbox) {
+    dom.removeAttribute("role");
+    dom.removeAttribute("tabIndex");
+    dom.removeAttribute("aria-checked");
+  } else {
+    dom.setAttribute("role", "checkbox");
+    dom.setAttribute("tabIndex", "-1");
+    dom.setAttribute("aria-checked", listItemNode.getChecked() ? "true" : "false");
+  }
+}
+function $convertListItemElement(domNode) {
+  const isGitHubCheckList = domNode.classList.contains("task-list-item");
+  if (isGitHubCheckList) {
+    for (const child of domNode.children) {
+      if (child.tagName === "INPUT") {
+        return $convertCheckboxInput(child);
+      }
+    }
+  }
+  const isJoplinCheckList = domNode.classList.contains("joplin-checkbox");
+  if (isJoplinCheckList) {
+    for (const child of domNode.children) {
+      if (child.classList.contains("checkbox-wrapper") && child.children.length > 0 && child.children[0].tagName === "INPUT") {
+        return $convertCheckboxInput(child.children[0]);
+      }
+    }
+  }
+  const ariaCheckedAttr = domNode.getAttribute("aria-checked");
+  const checked = ariaCheckedAttr === "true" ? true : ariaCheckedAttr === "false" ? false : void 0;
+  const node = $createListItemNode(checked);
+  $setFormatFromDOM2(node, domNode);
+  return {
+    after: setFormatFromChildren.bind(null, node),
+    node: $setDirectionFromDOM2(node, domNode)
+  };
+}
+function $convertCheckboxInput(domNode) {
+  const isCheckboxInput = domNode.getAttribute("type") === "checkbox";
+  if (!isCheckboxInput) {
+    return {
+      node: null
+    };
+  }
+  const checked = domNode.hasAttribute("checked");
+  const node = $createListItemNode(checked);
+  return {
+    after: setFormatFromChildren.bind(null, node),
+    node
+  };
+}
+function setFormatFromChildren(listItemNode, children) {
+  const firstChild = children[0];
+  if (children.length === 1 && $isParagraphNode2(firstChild) && !listItemNode.getFormatType() && firstChild.getFormatType()) {
+    listItemNode.setFormat(firstChild.getFormatType());
+    return firstChild.getChildren();
+  }
+  return children;
+}
+function $createListItemNode(checked) {
+  return $applyNodeReplacement2(new ListItemNode(void 0, checked));
+}
+function $isListItemNode(node) {
+  return node instanceof ListItemNode;
+}
+var ListNode = class extends ElementNode2 {
+  /** @internal */
+  __tag;
+  /** @internal */
+  __start;
+  /** @internal */
+  __listType;
+  /** @internal */
+  $config() {
+    return this.config("list", {
+      $transform: (node) => {
+        mergeNextSiblingListIfSameType(node);
+        updateChildrenListItemValue(node);
+      },
+      extends: ElementNode2,
+      importDOM: buildImportMap2({
+        ol: () => ({
+          conversion: $convertListNode,
+          priority: 0
+        }),
+        ul: () => ({
+          conversion: $convertListNode,
+          priority: 0
+        })
+      })
+    });
+  }
+  constructor(listType = "number", start = 1, key) {
+    super(key);
+    const _listType = TAG_TO_LIST_TYPE[listType] || listType;
+    this.__listType = _listType;
+    this.__tag = _listType === "number" ? "ol" : "ul";
+    this.__start = start;
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__listType = prevNode.__listType;
+    this.__tag = prevNode.__tag;
+    this.__start = prevNode.__start;
+  }
+  getTag() {
+    return this.getLatest().__tag;
+  }
+  setListType(type) {
+    const writable = this.getWritable();
+    writable.__listType = type;
+    writable.__tag = type === "number" ? "ol" : "ul";
+    return writable;
+  }
+  getListType() {
+    return this.getLatest().__listType;
+  }
+  getStart() {
+    return this.getLatest().__start;
+  }
+  setStart(start) {
+    const self = this.getWritable();
+    self.__start = start;
+    return self;
+  }
+  // View
+  createDOM(config, _editor) {
+    const tag = this.__tag;
+    const dom = $getDocument2().createElement(tag);
+    if (this.__start !== 1) {
+      dom.setAttribute("start", String(this.__start));
+    }
+    dom.__lexicalListType = this.__listType;
+    $setListThemeClassNames(dom, config.theme, this);
+    return dom;
+  }
+  updateDOM(prevNode, dom, config) {
+    if (prevNode.__tag !== this.__tag || prevNode.__listType !== this.__listType) {
+      return true;
+    }
+    $setListThemeClassNames(dom, config.theme, this);
+    if (prevNode.__start !== this.__start) {
+      dom.setAttribute("start", String(this.__start));
+    }
+    return false;
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setListType(serializedNode.listType).setStart(serializedNode.start);
+  }
+  exportDOM(editor) {
+    const element = this.createDOM(editor._config, editor);
+    if (isHTMLElement2(element)) {
+      if (this.__start !== 1) {
+        element.setAttribute("start", String(this.__start));
+      }
+      if (this.__listType === "check") {
+        element.setAttribute("__lexicalListType", "check");
+      }
+      const direction = this.getDirection();
+      if (direction) {
+        element.dir = direction;
+      }
+    }
+    return {
+      element
+    };
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      listType: this.getListType(),
+      start: this.getStart(),
+      tag: this.getTag()
+    };
+  }
+  canBeEmpty() {
+    return false;
+  }
+  canIndent() {
+    return false;
+  }
+  splice(start, deleteCount, nodesToInsert) {
+    let listItemNodesToInsert = nodesToInsert;
+    for (let i2 = 0; i2 < nodesToInsert.length; i2++) {
+      const node = nodesToInsert[i2];
+      if (!$isListItemNode(node)) {
+        if (listItemNodesToInsert === nodesToInsert) {
+          listItemNodesToInsert = [...nodesToInsert];
+        }
+        const listItem = this.createListItemNode();
+        if ($isElementNode2(node) && !($isListNode(node) || node.isInline())) {
+          listItem.append(...node.getChildren());
+        } else {
+          listItem.append(node);
+        }
+        listItemNodesToInsert[i2] = listItem;
+      }
+    }
+    return super.splice(start, deleteCount, listItemNodesToInsert);
+  }
+  extractWithChild(child) {
+    return $isListItemNode(child);
+  }
+  /**
+   * Create an appropriate ListItemNode to be a child of this ListNode,
+   * {@link $createListItemNode} is the default implementation.
+   *
+   * @returns A new ListItemNode.
+   */
+  createListItemNode() {
+    return $createListItemNode();
+  }
+};
+function $setListThemeClassNames(dom, editorThemeClasses, node) {
+  const classesToAdd = [];
+  const classesToRemove = [];
+  const listTheme = editorThemeClasses.list;
+  if (listTheme !== void 0) {
+    const listLevelsClassNames = listTheme[`${node.__tag}Depth`] || [];
+    const listDepth = $getListDepth(node) - 1;
+    const normalizedListDepth = listDepth % listLevelsClassNames.length;
+    const listLevelClassName = listLevelsClassNames[normalizedListDepth];
+    const listClassName = listTheme[node.__tag];
+    let nestedListClassName;
+    const nestedListTheme = listTheme.nested;
+    const checklistClassName = listTheme.checklist;
+    if (nestedListTheme !== void 0 && nestedListTheme.list) {
+      nestedListClassName = nestedListTheme.list;
+    }
+    if (listClassName !== void 0) {
+      classesToAdd.push(listClassName);
+    }
+    if (checklistClassName !== void 0 && node.__listType === "check") {
+      classesToAdd.push(checklistClassName);
+    }
+    if (listLevelClassName !== void 0) {
+      classesToAdd.push(...normalizeClassNames2(listLevelClassName));
+      for (let i2 = 0; i2 < listLevelsClassNames.length; i2++) {
+        if (i2 !== normalizedListDepth) {
+          classesToRemove.push(...normalizeClassNames2(listLevelsClassNames[i2]));
+        }
+      }
+    }
+    if (nestedListClassName !== void 0) {
+      const nestedListItemClasses = normalizeClassNames2(nestedListClassName);
+      if (listDepth > 1) {
+        classesToAdd.push(...nestedListItemClasses);
+      } else {
+        classesToRemove.push(...nestedListItemClasses);
+      }
+    }
+  }
+  if (classesToRemove.length > 0) {
+    removeClassNamesFromElement2(dom, ...classesToRemove);
+  }
+  if (classesToAdd.length > 0) {
+    addClassNamesToElement2(dom, ...classesToAdd);
+  }
+}
+function $normalizeChildren(nodes, listNode) {
+  const $createWrapperItem = listNode.createListItemNode.bind(listNode);
+  const normalizedListItems = [];
+  for (let i2 = 0; i2 < nodes.length; i2++) {
+    const node = nodes[i2];
+    if ($isListItemNode(node)) {
+      normalizedListItems.push(node);
+      const children = node.getChildren();
+      if (children.length > 1) {
+        children.forEach((child) => {
+          if ($isListNode(child)) {
+            normalizedListItems.push($createWrapperItem().append(child));
+          }
+        });
+      }
+    } else {
+      normalizedListItems.push($createWrapperItem().append(node));
+    }
+  }
+  return normalizedListItems;
+}
+function isDomChecklist$1(domNode) {
+  if (domNode.getAttribute("__lexicallisttype") === "check" || // is github checklist
+  domNode.classList.contains("contains-task-list") || // is joplin checklist
+  domNode.getAttribute("data-is-checklist") === "1") {
+    return true;
+  }
+  for (const child of domNode.childNodes) {
+    if (isHTMLElement2(child) && child.hasAttribute("aria-checked")) {
+      return true;
+    }
+  }
+  return false;
+}
+function isHTMLOListElement(node) {
+  return isHTMLElement2(node) && node.nodeName.toLowerCase() === "ol";
+}
+function $convertListNode(domNode) {
+  let node;
+  if (isHTMLOListElement(domNode)) {
+    const start = domNode.start;
+    node = $createListNode("number", start);
+  } else if (isDomChecklist$1(domNode)) {
+    node = $createListNode("check");
+  } else {
+    node = $createListNode("bullet");
+  }
+  $setDirectionFromDOM2(node, domNode);
+  return {
+    after: (children) => $normalizeChildren(children, node),
+    node
+  };
+}
+var TAG_TO_LIST_TYPE = {
+  ol: "number",
+  ul: "bullet"
+};
+function $createListNode(listType = "number", start = 1) {
+  return $applyNodeReplacement2(new ListNode(listType, start));
+}
+function $isListNode(node) {
+  return node instanceof ListNode;
+}
+var CHECKBOX_KEYS = /* @__PURE__ */ new Set([" ", "Alt", "ArrowDown", "ArrowLeft", "ArrowUp", "CapsLock", "Control", "Escape", "Meta", "Shift"]);
+var INSERT_CHECK_LIST_COMMAND = /* @__PURE__ */ createCommand2("INSERT_CHECK_LIST_COMMAND");
+function registerCheckList(editor, options) {
+  const disableTakeFocusOnClick = options && options.disableTakeFocusOnClick || false;
+  const peekDisableTakeFocusOnClick = typeof disableTakeFocusOnClick === "boolean" ? () => disableTakeFocusOnClick : disableTakeFocusOnClick.peek.bind(disableTakeFocusOnClick);
+  const DEDUP_WINDOW_MS = 500;
+  const isWithinDedupWindow = (event) => {
+    const target = event.target;
+    if (!isHTMLElement2(target)) {
+      return false;
+    }
+    const last = target.__lexicalCheckListLastHandled;
+    return last !== void 0 && event.timeStamp - last < DEDUP_WINDOW_MS;
+  };
+  const recordHandled = (event) => {
+    const target = event.target;
+    if (isHTMLElement2(target)) {
+      target.__lexicalCheckListLastHandled = event.timeStamp;
+    }
+  };
+  const configHandleClick = (event) => {
+    if (isWithinDedupWindow(event)) {
+      return;
+    }
+    handleClick(event, peekDisableTakeFocusOnClick());
+  };
+  const configHandlePointerUp = (event) => {
+    if (event.pointerType !== "touch") {
+      return;
+    }
+    if (isWithinDedupWindow(event)) {
+      return;
+    }
+    recordHandled(event);
+    handleClick(event, peekDisableTakeFocusOnClick());
+  };
+  let lastPress = "none";
+  const configHandleSelectDefaults = (event) => {
+    lastPress = handleSelectDefaults(event, peekDisableTakeFocusOnClick()) ? "checkMark" : "content";
+  };
+  const returnFocusAfterPress = () => {
+    if (lastPress === "content") {
+      returnFocusToRoot(editor);
+    }
+    lastPress = "none";
+  };
+  return mergeRegister2(editor.registerCommand(INSERT_CHECK_LIST_COMMAND, () => {
+    $insertList("check");
+    return true;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_DOWN_COMMAND2, (event) => {
+    return handleArrowUpOrDown(event, editor, false);
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_UP_COMMAND2, (event) => {
+    return handleArrowUpOrDown(event, editor, true);
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ESCAPE_COMMAND2, () => {
+    const activeItem = getActiveCheckListItem(editor);
+    if (activeItem != null) {
+      const rootElement = editor.getRootElement();
+      if (rootElement != null) {
+        rootElement.focus();
+      }
+      return true;
+    }
+    return false;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_SPACE_COMMAND2, (event) => {
+    const activeItem = getActiveCheckListItem(editor);
+    if (activeItem != null && editor.isEditable()) {
+      editor.update(() => {
+        const listItemNode = $getNearestNodeFromDOMNode2(activeItem);
+        if ($isListItemNode(listItemNode)) {
+          event.preventDefault();
+          listItemNode.toggleChecked();
+        }
+      });
+      return true;
+    }
+    return false;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_LEFT_COMMAND2, (event) => {
+    if (getActiveCheckListItem(editor) !== null) {
+      returnFocusToRoot(editor);
+      return false;
+    }
+    return editor.read("latest", () => {
+      const selection = $getSelection2();
+      if ($isRangeSelection2(selection) && selection.isCollapsed()) {
+        const {
+          anchor
+        } = selection;
+        const isElement = anchor.type === "element";
+        if (isElement || anchor.offset === 0) {
+          const anchorNode = anchor.getNode();
+          const elementNode = $findMatchingParent2(anchorNode, (node) => $isElementNode2(node) && !node.isInline());
+          if ($isListItemNode(elementNode)) {
+            const parent = elementNode.getParent();
+            if ($isListNode(parent) && parent.getListType() === "check" && (isElement || elementNode.getFirstDescendant() === anchorNode)) {
+              const domNode = editor.getElementByKey(elementNode.__key);
+              if (domNode != null && getActiveElement2(domNode) !== domNode) {
+                domNode.focus();
+                event.preventDefault();
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    });
+  }, COMMAND_PRIORITY_LOW2), editor.registerRootListener((rootElement) => {
+    if (rootElement !== null) {
+      return mergeRegister2(
+        registerEventListeners2(rootElement, {
+          // Whichever of the two runs first consumes the press, before the
+          // toggle it wraps focuses the item again for a check mark press.
+          // pointerup also covers a gesture that never produces a click,
+          // such as a right click opening the context menu.
+          click: (event) => {
+            returnFocusAfterPress();
+            configHandleClick(event);
+          },
+          pointerup: (event) => {
+            returnFocusAfterPress();
+            configHandlePointerUp(event);
+          }
+        }),
+        // Use capture so we run before other listeners that might move focus.
+        // Some browsers / integrations still generate mousedown events as well
+        // as pointerdown, so handle both.
+        registerEventListeners2(rootElement, {
+          // Entering text moves the caret, which Chrome and Safari also
+          // treat as handing focus back to the editing host. Capture so
+          // the focus is right before the editor handles the input.
+          beforeinput: () => returnFocusToRoot(editor),
+          // Correcting the focus as soon as the browser moves it, rather
+          // than waiting for the release, keeps the item from holding it
+          // for the length of the press. Only Firefox: Chrome and Safari
+          // hand the focus back themselves as part of placing the caret,
+          // and stepping in before they do puts the caret at the start of
+          // the item instead. A press on an item that already holds the
+          // focus moves no focus at all and so arrives at neither of
+          // these, which is what the release below is still there for.
+          focusin: () => {
+            if (IS_FIREFOX2 && lastPress === "content") {
+              returnFocusToRoot(editor);
+            }
+          },
+          // Every other key is the text being operated rather than the
+          // checkbox, the caret-moving arrows above all: the caret leaves
+          // the check mark behind, so the focus has to follow it. Text
+          // entry arrives here too, but not all of it comes from a key,
+          // which is why beforeinput covers that separately.
+          keydown: (event) => {
+            if (!CHECKBOX_KEYS.has(event.key)) {
+              returnFocusToRoot(editor);
+            }
+          },
+          mousedown: configHandleSelectDefaults,
+          pointerdown: configHandleSelectDefaults
+        }, {
+          capture: true
+        }),
+        // Intercept touchstart to stop the mobile browser from placing the
+        // caret and opening the keyboard when tapping the checklist marker.
+        // passive:false lets the handler call preventDefault, so it needs its
+        // own options and can't share the capture-only group above.
+        registerEventListener2(rootElement, "touchstart", configHandleSelectDefaults, {
+          capture: true,
+          passive: false
+        })
+      );
+    }
+  }));
+}
+function handleCheckItemEvent(event, callback) {
+  const target = event.target;
+  if (!isHTMLElement2(target)) {
+    return;
+  }
+  const firstChild = target.firstChild;
+  if (isHTMLElement2(firstChild) && (firstChild.tagName === "UL" || firstChild.tagName === "OL")) {
+    return;
+  }
+  const parentNode = target.parentNode;
+  if (!parentNode || parentNode.__lexicalListType !== "check") {
+    return;
+  }
+  let clientX = null;
+  let pointerType = null;
+  if ("clientX" in event) {
+    clientX = event.clientX;
+  } else if ("touches" in event) {
+    const touches = event.touches;
+    if (touches.length > 0) {
+      clientX = touches[0].clientX;
+      pointerType = "touch";
+    }
+  }
+  if (clientX == null) {
+    return;
+  }
+  const rect = target.getBoundingClientRect();
+  const zoom = calculateZoomLevel2(target);
+  const clientXInPixels = clientX / zoom;
+  const targetView = target.ownerDocument.defaultView;
+  const beforeStyles = targetView ? targetView.getComputedStyle(target, "::before") : {
+    width: "0px"
+  };
+  const beforeWidthInPixels = parseFloat(beforeStyles.width);
+  const isTouchEvent = pointerType === "touch" || "pointerType" in event && event.pointerType === "touch";
+  const clickAreaPadding = isTouchEvent ? 32 : 0;
+  if (target.dir === "rtl" ? clientXInPixels < rect.right + clickAreaPadding && clientXInPixels > rect.right - beforeWidthInPixels - clickAreaPadding : clientXInPixels > rect.left - clickAreaPadding && clientXInPixels < rect.left + beforeWidthInPixels + clickAreaPadding) {
+    callback();
+  }
+}
+function handleClick(event, disableFocusOnClick) {
+  handleCheckItemEvent(event, () => {
+    if (isHTMLElement2(event.target)) {
+      const domNode = event.target;
+      const editor = getNearestEditorFromDOMNode2(domNode);
+      if (editor != null && editor.isEditable()) {
+        editor.update(() => {
+          const node = $getNearestNodeFromDOMNode2(domNode);
+          if ($isListItemNode(node)) {
+            if (disableFocusOnClick) {
+              $addUpdateTag2(SKIP_SELECTION_FOCUS_TAG2);
+              $addUpdateTag2(SKIP_DOM_SELECTION_TAG2);
+            } else {
+              domNode.focus();
+            }
+            node.toggleChecked();
+          }
+        });
+      }
+    }
+  });
+}
+function handleSelectDefaults(event, disableTakeFocusOnClick) {
+  let isCheckMarkPress = false;
+  handleCheckItemEvent(event, () => {
+    isCheckMarkPress = true;
+    event.preventDefault();
+    if (disableTakeFocusOnClick) {
+      event.stopPropagation();
+    }
+  });
+  return isCheckMarkPress;
+}
+function returnFocusToRoot(editor) {
+  const rootElement = editor.getRootElement();
+  const activeElement = rootElement ? getActiveElement2(rootElement) : null;
+  if (rootElement !== null && isHTMLElement2(activeElement) && isCheckListItem(activeElement)) {
+    rootElement.focus({
+      preventScroll: true
+    });
+  }
+}
+function isCheckListItem(dom) {
+  const parentNode = dom.parentNode;
+  return dom.tagName === "LI" && parentNode != null && // @ts-ignore internal field
+  parentNode.__lexicalListType === "check";
+}
+function getActiveCheckListItem(editor) {
+  const rootElement = editor.getRootElement();
+  const activeElement = rootElement ? getActiveElement2(rootElement) : null;
+  return isHTMLElement2(activeElement) && isCheckListItem(activeElement) ? activeElement : null;
+}
+function findCheckListItemSibling(node, backward) {
+  let sibling = backward ? node.getPreviousSibling() : node.getNextSibling();
+  let parent = node;
+  while (sibling == null && $isListItemNode(parent)) {
+    parent = parent.getParentOrThrow().getParent();
+    if (parent != null) {
+      sibling = backward ? parent.getPreviousSibling() : parent.getNextSibling();
+    }
+  }
+  while ($isListItemNode(sibling)) {
+    const firstChild = backward ? sibling.getLastChild() : sibling.getFirstChild();
+    if (!$isListNode(firstChild)) {
+      return sibling;
+    }
+    sibling = backward ? firstChild.getLastChild() : firstChild.getFirstChild();
+  }
+  return null;
+}
+function handleArrowUpOrDown(event, editor, backward) {
+  const activeItem = getActiveCheckListItem(editor);
+  if (activeItem != null) {
+    let nextItemKey = null;
+    editor.update(() => {
+      const listItem = $getNearestNodeFromDOMNode2(activeItem);
+      if (!$isListItemNode(listItem)) {
+        return;
+      }
+      const nextListItem = findCheckListItemSibling(listItem, backward);
+      if (nextListItem != null) {
+        nextListItem.selectStart();
+        if (editor.getElementByKey(nextListItem.__key) != null) {
+          event.preventDefault();
+          nextItemKey = nextListItem.__key;
+        }
+      }
+    }, {
+      // The focus has to land after the reconciler has moved the selection
+      // onto the next item, which is what onUpdate is for. The element is
+      // resolved from the key here rather than captured above, so a
+      // reconciliation that replaced it is followed to the current one.
+      onUpdate: () => {
+        const dom = nextItemKey === null ? null : editor.getElementByKey(nextItemKey);
+        if (dom != null) {
+          dom.focus();
+        }
+      }
+    });
+  }
+  return false;
+}
+function isDomChecklist(domNode) {
+  return domNode.matches('[__lexicallisttype="check"], .contains-task-list, [data-is-checklist="1"]') || domNode.querySelector(":scope > [aria-checked]") !== null;
+}
+function $normalizeListChildren(children, listNode) {
+  const out = [];
+  for (const child of children) {
+    if ($isListItemNode(child)) {
+      out.push(child);
+      const innerChildren = child.getChildren();
+      if (innerChildren.length > 1) {
+        for (const inner of innerChildren) {
+          if ($isListNode(inner)) {
+            out.push(listNode.createListItemNode().append(inner));
+          }
+        }
+      }
+    } else {
+      out.push(listNode.createListItemNode().append(child));
+    }
+  }
+  return out;
+}
+var ListRule = {
+  $import: (ctx, el) => {
+    let node;
+    if (isElementOfTag2(el, "ol")) {
+      node = $createListNode("number", el.start);
+    } else if (isDomChecklist(el)) {
+      node = $createListNode("check");
+    } else {
+      node = $createListNode("bullet");
+    }
+    $setDirectionFromDOM2(node, el);
+    return [node.splice(0, 0, $propagateTextAlignToBlockChildren2($normalizeListChildren(ctx.$importChildren(el), node), el))];
+  },
+  match: /* @__PURE__ */ sel2.tag("ol", "ul"),
+  name: "@lexical/list/list"
+};
+function $liftFormatFromSingleParagraph(listItemNode, children) {
+  if (children.length !== 1) {
+    return children;
+  }
+  const firstChild = children[0];
+  if ($isParagraphNode2(firstChild) && !listItemNode.getFormatType() && firstChild.getFormatType()) {
+    listItemNode.setFormat(firstChild.getFormatType());
+    return firstChild.getChildren();
+  }
+  return children;
+}
+function $flattenListItemBlocks(children) {
+  const $isBoundary = (node) => $isBlockLevel2(node) && !$isListNode(node);
+  if (!children.some($isBoundary)) {
+    return children;
+  }
+  const segments = [];
+  let inlineRun = [];
+  const flushInlineRun = () => {
+    if (inlineRun.length > 0) {
+      segments.push(inlineRun);
+      inlineRun = [];
+    }
+  };
+  for (const child of children) {
+    if ($isBoundary(child)) {
+      flushInlineRun();
+      segments.push($isElementNode2(child) ? child.getChildren() : [child]);
+    } else {
+      inlineRun.push(child);
+    }
+  }
+  flushInlineRun();
+  const out = [];
+  for (const segment of segments) {
+    if (out.length > 0) {
+      out.push($createLineBreakNode2());
+    }
+    out.push(...segment);
+  }
+  return out;
+}
+var ListItemRule = {
+  $import: (ctx, el) => {
+    const ariaChecked = el.getAttribute("aria-checked");
+    const checked = ariaChecked === "true" ? true : ariaChecked === "false" ? false : void 0;
+    const node = $createListItemNode(checked);
+    $setFormatFromDOM2(node, el);
+    $setDirectionFromDOM2(node, el);
+    return [node.splice(
+      0,
+      0,
+      // Lift a sole wrapping paragraph's format onto the item *before*
+      // flattening, otherwise the paragraph would already be unwrapped and
+      // its alignment lost.
+      $flattenListItemBlocks($liftFormatFromSingleParagraph(node, ctx.$importChildren(el)))
+    )];
+  },
+  match: /* @__PURE__ */ sel2.tag("li"),
+  name: "@lexical/list/li"
+};
+function $buildChecklistItem(ctx, el, checkboxOwner) {
+  const checkboxInput = isElementOfTag2(checkboxOwner, "input") ? checkboxOwner : checkboxOwner.querySelector('input[type="checkbox"]');
+  if (!checkboxInput || checkboxInput.getAttribute("type") !== "checkbox") {
+    return [];
+  }
+  const checked = checkboxInput.hasAttribute("checked");
+  const node = $createListItemNode(checked);
+  $setFormatFromDOM2(node, el);
+  $setDirectionFromDOM2(node, el);
+  return [node.splice(0, 0, $flattenListItemBlocks($liftFormatFromSingleParagraph(node, ctx.$importChildren(el))))];
+}
+var TaskListItemRule = {
+  $import: (ctx, el, $next) => {
+    const input = el.querySelector(':scope > input[type="checkbox"]');
+    if (!input) {
+      return $next();
+    }
+    return $buildChecklistItem(ctx, el, input);
+  },
+  match: /* @__PURE__ */ sel2.tag("li").classAll("task-list-item"),
+  name: "@lexical/list/li-task-list-item"
+};
+var JoplinChecklistItemRule = {
+  $import: (ctx, el, $next) => {
+    const wrapper = el.querySelector(":scope > .checkbox-wrapper");
+    if (!wrapper) {
+      return $next();
+    }
+    const input = wrapper.querySelector(':scope > input[type="checkbox"]');
+    if (!input) {
+      return $next();
+    }
+    return $buildChecklistItem(ctx, el, input);
+  },
+  match: /* @__PURE__ */ sel2.tag("li").classAll("joplin-checkbox"),
+  name: "@lexical/list/li-joplin-checkbox"
+};
+var ListSchema = {
+  $accepts: (child) => $isListItemNode(child) || $isListNode(child),
+  // Inline runs inside a `<ul>`/`<ol>` (e.g. text between two `<li>`s)
+  // become the children of a synthetic `ListItemNode`. `ListItemNode`
+  // is itself a block-level container of inlines, so no intermediate
+  // `ParagraphNode` is needed (and the demoted-paragraph normalization
+  // would strip one anyway).
+  $packageRun: (run) => [$createListItemNode().splice(0, 0, run)],
+  name: "ListSchema"
+};
+var ListImportRules = [
+  // More specific rules (class-restricted) must precede the generic `li`
+  // rule so they win the dispatch race (lower array index = higher
+  // priority).
+  TaskListItemRule,
+  JoplinChecklistItemRule,
+  ListRule,
+  ListItemRule
+];
+var UPDATE_LIST_START_COMMAND = /* @__PURE__ */ createCommand2("UPDATE_LIST_START_COMMAND");
+var INSERT_UNORDERED_LIST_COMMAND = /* @__PURE__ */ createCommand2("INSERT_UNORDERED_LIST_COMMAND");
+var INSERT_ORDERED_LIST_COMMAND = /* @__PURE__ */ createCommand2("INSERT_ORDERED_LIST_COMMAND");
+var REMOVE_LIST_COMMAND = /* @__PURE__ */ createCommand2("REMOVE_LIST_COMMAND");
+function registerList(editor, options) {
+  const removeListener = mergeRegister2(editor.registerCommand(INSERT_ORDERED_LIST_COMMAND, () => {
+    $insertList("number");
+    return true;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(UPDATE_LIST_START_COMMAND, (payload) => {
+    const {
+      listNodeKey,
+      newStart
+    } = payload;
+    const listNode = $getNodeByKey2(listNodeKey);
+    if (!$isListNode(listNode)) {
+      return false;
+    }
+    if (listNode.getListType() === "number") {
+      listNode.setStart(newStart);
+      updateChildrenListItemValue(listNode);
+    }
+    return true;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(INSERT_UNORDERED_LIST_COMMAND, () => {
+    $insertList("bullet");
+    return true;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(REMOVE_LIST_COMMAND, () => {
+    $removeList();
+    return true;
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(INSERT_PARAGRAPH_COMMAND2, () => {
+    const shouldRestore = options && options.restoreNumbering;
+    return $handleListInsertParagraph(!!shouldRestore);
+  }, COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_BACKSPACE_COMMAND2, (event) => {
+    const selection = $getSelection2();
+    if (!$isRangeSelection2(selection) || !selection.isCollapsed()) {
+      return false;
+    }
+    const {
+      anchor
+    } = selection;
+    if (anchor.offset !== 0) {
+      return false;
+    }
+    let current = anchor.getNode();
+    while (!$isListItemNode(current)) {
+      if (current.getPreviousSibling() !== null) {
+        return false;
+      }
+      const parent = current.getParent();
+      if (parent === null) {
+        return false;
+      }
+      current = parent;
+    }
+    if ($isListItemNode(current) && current.collapseAtStart(selection)) {
+      event.preventDefault();
+      return true;
+    }
+    return false;
+  }, COMMAND_PRIORITY_BEFORE_EDITOR2), editor.registerNodeTransform(ListItemNode, (node) => {
+    const firstChild = node.getFirstChild();
+    if (firstChild) {
+      if ($isTextNode2(firstChild)) {
+        const style = firstChild.getStyle();
+        const format = firstChild.getFormat();
+        if (node.getTextStyle() !== style) {
+          node.setTextStyle(style);
+        }
+        if (node.getTextFormat() !== format) {
+          node.setTextFormat(format);
+        }
+      }
+    } else {
+      const selection = $getSelection2();
+      if ($isRangeSelection2(selection) && (selection.style !== node.getTextStyle() || selection.format !== node.getTextFormat()) && selection.isCollapsed() && node.is(selection.anchor.getNode())) {
+        node.setTextStyle(selection.style).setTextFormat(selection.format);
+      }
+    }
+  }), editor.registerNodeTransform(TextNode2, (node) => {
+    const listItemParentNode = node.getParent();
+    if ($isListItemNode(listItemParentNode) && node.is(listItemParentNode.getFirstChild())) {
+      const style = node.getStyle();
+      const format = node.getFormat();
+      if (style !== listItemParentNode.getTextStyle() || format !== listItemParentNode.getTextFormat()) {
+        listItemParentNode.setTextStyle(style).setTextFormat(format);
+      }
+    }
+  }));
+  return removeListener;
+}
+function registerListStrictIndentTransform(editor) {
+  const $formatListIndentStrict = (listItemNode) => {
+    const listNode = listItemNode.getParent();
+    if ($isListNode(listItemNode.getFirstChild()) || !$isListNode(listNode)) {
+      return;
+    }
+    const startingListItemNode = $findMatchingParent2(listItemNode, (node) => $isListItemNode(node) && $isListNode(node.getParent()) && $isListItemNode(node.getPreviousSibling()));
+    if (startingListItemNode === null && listItemNode.getIndent() > 0) {
+      listItemNode.setIndent(0);
+    } else if ($isListItemNode(startingListItemNode)) {
+      const prevListItemNode = startingListItemNode.getPreviousSibling();
+      if ($isListItemNode(prevListItemNode)) {
+        const endListItemNode = $findChildrenEndListItemNode(prevListItemNode);
+        const endListNode = endListItemNode.getParent();
+        if ($isListNode(endListNode)) {
+          const prevDepth = $getListDepth(endListNode);
+          const depth = $getListDepth(listNode);
+          if (prevDepth + 1 < depth) {
+            listItemNode.setIndent(prevDepth);
+          }
+        }
+      }
+    }
+  };
+  const $processListWithStrictIndent = (listNode) => {
+    const queue = [listNode];
+    while (queue.length > 0) {
+      const node = queue.shift();
+      if (!$isListNode(node)) {
+        continue;
+      }
+      for (const child of node.getChildren()) {
+        if ($isListItemNode(child)) {
+          $formatListIndentStrict(child);
+          const firstChild = child.getFirstChild();
+          if ($isListNode(firstChild)) {
+            queue.push(firstChild);
+          }
+        }
+      }
+    }
+  };
+  return editor.registerNodeTransform(ListNode, $processListWithStrictIndent);
+}
+function $findChildrenEndListItemNode(listItemNode) {
+  let current = listItemNode;
+  let firstChild = current.getFirstChild();
+  while ($isListNode(firstChild)) {
+    const lastChild = firstChild.getLastChild();
+    if ($isListItemNode(lastChild)) {
+      current = lastChild;
+      firstChild = current.getFirstChild();
+    } else {
+      break;
+    }
+  }
+  return current;
+}
+var ListExtension = {
+  build(editor, config, state) {
+    return namedSignals2(config);
+  },
+  config: {
+    hasStrictIndent: false,
+    shouldPreserveNumbering: false
+  },
+  dependencies: [
+    // DOMImportExtension support for the nodes registered here. Inert
+    // unless the editor routes HTML through the pipeline (e.g. via
+    // ClipboardDOMImportExtension or $generateNodesFromDOMViaExtension).
+    CoreImportExtension2,
+    [DOMImportExtension2, {
+      rules: ListImportRules
+    }]
+  ],
+  name: "@lexical/list/List",
+  nodes: () => [ListNode, ListItemNode],
+  register(editor, config, state) {
+    const stores = state.getOutput();
+    return mergeRegister2(effect(() => {
+      return registerList(editor, {
+        restoreNumbering: stores.shouldPreserveNumbering.value
+      });
+    }), effect(() => stores.hasStrictIndent.value ? registerListStrictIndentTransform(editor) : void 0));
+  }
+};
+var CheckListExtension = {
+  build: (editor, config) => namedSignals2(config),
+  config: {
+    disableTakeFocusOnClick: false
+  },
+  dependencies: [ListExtension],
+  name: "@lexical/list/CheckList",
+  register: (editor, config, state) => registerCheckList(editor, state.getOutput())
+};
+var ListImportExtension = {
+  dependencies: [ListExtension],
+  name: "@lexical/list/Import"
+};
+var WORD_LIST_CLASS_RE = /^MsoListParagraph(CxSp(First|Middle|Last))?$/;
+var WORD_NUMBERED_RE = /^[A-Za-z0-9]+[.)]/;
+var WORD_GENERATOR_RE = /Microsoft Word/i;
+var MSO_LIST_DATA_ATTR = "data-mso-list";
+function readWordListLevel(el) {
+  const m2 = (el.getAttribute(MSO_LIST_DATA_ATTR) || "").match(/level(\d+)/);
+  return m2 ? parseInt(m2[1], 10) : 1;
+}
+function findMarkerSpan(el) {
+  return el.querySelector(`span[${MSO_LIST_DATA_ATTR}="Ignore"]`);
+}
+function readWordMarker(el) {
+  const span = findMarkerSpan(el);
+  return span ? (span.textContent || "").trim() : "";
+}
+function classifyWordListType(marker) {
+  return WORD_NUMBERED_RE.test(marker) ? "number" : "bullet";
+}
+function stripWordMarker(el) {
+  const inner = findMarkerSpan(el);
+  if (!inner) {
+    return;
+  }
+  let outer = inner;
+  while (outer.parentElement && outer.parentElement !== el && outer.parentElement.nodeName === "SPAN") {
+    outer = outer.parentElement;
+  }
+  outer.remove();
+}
+function isWordListParagraph(node) {
+  return isHTMLElement2(node) && WORD_LIST_CLASS_RE.test(node.className);
+}
+function $buildWordListTree(ctx, items) {
+  const root = $createListNode(classifyWordListType(items[0].marker));
+  const stack = [{
+    level: items[0].level,
+    list: root
+  }];
+  for (const item of items) {
+    while (stack.length > 1 && stack[stack.length - 1].level > item.level) {
+      stack.pop();
+    }
+    if (item.level > stack[stack.length - 1].level) {
+      const sub = $createListNode(classifyWordListType(item.marker));
+      stack[stack.length - 1].list.append($createListItemNode().append(sub));
+      stack.push({
+        level: item.level,
+        list: sub
+      });
+    }
+    stripWordMarker(item.el);
+    stack[stack.length - 1].list.append($createListItemNode().splice(0, 0, ctx.$importChildren(item.el, {
+      schema: InlineSchema2
+    })));
+  }
+  return root;
+}
+var WordListConsumed = /* @__PURE__ */ createImportState2("@lexical/list/word-consumed-list-items", () => null);
+var WordListParagraphRule = {
+  $import: (ctx, el) => {
+    let consumed = ctx.session.get(WordListConsumed);
+    if (consumed === null) {
+      consumed = /* @__PURE__ */ new WeakSet();
+      ctx.session.set(WordListConsumed, consumed);
+    }
+    if (consumed.has(el)) {
+      return [];
+    }
+    const items = [];
+    let cur = el;
+    while (cur && isWordListParagraph(cur)) {
+      consumed.add(cur);
+      items.push({
+        el: cur,
+        level: readWordListLevel(cur),
+        marker: readWordMarker(cur)
+      });
+      if (cur.classList.contains("MsoListParagraphCxSpLast") || cur.className === "MsoListParagraph") {
+        break;
+      }
+      cur = cur.nextElementSibling;
+    }
+    return [$buildWordListTree(ctx, items)];
+  },
+  match: /* @__PURE__ */ sel2.tag("p").classAny("MsoListParagraph", "MsoListParagraphCxSpFirst", "MsoListParagraphCxSpMiddle", "MsoListParagraphCxSpLast"),
+  name: "@lexical/list/word-list-paragraph"
+};
+var WordOfficeParagraphRule = {
+  $import: () => [],
+  match: /* @__PURE__ */ sel2.tag("o:p"),
+  name: "@lexical/list/word-o-p"
+};
+var WordListPasteOverlay = /* @__PURE__ */ defineOverlayRules2([WordOfficeParagraphRule, WordListParagraphRule]);
+var $installWordListPasteOverlay = (dom, ctx, $next) => {
+  const meta = dom.querySelector('meta[name="Generator"]');
+  if (meta && WORD_GENERATOR_RE.test(meta.getAttribute("content") || "")) {
+    for (const el of Array.from(dom.querySelectorAll('[style*="mso-list"]'))) {
+      const msoList = getStyleObjectFromCSS2(el.getAttribute("style") || "")["mso-list"];
+      if (msoList) {
+        el.setAttribute(MSO_LIST_DATA_ATTR, msoList);
+      }
+    }
+    ctx.session.update(ImportOverlays2, (prev) => [...prev, WordListPasteOverlay]);
+  }
+  $next();
+};
+var WordListImportExtension = {
+  dependencies: [
+    // The overlay builds ListNodes, so the nodes have to be registered.
+    ListExtension,
+    [DOMImportExtension2, {
+      preprocess: [$installWordListPasteOverlay]
+    }]
+  ],
+  name: "@lexical/list/WordListImport"
+};
+
+// node_modules/@lexical/list/dist/LexicalList.mjs
+var mod11 = true ? LexicalList_dev_exports : LexicalList_prod_exports;
+var $createListItemNode2 = mod11.$createListItemNode;
+var $createListNode2 = mod11.$createListNode;
+var $getListDepth2 = mod11.$getListDepth;
+var $handleListInsertParagraph2 = mod11.$handleListInsertParagraph;
+var $insertList2 = mod11.$insertList;
+var $isListItemNode2 = mod11.$isListItemNode;
+var $isListNode2 = mod11.$isListNode;
+var $removeList2 = mod11.$removeList;
+var CheckListExtension2 = mod11.CheckListExtension;
+var INSERT_CHECK_LIST_COMMAND2 = mod11.INSERT_CHECK_LIST_COMMAND;
+var INSERT_ORDERED_LIST_COMMAND2 = mod11.INSERT_ORDERED_LIST_COMMAND;
+var INSERT_UNORDERED_LIST_COMMAND2 = mod11.INSERT_UNORDERED_LIST_COMMAND;
+var ListExtension2 = mod11.ListExtension;
+var ListImportExtension2 = mod11.ListImportExtension;
+var ListImportRules2 = mod11.ListImportRules;
+var ListItemNode2 = mod11.ListItemNode;
+var ListNode2 = mod11.ListNode;
+var ListSchema2 = mod11.ListSchema;
+var REMOVE_LIST_COMMAND2 = mod11.REMOVE_LIST_COMMAND;
+var UPDATE_LIST_START_COMMAND2 = mod11.UPDATE_LIST_START_COMMAND;
+var WordListImportExtension2 = mod11.WordListImportExtension;
+var registerCheckList2 = mod11.registerCheckList;
+var registerList2 = mod11.registerList;
+var registerListStrictIndentTransform2 = mod11.registerListStrictIndentTransform;
+
+// node_modules/@lexical/markdown/dist/LexicalMarkdown.dev.mjs
+var LexicalMarkdown_dev_exports = {};
+__export(LexicalMarkdown_dev_exports, {
+  $convertFromMarkdownString: () => $convertFromMarkdownString,
+  $convertSelectionToMarkdownString: () => $convertSelectionToMarkdownString,
+  $convertToMarkdownString: () => $convertToMarkdownString,
+  $generateNodesFromMarkdownString: () => $generateNodesFromMarkdownString,
+  BOLD_ITALIC_STAR: () => BOLD_ITALIC_STAR,
+  BOLD_ITALIC_UNDERSCORE: () => BOLD_ITALIC_UNDERSCORE,
+  BOLD_STAR: () => BOLD_STAR,
+  BOLD_UNDERSCORE: () => BOLD_UNDERSCORE,
+  CHECK_LIST: () => CHECK_LIST,
+  CODE: () => CODE,
+  ELEMENT_TRANSFORMERS: () => ELEMENT_TRANSFORMERS,
+  HEADING: () => HEADING,
+  HIGHLIGHT: () => HIGHLIGHT,
+  INLINE_CODE: () => INLINE_CODE,
+  ITALIC_STAR: () => ITALIC_STAR,
+  ITALIC_UNDERSCORE: () => ITALIC_UNDERSCORE,
+  LINK: () => LINK,
+  MULTILINE_ELEMENT_TRANSFORMERS: () => MULTILINE_ELEMENT_TRANSFORMERS,
+  ORDERED_LIST: () => ORDERED_LIST,
+  QUOTE: () => QUOTE,
+  STRIKETHROUGH: () => STRIKETHROUGH,
+  TEXT_FORMAT_TRANSFORMERS: () => TEXT_FORMAT_TRANSFORMERS,
+  TEXT_MATCH_TRANSFORMERS: () => TEXT_MATCH_TRANSFORMERS,
+  TRANSFORMERS: () => TRANSFORMERS,
+  UNORDERED_LIST: () => UNORDERED_LIST,
+  isTableRowDivider: () => isTableRowDivider,
+  registerMarkdownShortcuts: () => registerMarkdownShortcuts
+});
+
+// node_modules/@lexical/code-core/dist/LexicalCodeCore.dev.mjs
+var LexicalCodeCore_dev_exports = {};
+__export(LexicalCodeCore_dev_exports, {
+  $createCodeHighlightNode: () => $createCodeHighlightNode,
+  $createCodeNode: () => $createCodeNode,
+  $getCodeLineDirection: () => $getCodeLineDirection,
+  $getEndOfCodeInLine: () => $getEndOfCodeInLine,
+  $getFirstCodeNodeOfLine: () => $getFirstCodeNodeOfLine,
+  $getLastCodeNodeOfLine: () => $getLastCodeNodeOfLine,
+  $getStartOfCodeInLine: () => $getStartOfCodeInLine,
+  $isCodeHighlightNode: () => $isCodeHighlightNode,
+  $isCodeNode: () => $isCodeNode,
+  $outdentLeadingSpaces: () => $outdentLeadingSpaces,
+  $plainifyCodeContent: () => $plainifyCodeContent,
+  CodeExtension: () => CodeExtension,
+  CodeHighlightNode: () => CodeHighlightNode,
+  CodeImportExtension: () => CodeImportExtension,
+  CodeImportRules: () => CodeImportRules,
+  CodeIndentExtension: () => CodeIndentExtension,
+  CodeNode: () => CodeNode,
+  DEFAULT_CODE_LANGUAGE: () => DEFAULT_CODE_LANGUAGE,
+  getDefaultCodeLanguage: () => getDefaultCodeLanguage,
+  registerCodeIndentation: () => registerCodeIndentation
+});
+function warnOnlyOnce3(message) {
+  {
+    let run = false;
+    return () => {
+      if (!run) {
+        console.warn(message);
+      }
+      run = true;
+    };
+  }
+}
+function formatDevErrorMessage8(message) {
+  throw new Error(message);
+}
+function $getLastMatchingCodeNode(anchor, direction) {
+  let matchingNode = anchor;
+  for (let caret = $getSiblingCaret2(anchor, direction); caret && ($isCodeHighlightNode(caret.origin) || $isTabNode2(caret.origin)); caret = caret.getAdjacentCaret()) {
+    matchingNode = caret.origin;
+  }
+  return matchingNode;
+}
+function $getFirstCodeNodeOfLine(anchor) {
+  return $getLastMatchingCodeNode(anchor, "previous");
+}
+function $getLastCodeNodeOfLine(anchor) {
+  return $getLastMatchingCodeNode(anchor, "next");
+}
+function $getCodeLineDirection(anchor) {
+  const start = $getFirstCodeNodeOfLine(anchor);
+  const end = $getLastCodeNodeOfLine(anchor);
+  let node = start;
+  while (node !== null) {
+    if ($isCodeHighlightNode(node)) {
+      const direction = getTextDirection2(node.getTextContent());
+      if (direction !== null) {
+        return direction;
+      }
+    }
+    if (node === end) {
+      break;
+    }
+    node = node.getNextSibling();
+  }
+  const parent = start.getParent();
+  if ($isElementNode2(parent)) {
+    const parentDirection = parent.getDirection();
+    if (parentDirection === "ltr" || parentDirection === "rtl") {
+      return parentDirection;
+    }
+  }
+  return null;
+}
+function $getStartOfCodeInLine(anchor, offset) {
+  let last = null;
+  let lastNonBlank = null;
+  let node = anchor;
+  let nodeOffset = offset;
+  let nodeTextContent = anchor.getTextContent();
+  while (true) {
+    if (nodeOffset === 0) {
+      const prevSibling = node.getPreviousSibling();
+      if (prevSibling === null) {
+        node = null;
+        break;
+      }
+      if (!($isCodeHighlightNode(prevSibling) || $isTabNode2(prevSibling) || $isLineBreakNode2(prevSibling))) {
+        formatDevErrorMessage8(`Expected a valid Code Node: CodeHighlightNode, TabNode, LineBreakNode`);
+      }
+      node = prevSibling;
+      if ($isLineBreakNode2(node)) {
+        last = {
+          node,
+          offset: 1
+        };
+        break;
+      }
+      nodeOffset = Math.max(0, node.getTextContentSize() - 1);
+      nodeTextContent = node.getTextContent();
+    } else {
+      nodeOffset--;
+    }
+    const character = nodeTextContent[nodeOffset];
+    if ($isCodeHighlightNode(node) && character !== " ") {
+      lastNonBlank = {
+        node,
+        offset: nodeOffset
+      };
+    }
+  }
+  if (lastNonBlank !== null) {
+    return lastNonBlank;
+  }
+  let codeCharacterAtAnchorOffset = null;
+  if (offset < anchor.getTextContentSize()) {
+    if ($isCodeHighlightNode(anchor)) {
+      codeCharacterAtAnchorOffset = anchor.getTextContent()[offset];
+    }
+  } else {
+    const nextSibling = anchor.getNextSibling();
+    if ($isCodeHighlightNode(nextSibling)) {
+      codeCharacterAtAnchorOffset = nextSibling.getTextContent()[0];
+    }
+  }
+  if (codeCharacterAtAnchorOffset !== null && codeCharacterAtAnchorOffset !== " ") {
+    return last;
+  } else {
+    const nextNonBlank = findNextNonBlankInLine(anchor, offset);
+    if (nextNonBlank !== null) {
+      return nextNonBlank;
+    } else {
+      return last;
+    }
+  }
+}
+function findNextNonBlankInLine(anchor, offset) {
+  let node = anchor;
+  let nodeOffset = offset;
+  let nodeTextContent = anchor.getTextContent();
+  let nodeTextContentSize = anchor.getTextContentSize();
+  while (true) {
+    if (!$isCodeHighlightNode(node) || nodeOffset === nodeTextContentSize) {
+      node = node.getNextSibling();
+      if (node === null || $isLineBreakNode2(node)) {
+        return null;
+      }
+      if ($isCodeHighlightNode(node)) {
+        nodeOffset = 0;
+        nodeTextContent = node.getTextContent();
+        nodeTextContentSize = node.getTextContentSize();
+      }
+    }
+    if ($isCodeHighlightNode(node)) {
+      if (nodeTextContent[nodeOffset] !== " ") {
+        return {
+          node,
+          offset: nodeOffset
+        };
+      }
+      nodeOffset++;
+    }
+  }
+}
+function $getEndOfCodeInLine(anchor) {
+  const lastNode = $getLastCodeNodeOfLine(anchor);
+  if (!!$isLineBreakNode2(lastNode)) {
+    formatDevErrorMessage8(`Unexpected lineBreakNode in getEndOfCodeInLine`);
+  }
+  return lastNode;
+}
+function $plainifyCodeContent(text) {
+  const out = [];
+  tokenizeRawText2(text, {
+    linebreak: () => out.push($createLineBreakNode2()),
+    tab: () => out.push($createTabNode2()),
+    text: (part) => out.push($createCodeHighlightNode(part))
+  });
+  return out;
+}
+function $outdentLeadingSpaces(node, tabSize, selection) {
+  if (!Number.isInteger(tabSize) || tabSize <= 0) {
+    return false;
+  }
+  const text = node.getTextContent();
+  const leading = /^ +/.exec(text);
+  if (!leading) {
+    return false;
+  }
+  const stripCount = Math.min(tabSize, leading[0].length);
+  const lineKey = node.getKey();
+  const oldAnchorOffset = selection.anchor.key === lineKey && selection.anchor.type === "text" ? selection.anchor.offset : null;
+  const oldFocusOffset = selection.focus.key === lineKey && selection.focus.type === "text" ? selection.focus.offset : null;
+  node.spliceText(0, stripCount, "");
+  if (oldAnchorOffset !== null) {
+    selection.anchor.set(lineKey, Math.max(0, oldAnchorOffset - stripCount), "text");
+  }
+  if (oldFocusOffset !== null) {
+    selection.focus.set(lineKey, Math.max(0, oldFocusOffset - stripCount), "text");
+  }
+  return true;
+}
+var DEFAULT_CODE_LANGUAGE = "javascript";
+var getDefaultCodeLanguage = () => DEFAULT_CODE_LANGUAGE;
+function hasChildDOMNodeTag(node, tagName) {
+  for (const child of node.childNodes) {
+    if (isHTMLElement2(child) && child.tagName === tagName) {
+      return true;
+    }
+    if (hasChildDOMNodeTag(child, tagName)) {
+      return true;
+    }
+  }
+  return false;
+}
+var LANGUAGE_DATA_ATTRIBUTE$1 = "data-language";
+var HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE = "data-highlight-language";
+var THEME_DATA_ATTRIBUTE$1 = "data-theme";
+var noExtensionDeprecation = warnOnlyOnce3("Using CodeNode without CodeExtension is deprecated");
+var CodeNode = class extends ElementNode2 {
+  /** @internal */
+  __language;
+  /** @internal */
+  __theme;
+  /** @internal */
+  __isSyntaxHighlightSupported;
+  $config() {
+    return this.config("code", {
+      extends: ElementNode2,
+      importDOM: {
+        // Typically <pre> is used for code blocks, and <code> for inline code styles
+        // but if it's a multi line <code> we'll create a block. Pass through to
+        // inline format handled by TextNode otherwise.
+        code: (node) => {
+          const isMultiLine = node.textContent != null && (/\r?\n/.test(node.textContent) || hasChildDOMNodeTag(node, "BR"));
+          return isMultiLine ? {
+            conversion: $convertPreElement,
+            priority: 1
+          } : null;
+        },
+        div: () => ({
+          conversion: $convertDivElement,
+          priority: 1
+        }),
+        pre: () => ({
+          conversion: $convertPreElement,
+          priority: 0
+        }),
+        table: (node) => {
+          const table = node;
+          if (isGitHubCodeTable(table)) {
+            return {
+              conversion: $convertTableElement,
+              priority: 3
+            };
+          }
+          return null;
+        },
+        td: (node) => {
+          const td = node;
+          const table = td.closest("table");
+          if (isGitHubCodeCell(td) || table && isGitHubCodeTable(table)) {
+            return {
+              conversion: convertCodeNoop,
+              priority: 3
+            };
+          }
+          return null;
+        },
+        tr: (node) => {
+          const tr = node;
+          const table = tr.closest("table");
+          if (table && isGitHubCodeTable(table)) {
+            return {
+              conversion: convertCodeNoop,
+              priority: 3
+            };
+          }
+          return null;
+        }
+      }
+    });
+  }
+  // `language` carries an explicit `undefined` default so the constructor
+  // reports zero required arguments and `$config` can synthesize the static
+  // `clone` from the no-argument constructor.
+  constructor(language = void 0, key) {
+    super(key);
+    this.__language = language || void 0;
+    this.__isSyntaxHighlightSupported = false;
+    this.__theme = void 0;
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__language = prevNode.__language;
+    this.__theme = prevNode.__theme;
+    this.__isSyntaxHighlightSupported = prevNode.__isSyntaxHighlightSupported;
+  }
+  // View
+  createDOM(config) {
+    const element = $getDocument2().createElement("code");
+    addClassNamesToElement2(element, config.theme.code);
+    element.setAttribute("spellcheck", "false");
+    const language = this.getLanguage();
+    if (language) {
+      element.setAttribute(LANGUAGE_DATA_ATTRIBUTE$1, language);
+      if (this.getIsSyntaxHighlightSupported()) {
+        element.setAttribute(HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE, language);
+      }
+    }
+    const theme = this.getTheme();
+    if (theme) {
+      element.setAttribute(THEME_DATA_ATTRIBUTE$1, theme);
+    }
+    const style = this.getStyle();
+    if (style) {
+      setDOMStyleFromCSS2(element.style, style);
+    }
+    return element;
+  }
+  updateDOM(prevNode, dom, config) {
+    const language = this.__language;
+    const prevLanguage = prevNode.__language;
+    if (language) {
+      if (language !== prevLanguage) {
+        dom.setAttribute(LANGUAGE_DATA_ATTRIBUTE$1, language);
+      }
+    } else if (prevLanguage) {
+      dom.removeAttribute(LANGUAGE_DATA_ATTRIBUTE$1);
+    }
+    const isSyntaxHighlightSupported = this.__isSyntaxHighlightSupported;
+    const prevIsSyntaxHighlightSupported = prevNode.__isSyntaxHighlightSupported;
+    if (prevIsSyntaxHighlightSupported && prevLanguage) {
+      if (isSyntaxHighlightSupported && language) {
+        if (language !== prevLanguage) {
+          dom.setAttribute(HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE, language);
+        }
+      } else {
+        dom.removeAttribute(HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE);
+      }
+    } else if (isSyntaxHighlightSupported && language) {
+      dom.setAttribute(HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE, language);
+    }
+    const theme = this.__theme;
+    const prevTheme = prevNode.__theme;
+    if (theme) {
+      if (theme !== prevTheme) {
+        dom.setAttribute(THEME_DATA_ATTRIBUTE$1, theme);
+      }
+    } else if (prevTheme) {
+      dom.removeAttribute(THEME_DATA_ATTRIBUTE$1);
+    }
+    const style = this.__style;
+    const prevStyle = prevNode.__style;
+    if (style !== prevStyle) {
+      setDOMStyleFromCSS2(dom.style, style, prevStyle);
+    }
+    return false;
+  }
+  exportDOM(editor) {
+    const element = $getDocument2().createElement("pre");
+    addClassNamesToElement2(element, editor._config.theme.code);
+    element.setAttribute("spellcheck", "false");
+    const language = this.getLanguage();
+    if (language) {
+      element.setAttribute(LANGUAGE_DATA_ATTRIBUTE$1, language);
+      if (this.getIsSyntaxHighlightSupported()) {
+        element.setAttribute(HIGHLIGHT_LANGUAGE_DATA_ATTRIBUTE, language);
+      }
+    }
+    const theme = this.getTheme();
+    if (theme) {
+      element.setAttribute(THEME_DATA_ATTRIBUTE$1, theme);
+    }
+    const style = this.getStyle();
+    if (style) {
+      setDOMStyleFromCSS2(element.style, style);
+    }
+    return {
+      element
+    };
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setLanguage(serializedNode.language).setTheme(serializedNode.theme);
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      language: this.getLanguage(),
+      theme: this.getTheme()
+    };
+  }
+  // Mutation
+  insertNewAfter(selection, restoreSelection = true) {
+    if (!getPeerDependencyFromEditor2($getEditor2(), "@lexical/code")) {
+      noExtensionDeprecation();
+      const el = $exitCodeNodeOnEnter(selection);
+      if (el) {
+        return el;
+      }
+    }
+    const {
+      anchor,
+      focus
+    } = selection;
+    const firstPoint = anchor.isBefore(focus) ? anchor : focus;
+    const firstSelectionNode = firstPoint.getNode();
+    if ($isTextNode2(firstSelectionNode)) {
+      let node = $getFirstCodeNodeOfLine(firstSelectionNode);
+      const insertNodes = [];
+      while (true) {
+        if ($isTabNode2(node)) {
+          insertNodes.push($createTabNode2());
+          node = node.getNextSibling();
+        } else if ($isCodeHighlightNode(node)) {
+          let spaces = 0;
+          const text = node.getTextContent();
+          const textSize = node.getTextContentSize();
+          while (spaces < textSize && text[spaces] === " ") {
+            spaces++;
+          }
+          if (spaces !== 0) {
+            insertNodes.push($createCodeHighlightNode(" ".repeat(spaces)));
+          }
+          if (spaces !== textSize) {
+            break;
+          }
+          node = node.getNextSibling();
+        } else {
+          break;
+        }
+      }
+      const split = firstSelectionNode.splitText(anchor.offset)[0];
+      const x2 = anchor.offset === 0 ? 0 : 1;
+      const index = split.getIndexWithinParent() + x2;
+      const codeNode = firstSelectionNode.getParentOrThrow();
+      const nodesToInsert = [$createLineBreakNode2(), ...insertNodes];
+      codeNode.splice(index, 0, nodesToInsert);
+      const last = insertNodes[insertNodes.length - 1];
+      if (last) {
+        last.select();
+      } else if (anchor.offset === 0) {
+        split.selectPrevious();
+      } else {
+        split.getNextSibling().selectNext(0, 0);
+      }
+    }
+    if ($isCodeNode(firstSelectionNode)) {
+      const {
+        offset
+      } = selection.anchor;
+      firstSelectionNode.splice(offset, 0, [$createLineBreakNode2()]);
+      firstSelectionNode.select(offset + 1, offset + 1);
+    }
+    return null;
+  }
+  canIndent() {
+    return false;
+  }
+  collapseAtStart() {
+    const paragraph = $createParagraphNode2();
+    const children = this.getChildren();
+    children.forEach((child) => paragraph.append(child));
+    this.replace(paragraph);
+    return true;
+  }
+  setLanguage(language) {
+    const writable = this.getWritable();
+    writable.__language = language || void 0;
+    return writable;
+  }
+  getLanguage() {
+    return this.getLatest().__language;
+  }
+  setIsSyntaxHighlightSupported(isSupported) {
+    const writable = this.getWritable();
+    writable.__isSyntaxHighlightSupported = isSupported;
+    return writable;
+  }
+  getIsSyntaxHighlightSupported() {
+    return this.getLatest().__isSyntaxHighlightSupported;
+  }
+  setTheme(theme) {
+    const writable = this.getWritable();
+    writable.__theme = theme || void 0;
+    return writable;
+  }
+  getTheme() {
+    return this.getLatest().__theme;
+  }
+};
+function $createCodeNode(language, theme) {
+  return $create2(CodeNode).setLanguage(language).setTheme(theme);
+}
+function $isCodeNode(node) {
+  return node instanceof CodeNode;
+}
+function $convertPreElement(domNode) {
+  const language = domNode.getAttribute(LANGUAGE_DATA_ATTRIBUTE$1);
+  const theme = domNode.getAttribute(THEME_DATA_ATTRIBUTE$1);
+  return {
+    node: $createCodeNode(language, theme)
+  };
+}
+function $convertDivElement(domNode) {
+  const div = domNode;
+  const isCode = isCodeElement(div);
+  if (!isCode && !isCodeChildElement(div)) {
+    return {
+      node: null
+    };
+  }
+  return {
+    node: isCode ? $createCodeNode() : null
+  };
+}
+function $convertTableElement() {
+  return {
+    node: $createCodeNode()
+  };
+}
+function convertCodeNoop() {
+  return {
+    node: null
+  };
+}
+function isCodeElement(div) {
+  return div.style.fontFamily.match("monospace") !== null;
+}
+function isCodeChildElement(node) {
+  let parent = node.parentElement;
+  while (parent !== null) {
+    if (isCodeElement(parent)) {
+      return true;
+    }
+    parent = parent.parentElement;
+  }
+  return false;
+}
+function isGitHubCodeCell(cell) {
+  return cell.classList.contains("js-file-line");
+}
+function isGitHubCodeTable(table) {
+  return table.classList.contains("js-file-line-container");
+}
+function $exitCodeNodeOnEnter(selection) {
+  const {
+    anchor
+  } = selection;
+  if (selection.isCollapsed() && anchor.type === "element") {
+    const codeNode = anchor.getNode();
+    if ($isCodeNode(codeNode)) {
+      const childrenSize = codeNode.getChildrenSize();
+      if (childrenSize >= 2 && anchor.offset === childrenSize) {
+        const lastChild = codeNode.getLastChild();
+        if ($isLineBreakNode2(lastChild) && $isLineBreakNode2(lastChild.getPreviousSibling())) {
+          const newElement = $createParagraphNode2();
+          codeNode.splice(childrenSize - 2, 2, []).insertAfter(newElement, false);
+          newElement.select();
+          return newElement;
+        }
+      }
+    }
+  }
+  return null;
+}
+var CodeHighlightNode = class extends TextNode2 {
+  /** @internal */
+  __highlightType;
+  constructor(text = "", highlightType, key) {
+    super(text, key);
+    this.__highlightType = highlightType;
+  }
+  $config() {
+    return this.config("code-highlight", {
+      extends: TextNode2
+    });
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__highlightType = prevNode.__highlightType;
+  }
+  getHighlightType() {
+    const self = this.getLatest();
+    return self.__highlightType;
+  }
+  setHighlightType(highlightType) {
+    const self = this.getWritable();
+    self.__highlightType = highlightType || void 0;
+    return self;
+  }
+  canHaveFormat() {
+    return false;
+  }
+  createDOM(config) {
+    const element = super.createDOM(config);
+    const className = getHighlightThemeClass(config.theme, this.__highlightType);
+    addClassNamesToElement2(element, className);
+    return element;
+  }
+  updateDOM(prevNode, dom, config) {
+    const update = super.updateDOM(prevNode, dom, config);
+    const prevClassName = getHighlightThemeClass(config.theme, prevNode.__highlightType);
+    const nextClassName = getHighlightThemeClass(config.theme, this.__highlightType);
+    if (prevClassName !== nextClassName) {
+      if (prevClassName) {
+        removeClassNamesFromElement2(dom, prevClassName);
+      }
+      if (nextClassName) {
+        addClassNamesToElement2(dom, nextClassName);
+      }
+    }
+    return update;
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setHighlightType(serializedNode.highlightType);
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      highlightType: this.getHighlightType()
+    };
+  }
+  // Prevent formatting (bold, underline, etc)
+  setFormat(format) {
+    return this;
+  }
+  isParentRequired() {
+    return true;
+  }
+  createParentElementNode() {
+    return $createCodeNode();
+  }
+};
+function getHighlightThemeClass(theme, highlightType) {
+  return highlightType && theme && theme.codeHighlight && theme.codeHighlight[highlightType];
+}
+function $createCodeHighlightNode(text = "", highlightType) {
+  return $applyNodeReplacement2(new CodeHighlightNode(text, highlightType));
+}
+function $isCodeHighlightNode(node) {
+  return node instanceof CodeHighlightNode;
+}
+var LANGUAGE_DATA_ATTRIBUTE = "data-language";
+var THEME_DATA_ATTRIBUTE = "data-theme";
+function isMonospaceElement(el) {
+  return el.style.fontFamily.match("monospace") !== null;
+}
+function isMonospaceDescendant(node) {
+  let parent = node.parentElement;
+  while (parent !== null) {
+    if (isMonospaceElement(parent)) {
+      return true;
+    }
+    parent = parent.parentElement;
+  }
+  return false;
+}
+var GitHubCodeTableOverlayRules = /* @__PURE__ */ defineOverlayRules2([{
+  $import: (ctx, el) => ctx.$importChildren(el),
+  match: /* @__PURE__ */ sel2.tag("tr", "td"),
+  name: "@lexical/code/github-code-table/unwrap"
+}]);
+var PreRule = {
+  $import: (ctx, el) => [$createCodeNode(el.getAttribute(LANGUAGE_DATA_ATTRIBUTE), el.getAttribute(THEME_DATA_ATTRIBUTE)).splice(0, 0, ctx.$importChildren(el))],
+  match: /* @__PURE__ */ sel2.tag("pre"),
+  name: "@lexical/code/pre"
+};
+var MultilineCodeRule = {
+  $import: (ctx, el, $next) => {
+    const text = el.textContent || "";
+    const isMultiLine = /\r?\n/.test(text) || el.querySelector("br") !== null;
+    if (!isMultiLine) {
+      return $next();
+    }
+    return [$createCodeNode(el.getAttribute(LANGUAGE_DATA_ATTRIBUTE), el.getAttribute(THEME_DATA_ATTRIBUTE)).splice(0, 0, ctx.$importChildren(el))];
+  },
+  match: /* @__PURE__ */ sel2.tag("code"),
+  name: "@lexical/code/code-multiline"
+};
+function isMonospacePreElement(el) {
+  if (!isHTMLElement2(el)) {
+    return false;
+  }
+  const ff = el.style.fontFamily;
+  const ws = el.style.whiteSpace;
+  return typeof ff === "string" && /monospace/i.test(ff) && typeof ws === "string" && ws.startsWith("pre");
+}
+function splitMonospaceWrapperLines(el) {
+  let hasBlockChild = false;
+  const lines = [];
+  let acc = "";
+  let hasAcc = false;
+  const flush = () => {
+    if (hasAcc) {
+      lines.push(acc);
+      acc = "";
+      hasAcc = false;
+    }
+  };
+  for (const child of Array.from(el.childNodes)) {
+    if (isHTMLElement2(child)) {
+      if (child.tagName === "DIV") {
+        flush();
+        lines.push(child.textContent || "");
+        hasBlockChild = true;
+      } else if (child.tagName === "BR") {
+        flush();
+        lines.push("");
+        hasBlockChild = true;
+      } else {
+        acc += child.textContent || "";
+        hasAcc = true;
+      }
+    } else if (isDOMTextNode2(child)) {
+      const t2 = child.textContent || "";
+      if (t2.length > 0) {
+        acc += t2;
+        hasAcc = true;
+      }
+    }
+  }
+  flush();
+  return hasBlockChild ? lines : null;
+}
+function looksLikeVscodePaste(root) {
+  for (const child of Array.from(root.children)) {
+    if (isHTMLElement2(child) && isMonospacePreElement(child)) {
+      const lines = splitMonospaceWrapperLines(child);
+      if (lines !== null) {
+        return true;
+      }
+      const next = child.nextElementSibling;
+      if (next && isMonospacePreElement(next)) {
+        return true;
+      }
+      continue;
+    }
+    if (looksLikeVscodePaste(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+var VscodeWrapperRule = {
+  $import: (_ctx, el, $next) => {
+    if (!isMonospacePreElement(el) || isMonospaceDescendant(el)) {
+      return $next();
+    }
+    const lines = splitMonospaceWrapperLines(el);
+    if (lines === null || lines.length === 0) {
+      return $next();
+    }
+    return [$createCodeNode().splice(0, 0, $generateNodesFromRawText2(lines.join("\n")))];
+  },
+  match: /* @__PURE__ */ sel2.tag("div"),
+  name: "@lexical/code/vscode-wrapper"
+};
+var VscodeLineRunRule = {
+  $import: (_ctx, el, $next) => {
+    if (!isMonospacePreElement(el) || isMonospaceDescendant(el)) {
+      return $next();
+    }
+    const prev = el.previousElementSibling;
+    if (prev && isMonospacePreElement(prev)) {
+      return [];
+    }
+    const lines = [];
+    let cur = el;
+    while (cur && isMonospacePreElement(cur)) {
+      lines.push(cur.tagName === "BR" ? "" : cur.textContent || "");
+      cur = cur.nextElementSibling;
+    }
+    if (lines.length < 2) {
+      return $next();
+    }
+    return [$createCodeNode().splice(0, 0, $generateNodesFromRawText2(lines.join("\n")))];
+  },
+  match: /* @__PURE__ */ sel2.tag("div", "br"),
+  name: "@lexical/code/vscode-line-run"
+};
+var VscodeCodePasteOverlay = /* @__PURE__ */ defineOverlayRules2([VscodeWrapperRule, VscodeLineRunRule]);
+var $installVscodeCodePasteOverlay = (dom, ctx, $next) => {
+  const root = isDOMDocumentNode2(dom) ? dom.body : dom;
+  if (looksLikeVscodePaste(root)) {
+    ctx.session.update(ImportOverlays2, (prev) => [...prev, VscodeCodePasteOverlay]);
+  }
+  $next();
+};
+var DivRule = {
+  $import: (ctx, el, $next) => {
+    if (isMonospaceElement(el)) {
+      return [$createCodeNode().splice(0, 0, ctx.$importChildren(el))];
+    }
+    if (isMonospaceDescendant(el)) {
+      return ctx.$importChildren(el);
+    }
+    return $next();
+  },
+  match: /* @__PURE__ */ sel2.tag("div"),
+  name: "@lexical/code/div"
+};
+var GitHubCodeTableRule = {
+  $import: (ctx, el) => [$createCodeNode().splice(0, 0, ctx.$importChildren(el, {
+    rules: GitHubCodeTableOverlayRules
+  }))],
+  match: /* @__PURE__ */ sel2.tag("table").classAll("js-file-line-container"),
+  name: "@lexical/code/github-code-table"
+};
+var GitHubCodeCellByClassRule = {
+  $import: (ctx, el) => ctx.$importChildren(el),
+  match: /* @__PURE__ */ sel2.tag("td").classAll("js-file-line"),
+  name: "@lexical/code/github-code-cell-by-class"
+};
+var CodeImportRules = [
+  // Higher-priority (more-specific) rules first:
+  GitHubCodeTableRule,
+  GitHubCodeCellByClassRule,
+  MultilineCodeRule,
+  PreRule,
+  DivRule
+];
+var CodeExtension = {
+  dependencies: [
+    // DOMImportExtension support for the nodes registered here. Inert
+    // unless the editor routes HTML through the pipeline (e.g. via
+    // ClipboardDOMImportExtension or $generateNodesFromDOMViaExtension).
+    CoreImportExtension2,
+    [DOMImportExtension2, {
+      preprocess: [$installVscodeCodePasteOverlay],
+      rules: CodeImportRules
+    }]
+  ],
+  name: "@lexical/code",
+  nodes: () => [CodeNode, CodeHighlightNode],
+  register(editor) {
+    return mergeRegister2(editor.registerCommand(KEY_ENTER_COMMAND2, (event) => {
+      const selection = $getSelection2();
+      if ($isRangeSelection2(selection) && $exitCodeNodeOnEnter(selection)) {
+        if (event !== null) {
+          event.preventDefault();
+        }
+        return true;
+      }
+      return false;
+    }, COMMAND_PRIORITY_LOW2), editor.registerNodeTransform(TabNode2, (node) => {
+      if (node.getFormat() !== 0 && $isCodeNode(node.getParent())) {
+        node.setFormat(0);
+      }
+    }));
+  }
+};
+var CodeImportExtension = {
+  dependencies: [CodeExtension],
+  name: "@lexical/code/Import"
+};
+function $isSelectionInCode(selection) {
+  if (!$isRangeSelection2(selection)) {
+    return false;
+  }
+  const anchorNode = selection.anchor.getNode();
+  const maybeAnchorCodeNode = $isCodeNode(anchorNode) ? anchorNode : anchorNode.getParent();
+  const focusNode = selection.focus.getNode();
+  const maybeFocusCodeNode = $isCodeNode(focusNode) ? focusNode : focusNode.getParent();
+  return $isCodeNode(maybeAnchorCodeNode) && maybeAnchorCodeNode.is(maybeFocusCodeNode);
+}
+function $getCodeLines(selection) {
+  const nodes = selection.getNodes();
+  const lines = [];
+  if (nodes.length === 1 && $isCodeNode(nodes[0])) {
+    return lines;
+  }
+  let lastLine = [];
+  for (let i2 = 0; i2 < nodes.length; i2++) {
+    const node = nodes[i2];
+    if (!($isCodeHighlightNode(node) || $isTabNode2(node) || $isLineBreakNode2(node))) {
+      formatDevErrorMessage8(`Expected selection to be inside CodeBlock and consisting of CodeHighlightNode, TabNode and LineBreakNode`);
+    }
+    if ($isLineBreakNode2(node)) {
+      if (lastLine.length > 0) {
+        lines.push(lastLine);
+        lastLine = [];
+      }
+    } else {
+      lastLine.push(node);
+    }
+  }
+  if (lastLine.length > 0) {
+    const selectionEnd = selection.isBackward() ? selection.anchor : selection.focus;
+    const lastPoint = $createPoint2(lastLine[0].getKey(), 0, "text");
+    if (!selectionEnd.is(lastPoint)) {
+      lines.push(lastLine);
+    }
+  }
+  return lines;
+}
+function $handleTab(shiftKey) {
+  const selection = $getSelection2();
+  if (!$isRangeSelection2(selection) || !$isSelectionInCode(selection)) {
+    return null;
+  }
+  const indentOrOutdent = !shiftKey ? INDENT_CONTENT_COMMAND2 : OUTDENT_CONTENT_COMMAND2;
+  const tabOrOutdent = !shiftKey ? INSERT_TAB_COMMAND2 : OUTDENT_CONTENT_COMMAND2;
+  const anchor = selection.anchor;
+  const focus = selection.focus;
+  if (anchor.is(focus)) {
+    return tabOrOutdent;
+  }
+  const codeLines = $getCodeLines(selection);
+  if (codeLines.length !== 1) {
+    return indentOrOutdent;
+  }
+  const codeLine = codeLines[0];
+  const codeLineLength = codeLine.length;
+  if (!(codeLineLength !== 0)) {
+    formatDevErrorMessage8(`$getCodeLines only extracts non-empty lines`);
+  }
+  let selectionFirst;
+  let selectionLast;
+  if (selection.isBackward()) {
+    selectionFirst = focus;
+    selectionLast = anchor;
+  } else {
+    selectionFirst = anchor;
+    selectionLast = focus;
+  }
+  const firstOfLine = $getFirstCodeNodeOfLine(codeLine[0]);
+  const lastOfLine = $getLastCodeNodeOfLine(codeLine[0]);
+  const anchorOfLine = $createPoint2(firstOfLine.getKey(), 0, "text");
+  const focusOfLine = $createPoint2(lastOfLine.getKey(), lastOfLine.getTextContentSize(), "text");
+  if (selectionFirst.isBefore(anchorOfLine)) {
+    return indentOrOutdent;
+  }
+  if (focusOfLine.isBefore(selectionLast)) {
+    return indentOrOutdent;
+  }
+  if (anchorOfLine.isBefore(selectionFirst) || selectionLast.isBefore(focusOfLine)) {
+    return tabOrOutdent;
+  }
+  return indentOrOutdent;
+}
+function $outdentLineAtCaret(selection, tabSize) {
+  const anchorNode = selection.anchor.getNode();
+  if (!$isCodeHighlightNode(anchorNode) && !$isTabNode2(anchorNode)) {
+    return;
+  }
+  const firstOfLine = $getFirstCodeNodeOfLine(anchorNode);
+  if ($isTabNode2(firstOfLine)) {
+    firstOfLine.remove();
+  } else if (tabSize !== void 0 && $isCodeHighlightNode(firstOfLine)) {
+    $outdentLeadingSpaces(firstOfLine, tabSize, selection);
+  }
+}
+function $handleMultilineIndent(type, tabSize) {
+  const selection = $getSelection2();
+  if (!$isRangeSelection2(selection) || !$isSelectionInCode(selection)) {
+    return false;
+  }
+  const codeLines = $getCodeLines(selection);
+  const codeLinesLength = codeLines.length;
+  if (codeLinesLength === 0 && selection.isCollapsed()) {
+    if (type === INDENT_CONTENT_COMMAND2) {
+      selection.insertNodes([$createTabNode2()]);
+    } else {
+      $outdentLineAtCaret(selection, tabSize);
+    }
+    return true;
+  }
+  if (codeLinesLength === 0 && type === INDENT_CONTENT_COMMAND2 && selection.getTextContent() === "\n") {
+    const tabNode = $createTabNode2();
+    const lineBreakNode = $createLineBreakNode2();
+    const direction = selection.isBackward() ? "previous" : "next";
+    selection.insertNodes([tabNode, lineBreakNode]);
+    $setSelectionFromCaretRange2($getCaretRangeInDirection2($getCaretRange2($getTextPointCaret2(tabNode, "next", 0), $normalizeCaret2($getSiblingCaret2(lineBreakNode, "next"))), direction));
+    return true;
+  }
+  for (let i2 = 0; i2 < codeLinesLength; i2++) {
+    const line = codeLines[i2];
+    if (line.length > 0) {
+      let firstOfLine = line[0];
+      if (i2 === 0) {
+        firstOfLine = $getFirstCodeNodeOfLine(firstOfLine);
+      }
+      if (type === INDENT_CONTENT_COMMAND2) {
+        const tabNode = $createTabNode2();
+        firstOfLine.insertBefore(tabNode);
+        if (i2 === 0) {
+          const anchorKey = selection.isBackward() ? "focus" : "anchor";
+          const anchorLine = $createPoint2(firstOfLine.getKey(), 0, "text");
+          if (selection[anchorKey].is(anchorLine)) {
+            selection[anchorKey].set(tabNode.getKey(), 0, "text");
+          }
+        }
+      } else if ($isTabNode2(firstOfLine)) {
+        firstOfLine.remove();
+      } else if (tabSize !== void 0 && $isCodeHighlightNode(firstOfLine)) {
+        $outdentLeadingSpaces(firstOfLine, tabSize, selection);
+      }
+    }
+  }
+  return true;
+}
+function $handleShiftLines(type, event) {
+  const selection = $getSelection2();
+  if (!$isRangeSelection2(selection)) {
+    return false;
+  }
+  const {
+    anchor,
+    focus
+  } = selection;
+  const anchorOffset = anchor.offset;
+  const focusOffset = focus.offset;
+  const anchorNode = anchor.getNode();
+  const focusNode = focus.getNode();
+  const arrowIsUp = type === KEY_ARROW_UP_COMMAND2;
+  if (!$isSelectionInCode(selection) || !($isCodeHighlightNode(anchorNode) || $isTabNode2(anchorNode)) || !($isCodeHighlightNode(focusNode) || $isTabNode2(focusNode))) {
+    return false;
+  }
+  if (!event.altKey) {
+    if (selection.isCollapsed()) {
+      const codeNode = anchorNode.getParentOrThrow();
+      if (arrowIsUp && anchorOffset === 0 && anchorNode.getPreviousSibling() === null) {
+        const codeNodeSibling = codeNode.getPreviousSibling();
+        if (codeNodeSibling === null) {
+          codeNode.selectPrevious();
+          event.preventDefault();
+          return false;
+        }
+      } else if (!arrowIsUp && anchorOffset === anchorNode.getTextContentSize() && anchorNode.getNextSibling() === null) {
+        const codeNodeSibling = codeNode.getNextSibling();
+        if (codeNodeSibling === null) {
+          codeNode.selectNext();
+          event.preventDefault();
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+  let start;
+  let end;
+  if (anchorNode.isBefore(focusNode)) {
+    start = $getFirstCodeNodeOfLine(anchorNode);
+    end = $getLastCodeNodeOfLine(focusNode);
+  } else {
+    start = $getFirstCodeNodeOfLine(focusNode);
+    end = $getLastCodeNodeOfLine(anchorNode);
+  }
+  if (start == null || end == null) {
+    return false;
+  }
+  const range = start.getNodesBetween(end);
+  for (let i2 = 0; i2 < range.length; i2++) {
+    const node = range[i2];
+    if (!$isCodeHighlightNode(node) && !$isTabNode2(node) && !$isLineBreakNode2(node)) {
+      return false;
+    }
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  const linebreak = arrowIsUp ? start.getPreviousSibling() : end.getNextSibling();
+  if (!$isLineBreakNode2(linebreak)) {
+    return true;
+  }
+  const sibling = arrowIsUp ? linebreak.getPreviousSibling() : linebreak.getNextSibling();
+  if (sibling == null) {
+    return true;
+  }
+  const adjacentLineIsBlank = $isLineBreakNode2(sibling);
+  const maybeInsertionPoint = !adjacentLineIsBlank && ($isCodeHighlightNode(sibling) || $isTabNode2(sibling)) ? arrowIsUp ? $getFirstCodeNodeOfLine(sibling) : $getLastCodeNodeOfLine(sibling) : null;
+  let insertionPoint = maybeInsertionPoint != null ? maybeInsertionPoint : sibling;
+  linebreak.remove();
+  range.forEach((node) => node.remove());
+  if (adjacentLineIsBlank) {
+    range.forEach((node) => {
+      insertionPoint.insertAfter(node);
+      insertionPoint = node;
+    });
+    insertionPoint.insertAfter(linebreak);
+  } else if (type === KEY_ARROW_UP_COMMAND2) {
+    range.forEach((node) => insertionPoint.insertBefore(node));
+    insertionPoint.insertBefore(linebreak);
+  } else {
+    insertionPoint.insertAfter(linebreak);
+    insertionPoint = linebreak;
+    range.forEach((node) => {
+      insertionPoint.insertAfter(node);
+      insertionPoint = node;
+    });
+  }
+  selection.setTextNodeRange(anchorNode, anchorOffset, focusNode, focusOffset);
+  return true;
+}
+function $handleMoveTo(type, event) {
+  const selection = $getSelection2();
+  if (!$isRangeSelection2(selection)) {
+    return false;
+  }
+  const {
+    anchor,
+    focus
+  } = selection;
+  const anchorNode = anchor.getNode();
+  const focusNode = focus.getNode();
+  const isMoveToStart = type === MOVE_TO_START2;
+  if (!$isSelectionInCode(selection) || !($isCodeHighlightNode(anchorNode) || $isTabNode2(anchorNode)) || !($isCodeHighlightNode(focusNode) || $isTabNode2(focusNode))) {
+    return false;
+  }
+  const focusLineNode = focusNode;
+  const direction = $getCodeLineDirection(focusLineNode);
+  const moveToStart = direction === "rtl" ? !isMoveToStart : isMoveToStart;
+  const originalAnchorKey = anchor.key;
+  const originalAnchorOffset = anchor.offset;
+  const originalAnchorType = anchor.type;
+  if (moveToStart) {
+    const start = $getStartOfCodeInLine(focusLineNode, focus.offset);
+    if (start !== null) {
+      const {
+        node,
+        offset
+      } = start;
+      if ($isLineBreakNode2(node)) {
+        node.selectNext(0, 0);
+      } else {
+        selection.setTextNodeRange(node, offset, node, offset);
+      }
+    } else {
+      focusLineNode.getParentOrThrow().selectStart();
+    }
+  } else {
+    const node = $getEndOfCodeInLine(focusLineNode);
+    node.select();
+  }
+  if (event.shiftKey) {
+    selection.anchor.set(originalAnchorKey, originalAnchorOffset, originalAnchorType);
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  return true;
+}
+function registerCodeIndentation(editor, tabSize, escapeWithArrows) {
+  return mergeRegister2(
+    ...escapeWithArrows ? [editor.registerCommand(KEY_ARROW_DOWN_COMMAND2, (event) => event.altKey ? false : $onEscapeDown2($isCodeNode, event), COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_RIGHT_COMMAND2, (event) => $onEscapeDown2($isCodeNode, event), COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_UP_COMMAND2, (event) => event.altKey ? false : $onEscapeUp2($isCodeNode, event), COMMAND_PRIORITY_LOW2), editor.registerCommand(KEY_ARROW_LEFT_COMMAND2, (event) => $onEscapeUp2($isCodeNode, event), COMMAND_PRIORITY_LOW2)] : [],
+    editor.registerCommand(KEY_TAB_COMMAND2, (event) => {
+      const command = $handleTab(event.shiftKey);
+      if (command === null) {
+        return false;
+      }
+      event.preventDefault();
+      editor.dispatchCommand(command);
+      return true;
+    }, COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(INSERT_TAB_COMMAND2, () => {
+      const selection = $getSelection2();
+      if (!$isSelectionInCode(selection)) {
+        return false;
+      }
+      $insertNodes2([$createTabNode2()]);
+      return true;
+    }, COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(INDENT_CONTENT_COMMAND2, () => $handleMultilineIndent(INDENT_CONTENT_COMMAND2), COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(OUTDENT_CONTENT_COMMAND2, () => $handleMultilineIndent(OUTDENT_CONTENT_COMMAND2, tabSize), COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(KEY_ARROW_UP_COMMAND2, (event) => {
+      const selection = $getSelection2();
+      if (!$isRangeSelection2(selection)) {
+        return false;
+      }
+      const {
+        anchor
+      } = selection;
+      const anchorNode = anchor.getNode();
+      if (!$isSelectionInCode(selection)) {
+        return false;
+      }
+      const parent = anchorNode.getParent();
+      if (selection.isCollapsed() && anchor.offset === 0 && anchorNode.getPreviousSibling() === null && $isCodeNode(parent) && parent.getPreviousSibling() === null) {
+        event.preventDefault();
+        return true;
+      }
+      return $handleShiftLines(KEY_ARROW_UP_COMMAND2, event);
+    }, COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(KEY_ARROW_DOWN_COMMAND2, (event) => {
+      const selection = $getSelection2();
+      if (!$isRangeSelection2(selection)) {
+        return false;
+      }
+      const {
+        anchor
+      } = selection;
+      const anchorNode = anchor.getNode();
+      if (!$isSelectionInCode(selection)) {
+        return false;
+      }
+      if (selection.isCollapsed() && anchor.offset === anchorNode.getTextContentSize() && anchorNode.getNextSibling() === null && $isCodeNode(anchorNode.getParentOrThrow()) && anchorNode.getParentOrThrow().getNextSibling() === null) {
+        event.preventDefault();
+        return true;
+      }
+      return $handleShiftLines(KEY_ARROW_DOWN_COMMAND2, event);
+    }, COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(MOVE_TO_START2, (event) => $handleMoveTo(MOVE_TO_START2, event), COMMAND_PRIORITY_LOW2),
+    editor.registerCommand(MOVE_TO_END2, (event) => $handleMoveTo(MOVE_TO_END2, event), COMMAND_PRIORITY_LOW2)
+  );
+}
+var CodeIndentExtension = {
+  build: (editor, config) => namedSignals2(config),
+  config: {
+    disabled: false,
+    escapeWithArrows: false,
+    tabSize: void 0
+  },
+  dependencies: [CodeExtension],
+  name: "@lexical/code-indent",
+  register: (editor, config, state) => {
+    const stores = state.getOutput();
+    return effect(() => {
+      if (stores.disabled.value) {
+        return;
+      }
+      return registerCodeIndentation(editor, stores.tabSize.value, stores.escapeWithArrows.value);
+    });
+  }
+};
+
+// node_modules/@lexical/code-core/dist/LexicalCodeCore.mjs
+var mod12 = true ? LexicalCodeCore_dev_exports : LexicalCodeCore_prod_exports;
+var $createCodeHighlightNode2 = mod12.$createCodeHighlightNode;
+var $createCodeNode2 = mod12.$createCodeNode;
+var $getCodeLineDirection2 = mod12.$getCodeLineDirection;
+var $getEndOfCodeInLine2 = mod12.$getEndOfCodeInLine;
+var $getFirstCodeNodeOfLine2 = mod12.$getFirstCodeNodeOfLine;
+var $getLastCodeNodeOfLine2 = mod12.$getLastCodeNodeOfLine;
+var $getStartOfCodeInLine2 = mod12.$getStartOfCodeInLine;
+var $isCodeHighlightNode2 = mod12.$isCodeHighlightNode;
+var $isCodeNode2 = mod12.$isCodeNode;
+var $outdentLeadingSpaces2 = mod12.$outdentLeadingSpaces;
+var $plainifyCodeContent2 = mod12.$plainifyCodeContent;
+var CodeExtension2 = mod12.CodeExtension;
+var CodeHighlightNode2 = mod12.CodeHighlightNode;
+var CodeImportExtension2 = mod12.CodeImportExtension;
+var CodeImportRules2 = mod12.CodeImportRules;
+var CodeIndentExtension2 = mod12.CodeIndentExtension;
+var CodeNode2 = mod12.CodeNode;
+var DEFAULT_CODE_LANGUAGE2 = mod12.DEFAULT_CODE_LANGUAGE;
+var getDefaultCodeLanguage2 = mod12.getDefaultCodeLanguage;
+var registerCodeIndentation2 = mod12.registerCodeIndentation;
+
+// node_modules/@lexical/link/dist/LexicalLink.dev.mjs
+var LexicalLink_dev_exports = {};
+__export(LexicalLink_dev_exports, {
+  $createAutoLinkNode: () => $createAutoLinkNode,
+  $createLinkNode: () => $createLinkNode,
+  $isAutoLinkNode: () => $isAutoLinkNode,
+  $isLinkNode: () => $isLinkNode,
+  $toggleLink: () => $toggleLink,
+  AutoLinkAnnounceExtension: () => AutoLinkAnnounceExtension,
+  AutoLinkExtension: () => AutoLinkExtension,
+  AutoLinkNode: () => AutoLinkNode,
+  ClickableLinkExtension: () => ClickableLinkExtension,
+  LinkExtension: () => LinkExtension,
+  LinkImportExtension: () => LinkImportExtension,
+  LinkImportRules: () => LinkImportRules,
+  LinkNode: () => LinkNode,
+  TOGGLE_LINK_COMMAND: () => TOGGLE_LINK_COMMAND,
+  autoLinkEmailMatcher: () => autoLinkEmailMatcher,
+  autoLinkUrlMatcher: () => autoLinkUrlMatcher,
+  createLinkMatcherWithRegExp: () => createLinkMatcherWithRegExp,
+  formatUrl: () => formatUrl,
+  registerAutoLink: () => registerAutoLink,
+  registerClickableLink: () => registerClickableLink,
+  registerLink: () => registerLink
+});
+function formatDevErrorMessage9(message) {
+  throw new Error(message);
+}
+var SUPPORTED_URL_PROTOCOLS = /* @__PURE__ */ new Set(["http:", "https:", "mailto:", "sms:", "tel:"]);
+var LinkNode = class extends ElementNode2 {
+  /** @internal */
+  __url;
+  /** @internal */
+  __target;
+  /** @internal */
+  __rel;
+  /** @internal */
+  __title;
+  $config() {
+    return this.config("link", {
+      extends: ElementNode2,
+      importDOM: {
+        a: () => ({
+          conversion: $convertAnchorElement,
+          priority: 1
+        })
+      }
+    });
+  }
+  constructor(url = "", attributes = {}, key) {
+    super(key);
+    const {
+      target = null,
+      rel = null,
+      title = null
+    } = attributes;
+    this.__url = url;
+    this.__target = target;
+    this.__rel = rel;
+    this.__title = title;
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__url = prevNode.__url;
+    this.__rel = prevNode.__rel;
+    this.__target = prevNode.__target;
+    this.__title = prevNode.__title;
+  }
+  createDOM(config) {
+    const element = $getDocument2().createElement("a");
+    this.updateLinkDOM(null, element, config);
+    addClassNamesToElement2(element, config.theme.link);
+    return element;
+  }
+  updateLinkDOM(prevNode, anchor, config) {
+    if (isHTMLAnchorElement2(anchor)) {
+      if (!prevNode || prevNode.__url !== this.__url) {
+        anchor.href = this.sanitizeUrl(this.__url);
+      }
+      for (const attr of ["target", "rel", "title"]) {
+        const key = `__${attr}`;
+        const value = this[key];
+        if (!prevNode || prevNode[key] !== value) {
+          if (value) {
+            anchor[attr] = value;
+          } else {
+            anchor.removeAttribute(attr);
+          }
+        }
+      }
+    }
+  }
+  updateDOM(prevNode, anchor, config) {
+    this.updateLinkDOM(prevNode, anchor, config);
+    return false;
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setURL(serializedNode.url).setRel(serializedNode.rel || null).setTarget(serializedNode.target || null).setTitle(serializedNode.title || null);
+  }
+  sanitizeUrl(url) {
+    const rawUrl = url;
+    url = formatUrl(url);
+    try {
+      const parsedUrl = new URL(formatUrl(url));
+      if (!SUPPORTED_URL_PROTOCOLS.has(parsedUrl.protocol)) {
+        return "about:blank";
+      }
+    } catch (_unused) {
+      const normalizedUrl = rawUrl.replace(/[\u0000-\u001F\u007F\s]/g, "");
+      const schemeMatch = normalizedUrl.match(/^([a-z][a-z0-9+.-]*):/i);
+      if (schemeMatch != null && !SUPPORTED_URL_PROTOCOLS.has(`${schemeMatch[1].toLowerCase()}:`)) {
+        return "about:blank";
+      }
+    }
+    return url;
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      rel: this.getRel(),
+      target: this.getTarget(),
+      title: this.getTitle(),
+      url: this.getURL()
+    };
+  }
+  getURL() {
+    return this.getLatest().__url;
+  }
+  setURL(url) {
+    const writable = this.getWritable();
+    writable.__url = url;
+    return writable;
+  }
+  getTarget() {
+    return this.getLatest().__target;
+  }
+  setTarget(target) {
+    const writable = this.getWritable();
+    writable.__target = target;
+    return writable;
+  }
+  getRel() {
+    return this.getLatest().__rel;
+  }
+  setRel(rel) {
+    const writable = this.getWritable();
+    writable.__rel = rel;
+    return writable;
+  }
+  getTitle() {
+    return this.getLatest().__title;
+  }
+  setTitle(title) {
+    const writable = this.getWritable();
+    writable.__title = title;
+    return writable;
+  }
+  insertNewAfter(_2, restoreSelection = true) {
+    const linkNode = $copyNode2(this);
+    this.insertAfter(linkNode, restoreSelection);
+    return linkNode;
+  }
+  canInsertTextBefore() {
+    return false;
+  }
+  canInsertTextAfter() {
+    return false;
+  }
+  canBeEmpty() {
+    return false;
+  }
+  isInline() {
+    return true;
+  }
+  extractWithChild(child, selection, destination) {
+    if (!$isRangeSelection2(selection)) {
+      return false;
+    }
+    const anchorNode = selection.anchor.getNode();
+    const focusNode = selection.focus.getNode();
+    return (this.is(anchorNode) || this.isParentOf(anchorNode)) && (this.is(focusNode) || this.isParentOf(focusNode)) && selection.getTextContent().length > 0;
+  }
+  isEmailURI() {
+    return this.getURL().startsWith("mailto:");
+  }
+  isWebSiteURI() {
+    const url = this.getURL();
+    return url.startsWith("https://") || url.startsWith("http://");
+  }
+  shouldMergeAdjacentLink(otherLink) {
+    return this.getType() === otherLink.getType() && this.getURL() === otherLink.getURL() && this.getTarget() === otherLink.getTarget() && this.getRel() === otherLink.getRel() && this.getTitle() === otherLink.getTitle();
+  }
+};
+function $saveCaretPair(point) {
+  const next = $caretFromPoint2(point, "next");
+  return [next, next.getFlipped()];
+}
+function $restoreCaretPair(point, pair) {
+  for (const caret of pair) {
+    if (caret.origin.isAttached()) {
+      const normalized = $normalizeCaret2(caret);
+      $setPointFromCaret2(point, normalized);
+      return;
+    }
+  }
+}
+function $linkNodeTransform(link) {
+  const selection = $getSelection2();
+  let anchorPair = null;
+  let focusPair = null;
+  if ($isRangeSelection2(selection)) {
+    anchorPair = $saveCaretPair(selection.anchor);
+    focusPair = $saveCaretPair(selection.focus);
+  }
+  function $restoreSelection2() {
+    if ($isRangeSelection2(selection)) {
+      $restoreCaretPair(selection.anchor, anchorPair);
+      $restoreCaretPair(selection.focus, focusPair);
+      $normalizeSelection__EXPERIMENTAL(selection);
+    }
+  }
+  let transformed = false;
+  for (const caret of $getChildCaret2(link, "next")) {
+    const node = caret.origin;
+    if ($isElementNode2(node) && !node.isInline()) {
+      const blockChildren = node.getChildren();
+      if (blockChildren.length > 0) {
+        const innerLink = $copyNode2(link);
+        innerLink.append(...blockChildren);
+        node.append(innerLink);
+        transformed = true;
+      }
+      $insertNodeToNearestRootAtCaret2(node, $rewindSiblingCaret2(caret), {
+        $shouldSplit: () => false
+      });
+    }
+  }
+  function $fixMergeBoundaryCaret(pair, absorbingLink, mergingLink) {
+    const [next, prev] = pair;
+    const $isAffected = (caret) => $isSiblingCaret2(caret) && caret.origin.is(absorbingLink);
+    if (!$isAffected(next) && !$isAffected(prev)) {
+      return pair;
+    }
+    const fixed = $normalizeCaret2($getChildCaret2(mergingLink, "next"));
+    return [fixed, fixed.getFlipped()];
+  }
+  if (link.isAttached()) {
+    const prevSibling = link.getPreviousSibling();
+    if ($isLinkNode(prevSibling) && prevSibling.shouldMergeAdjacentLink(link)) {
+      if (anchorPair) {
+        anchorPair = $fixMergeBoundaryCaret(anchorPair, prevSibling, link);
+      }
+      if (focusPair) {
+        focusPair = $fixMergeBoundaryCaret(focusPair, prevSibling, link);
+      }
+      prevSibling.append(...link.getChildren());
+      link.remove();
+      $restoreSelection2();
+      return;
+    }
+    const nextSibling = link.getNextSibling();
+    if ($isLinkNode(nextSibling) && link.shouldMergeAdjacentLink(nextSibling)) {
+      if (anchorPair) {
+        anchorPair = $fixMergeBoundaryCaret(anchorPair, link, nextSibling);
+      }
+      if (focusPair) {
+        focusPair = $fixMergeBoundaryCaret(focusPair, link, nextSibling);
+      }
+      link.append(...nextSibling.getChildren());
+      nextSibling.remove();
+      transformed = true;
+    }
+  }
+  if (!transformed) {
+    return;
+  }
+  if (!link.canBeEmpty() && link.isEmpty()) {
+    const parent = link.getParent();
+    link.remove();
+    if (parent && parent.isEmpty()) {
+      parent.remove();
+    }
+  }
+  $restoreSelection2();
+}
+function $convertAnchorElement(domNode) {
+  let node = null;
+  if (isHTMLAnchorElement2(domNode)) {
+    const content = domNode.textContent;
+    if (content !== null && content !== "" || domNode.children.length > 0) {
+      node = $createLinkNode(domNode.getAttribute("href") || "", {
+        rel: domNode.getAttribute("rel"),
+        target: domNode.getAttribute("target"),
+        title: domNode.getAttribute("title")
+      });
+    }
+  }
+  return {
+    node
+  };
+}
+function $createLinkNode(url = "", attributes) {
+  return $applyNodeReplacement2(new LinkNode(url, attributes));
+}
+function $isLinkNode(node) {
+  return node instanceof LinkNode;
+}
+var AutoLinkNode = class extends LinkNode {
+  /** @internal */
+  /** Indicates whether the autolink was ever unlinked. **/
+  __isUnlinked;
+  constructor(url = "", attributes = {}, key) {
+    super(url, attributes, key);
+    this.__isUnlinked = attributes.isUnlinked !== void 0 && attributes.isUnlinked !== null ? attributes.isUnlinked : false;
+  }
+  afterCloneFrom(prevNode) {
+    super.afterCloneFrom(prevNode);
+    this.__isUnlinked = prevNode.__isUnlinked;
+  }
+  $config() {
+    return this.config("autolink", {
+      extends: LinkNode
+    });
+  }
+  shouldMergeAdjacentLink(_otherLink) {
+    return false;
+  }
+  getIsUnlinked() {
+    return this.getLatest().__isUnlinked;
+  }
+  setIsUnlinked(value) {
+    const self = this.getWritable();
+    self.__isUnlinked = value;
+    return self;
+  }
+  createDOM(config) {
+    if (this.__isUnlinked) {
+      return $getDocument2().createElement("span");
+    } else {
+      return super.createDOM(config);
+    }
+  }
+  updateDOM(prevNode, anchor, config) {
+    return super.updateDOM(prevNode, anchor, config) || prevNode.__isUnlinked !== this.__isUnlinked;
+  }
+  updateFromJSON(serializedNode) {
+    return super.updateFromJSON(serializedNode).setIsUnlinked(serializedNode.isUnlinked || false);
+  }
+  exportJSON() {
+    return {
+      ...super.exportJSON(),
+      isUnlinked: this.__isUnlinked
+    };
+  }
+  // insertNewAfter is deliberately not overridden: LinkNode's implementation
+  // uses $copyNode, which runs clone() + afterCloneFrom() and so carries the
+  // element props (format/indent/style/dir/textFormat/textStyle) and NodeState
+  // as well as the link attributes. Enumerating properties by hand here
+  // dropped all of those, and rebuilt the node as a base AutoLinkNode even for
+  // a subclass. AutoLinkNode.afterCloneFrom already carries __isUnlinked.
+};
+function $createAutoLinkNode(url = "", attributes) {
+  return $applyNodeReplacement2(new AutoLinkNode(url, attributes));
+}
+function $isAutoLinkNode(node) {
+  return node instanceof AutoLinkNode;
+}
+var TOGGLE_LINK_COMMAND = /* @__PURE__ */ createCommand2("TOGGLE_LINK_COMMAND");
+function $getPointNode(point, offset) {
+  if (point.type === "element") {
+    const node = point.getNode();
+    if (!$isElementNode2(node)) {
+      formatDevErrorMessage9(`$getPointNode: element point is not an ElementNode`);
+    }
+    const childNode = node.getChildren()[point.offset + offset];
+    return childNode || null;
+  }
+  return null;
+}
+function $withSelectedNodes($fn) {
+  const initialSelection = $getSelection2();
+  if (!$isRangeSelection2(initialSelection)) {
+    return $fn();
+  }
+  const normalized = $normalizeSelection__EXPERIMENTAL(initialSelection);
+  const isBackwards = normalized.isBackward();
+  const anchorNode = $getPointNode(normalized.anchor, isBackwards ? -1 : 0);
+  const focusNode = $getPointNode(normalized.focus, isBackwards ? 0 : -1);
+  const rval = $fn();
+  if (anchorNode || focusNode) {
+    const updatedSelection = $getSelection2();
+    if ($isRangeSelection2(updatedSelection)) {
+      const finalSelection = updatedSelection.clone();
+      if (anchorNode) {
+        const anchorParent = anchorNode.getParent();
+        if (anchorParent) {
+          finalSelection.anchor.set(anchorParent.getKey(), anchorNode.getIndexWithinParent() + (isBackwards ? 1 : 0), "element");
+        }
+      }
+      if (focusNode) {
+        const focusParent = focusNode.getParent();
+        if (focusParent) {
+          finalSelection.focus.set(focusParent.getKey(), focusNode.getIndexWithinParent() + (isBackwards ? 0 : 1), "element");
+        }
+      }
+      $setSelection2($normalizeSelection__EXPERIMENTAL(finalSelection));
+    }
+  }
+  return rval;
+}
+function $splitLinkAtSelection(parentLink, extractedNodes) {
+  const extractedKeys = new Set(extractedNodes.filter((n2) => parentLink.isParentOf(n2)).map((n2) => n2.getKey()));
+  const allChildren = parentLink.getChildren();
+  const isExtractedChild = (child) => extractedKeys.has(child.getKey()) || $isElementNode2(child) && extractedNodes.some((n2) => parentLink.isParentOf(n2) && child.isParentOf(n2));
+  const extractedChildren = allChildren.filter(isExtractedChild);
+  if (extractedChildren.length === allChildren.length) {
+    allChildren.forEach((child) => parentLink.insertBefore(child));
+    parentLink.remove();
+    return;
+  }
+  const firstExtractedIndex = allChildren.findIndex(isExtractedChild);
+  const lastExtractedIndex = allChildren.findLastIndex(isExtractedChild);
+  const isAtStart = firstExtractedIndex === 0;
+  const isAtEnd = lastExtractedIndex === allChildren.length - 1;
+  if (isAtStart) {
+    extractedChildren.forEach((child) => parentLink.insertBefore(child));
+  } else if (isAtEnd) {
+    for (let i2 = extractedChildren.length - 1; i2 >= 0; i2--) {
+      parentLink.insertAfter(extractedChildren[i2]);
+    }
+  } else {
+    for (let i2 = extractedChildren.length - 1; i2 >= 0; i2--) {
+      parentLink.insertAfter(extractedChildren[i2]);
+    }
+    const trailingChildren = allChildren.slice(lastExtractedIndex + 1);
+    if (trailingChildren.length > 0) {
+      const newLink = $copyNode2(parentLink);
+      extractedChildren[extractedChildren.length - 1].insertAfter(newLink);
+      trailingChildren.forEach((child) => newLink.append(child));
+    }
+  }
+}
+function $toggleLink(urlOrAttributes, attributes = {}) {
+  let url;
+  if (urlOrAttributes && typeof urlOrAttributes === "object") {
+    const {
+      url: urlProp,
+      ...rest
+    } = urlOrAttributes;
+    url = urlProp;
+    attributes = {
+      ...rest,
+      ...attributes
+    };
+  } else {
+    url = urlOrAttributes;
+  }
+  const {
+    target,
+    title
+  } = attributes;
+  const rel = attributes.rel === void 0 ? "noreferrer" : attributes.rel;
+  const selection = $getSelection2();
+  if (selection === null || !$isRangeSelection2(selection) && !$isNodeSelection2(selection)) {
+    return;
+  }
+  if ($isNodeSelection2(selection)) {
+    const nodes2 = selection.getNodes();
+    if (nodes2.length === 0) {
+      return;
+    }
+    nodes2.forEach((node) => {
+      if (url === null) {
+        const linkParent = $findMatchingParent2(node, (parent) => !$isAutoLinkNode(parent) && $isLinkNode(parent));
+        if (linkParent) {
+          linkParent.insertBefore(node);
+          if (linkParent.getChildren().length === 0) {
+            linkParent.remove();
+          }
+        }
+      } else {
+        const existingLink = $findMatchingParent2(node, (parent) => !$isAutoLinkNode(parent) && $isLinkNode(parent));
+        if (existingLink) {
+          existingLink.setURL(url);
+          if (target !== void 0) {
+            existingLink.setTarget(target);
+          }
+          if (rel !== void 0) {
+            existingLink.setRel(rel);
+          }
+          if (title !== void 0) {
+            existingLink.setTitle(title);
+          }
+        } else {
+          const linkNode = $createLinkNode(url, {
+            rel,
+            target,
+            title
+          });
+          node.insertBefore(linkNode);
+          linkNode.append(node);
+        }
+      }
+    });
+    return;
+  }
+  if (selection.isCollapsed() && url === null) {
+    for (const node of selection.getNodes()) {
+      const parentLink = $findMatchingParent2(node, (parent) => !$isAutoLinkNode(parent) && $isLinkNode(parent));
+      if (parentLink !== null) {
+        parentLink.getParentOrThrow().splice(parentLink.getIndexWithinParent(), 0, parentLink.getChildren());
+        parentLink.remove();
+      }
+      return;
+    }
+  }
+  const nodes = selection.extract();
+  if (url === null) {
+    const processedLinks = /* @__PURE__ */ new Set();
+    nodes.forEach((node) => {
+      const parentLink = $findMatchingParent2(node, (parent) => !$isAutoLinkNode(parent) && $isLinkNode(parent));
+      if (parentLink !== null) {
+        const linkKey = parentLink.getKey();
+        if (processedLinks.has(linkKey)) {
+          return;
+        }
+        $splitLinkAtSelection(parentLink, nodes);
+        processedLinks.add(linkKey);
+      }
+    });
+    return;
+  }
+  const updatedNodes = /* @__PURE__ */ new Set();
+  const updateLinkNode = (linkNode) => {
+    if (updatedNodes.has(linkNode.getKey())) {
+      return;
+    }
+    updatedNodes.add(linkNode.getKey());
+    linkNode.setURL(url);
+    if (target !== void 0) {
+      linkNode.setTarget(target);
+    }
+    if (rel !== void 0) {
+      linkNode.setRel(rel);
+    }
+    if (title !== void 0) {
+      linkNode.setTitle(title);
+    }
+  };
+  if (nodes.length === 1) {
+    const firstNode = nodes[0];
+    const linkNode = $findMatchingParent2(firstNode, $isLinkNode);
+    if (linkNode !== null) {
+      return updateLinkNode(linkNode);
+    }
+  }
+  $withSelectedNodes(() => {
+    let linkNode = null;
+    for (const node of nodes) {
+      if (!node.isAttached()) {
+        continue;
+      }
+      const parentLinkNode = $findMatchingParent2(node, $isLinkNode);
+      if (parentLinkNode) {
+        updateLinkNode(parentLinkNode);
+        continue;
+      }
+      if ($isElementNode2(node)) {
+        if (!node.isInline()) {
+          continue;
+        }
+        if ($isLinkNode(node)) {
+          if (!$isAutoLinkNode(node) && (linkNode === null || !linkNode.getParentOrThrow().isParentOf(node))) {
+            updateLinkNode(node);
+            linkNode = node;
+            continue;
+          }
+          for (const child of node.getChildren()) {
+            node.insertBefore(child);
+          }
+          node.remove();
+          continue;
+        }
+      }
+      const prevLinkNode = node.getPreviousSibling();
+      if ($isLinkNode(prevLinkNode) && prevLinkNode.is(linkNode)) {
+        prevLinkNode.append(node);
+        continue;
+      }
+      linkNode = $createLinkNode(url, {
+        rel,
+        target,
+        title
+      });
+      node.insertAfter(linkNode);
+      linkNode.append(node);
+    }
+  });
+}
+var PHONE_NUMBER_REGEX = /^\+?[0-9\s()-]{5,}$/;
+function formatUrl(url) {
+  if (url.match(/^[a-z][a-z0-9+.-]*:/i)) {
+    return url;
+  } else if (url.match(/^[/#.]/)) {
+    return url;
+  } else if (url.includes("@")) {
+    return `mailto:${url}`;
+  } else if (PHONE_NUMBER_REGEX.test(url)) {
+    return `tel:${url}`;
+  }
+  return `https://${url}`;
+}
+var AutoLinkAnnounceExtension = {
+  build: (_editor, config) => namedSignals2(config),
+  config: {
+    created: "Link",
+    createdMany: "%s links",
+    destroyed: "Link removed",
+    destroyedMany: "%s links removed",
+    disabled: false
+  },
+  dependencies: [AriaLiveRegionExtension2],
+  name: "@lexical/link/AutoLinkAnnounce",
+  register(editor, _config, state) {
+    const {
+      created,
+      createdMany,
+      destroyed,
+      destroyedMany,
+      disabled
+    } = state.getOutput();
+    const {
+      announce
+    } = state.getDependency(AriaLiveRegionExtension2).output;
+    return effect(() => disabled.value ? void 0 : editor.registerMutationListener(AutoLinkNode, (nodes) => {
+      let createdCount = 0;
+      let destroyedCount = 0;
+      for (const [, mutation] of nodes) {
+        if (mutation === "created") {
+          createdCount++;
+        } else if (mutation === "destroyed") {
+          destroyedCount++;
+        }
+      }
+      if (createdCount > 0 && destroyedCount === 0) {
+        announce(createdCount === 1 ? created.peek() : createdMany.peek().replace("%s", String(createdCount)));
+      } else if (destroyedCount > 0 && createdCount === 0) {
+        announce(destroyedCount === 1 ? destroyed.peek() : destroyedMany.peek().replace("%s", String(destroyedCount)));
+      }
+    }, {
+      skipInitialization: true
+    }));
+  }
+};
+var AnchorRule = {
+  $import: (ctx, el) => {
+    if (!el.textContent && el.children.length === 0) {
+      return [];
+    }
+    const href = el.getAttribute("href") || "";
+    const attrs = {
+      rel: el.getAttribute("rel"),
+      target: el.getAttribute("target"),
+      title: el.getAttribute("title")
+    };
+    return $distributeInlineWrapper2(ctx.$importChildren(el), () => $createLinkNode(href, attrs));
+  },
+  match: /* @__PURE__ */ sel2.tag("a"),
+  name: "@lexical/link/a"
+};
+var LinkImportRules = [AnchorRule];
+var defaultProps = {
+  attributes: void 0,
+  validateUrl: void 0
+};
+function registerLink(editor, stores) {
+  return mergeRegister2(editor.registerNodeTransform(LinkNode, $linkNodeTransform), editor.registerCommand(TOGGLE_LINK_COMMAND, (payload) => {
+    const validateUrl = stores.validateUrl.peek();
+    const attributes = stores.attributes.peek();
+    if (payload === null) {
+      $toggleLink(null);
+      return true;
+    } else if (typeof payload === "string") {
+      if (validateUrl === void 0 || validateUrl(payload)) {
+        $toggleLink(payload, attributes);
+        return true;
+      }
+      return false;
+    } else {
+      const {
+        url,
+        ...payloadAttributes
+      } = payload;
+      if (validateUrl !== void 0 && !validateUrl(url)) {
+        return false;
+      }
+      $toggleLink(url, {
+        ...attributes,
+        ...payloadAttributes
+      });
+      return true;
+    }
+  }, COMMAND_PRIORITY_EDITOR2), effect(() => {
+    const validateUrl = stores.validateUrl.value;
+    if (!validateUrl) {
+      return;
+    }
+    const attributes = stores.attributes.value;
+    return editor.registerCommand(PASTE_COMMAND2, (event) => {
+      const selection = $getSelection2();
+      if (!$isRangeSelection2(selection) || selection.isCollapsed() || !objectKlassEquals2(event, ClipboardEvent)) {
+        return false;
+      }
+      if (event.clipboardData === null) {
+        return false;
+      }
+      const clipboardText = event.clipboardData.getData("text");
+      if (!validateUrl(clipboardText)) {
+        return false;
+      }
+      const nodes = selection.getNodes();
+      if (!nodes.some((node) => $isElementNode2(node) || $isTextNode2(node) && !node.isSimpleText())) {
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
+          ...attributes,
+          url: clipboardText
+        });
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    }, COMMAND_PRIORITY_LOW2);
+  }));
+}
+var LinkExtension = {
+  build(editor, config, state) {
+    return namedSignals2(config);
+  },
+  config: defaultProps,
+  dependencies: [
+    // DOMImportExtension support for the nodes registered here. Inert
+    // unless the editor routes HTML through the pipeline (e.g. via
+    // ClipboardDOMImportExtension or $generateNodesFromDOMViaExtension).
+    CoreImportExtension2,
+    [DOMImportExtension2, {
+      rules: LinkImportRules
+    }]
+  ],
+  mergeConfig(config, overrides) {
+    const merged = shallowMergeConfig2(config, overrides);
+    if (config.attributes) {
+      merged.attributes = shallowMergeConfig2(config.attributes, merged.attributes);
+    }
+    return merged;
+  },
+  name: "@lexical/link/Link",
+  nodes: () => [LinkNode],
+  register(editor, config, state) {
+    return registerLink(editor, state.getOutput());
+  }
+};
+var LinkImportExtension = {
+  dependencies: [LinkExtension],
+  name: "@lexical/link/Import"
+};
+function findMatchingDOM(startNode, predicate) {
+  let node = startNode;
+  while (node != null) {
+    if (predicate(node)) {
+      return node;
+    }
+    node = node.parentNode;
+  }
+  return null;
+}
+function registerClickableLink(editor, stores, eventOptions = {}) {
+  const onClick2 = (event) => {
+    const isMiddle = event.button === 1;
+    if (event.type === "auxclick" && !isMiddle) {
+      return;
+    }
+    const target = event.target;
+    if (!isDOMNode2(target)) {
+      return;
+    }
+    const nearestEditor = getNearestEditorFromDOMNode2(target);
+    if (nearestEditor === null) {
+      return;
+    }
+    let url = null;
+    let urlTarget = null;
+    let isUnlinkedAutolink = false;
+    nearestEditor.update(() => {
+      const clickedNode = $getNearestNodeFromDOMNode2(target);
+      if (clickedNode !== null) {
+        const maybeLinkNode = $findMatchingParent2(clickedNode, $isElementNode2);
+        if (!stores.disabled.peek()) {
+          if ($isLinkNode(maybeLinkNode)) {
+            isUnlinkedAutolink = $isAutoLinkNode(maybeLinkNode) && maybeLinkNode.getIsUnlinked();
+            url = maybeLinkNode.sanitizeUrl(maybeLinkNode.getURL());
+            urlTarget = maybeLinkNode.getTarget();
+          } else {
+            const a2 = findMatchingDOM(target, isHTMLAnchorElement2);
+            if (a2 !== null) {
+              url = a2.href;
+              urlTarget = a2.target;
+            }
+          }
+        }
+      }
+    });
+    if (url === null || url === "" || isUnlinkedAutolink) {
+      return;
+    }
+    const selection = editor.read("latest", $getSelection2);
+    if ($isRangeSelection2(selection) && !selection.isCollapsed()) {
+      event.preventDefault();
+      return;
+    }
+    window.open(url, stores.newTab.peek() || isMiddle || event.metaKey || event.ctrlKey || urlTarget === "_blank" ? "_blank" : "_self");
+    event.preventDefault();
+  };
+  return editor.registerRootListener((rootElement) => {
+    if (rootElement) {
+      return registerEventListeners2(rootElement, {
+        auxclick: onClick2,
+        click: onClick2
+      }, eventOptions);
+    }
+  });
+}
+var ClickableLinkExtension = {
+  build(editor, config, state) {
+    return namedSignals2(config);
+  },
+  config: {
+    disabled: false,
+    newTab: false
+  },
+  dependencies: [LinkExtension],
+  name: "@lexical/link/ClickableLink",
+  register(editor, config, state) {
+    return registerClickableLink(editor, state.getOutput());
+  }
+};
+function createLinkMatcherWithRegExp(regExp, urlTransformer = (text) => text) {
+  return (text) => {
+    const match = regExp.exec(text);
+    if (match === null) {
+      return null;
+    }
+    return {
+      index: match.index,
+      length: match[0].length,
+      text: match[0],
+      url: urlTransformer(match[0])
+    };
+  };
+}
+var URL_REGEX = /((https?:\/\/(www\.)?)|(www\.))[-\p{L}\p{N}@:%._+~#=]{1,256}\.[\p{L}\p{N}]{1,6}(?:[-\p{L}\p{N}()@:%_+.~#?&//=]*[\p{L}\p{N}()@_~#?&//=])?/u;
+var EMAIL_REGEX = /(([^<>()[\]\\.,;:\s@"]{1,64}(\.[^<>()[\]\\.,;:\s@"]{1,64}){0,63})|(".{1,255}"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]{1,63}\.){1,127}[a-zA-Z]{2,63}))/;
+var autoLinkUrlMatcher = (text) => {
+  const match = URL_REGEX.exec(text);
+  if (match === null) {
+    return null;
+  }
+  let matched = match[0];
+  let depth = 0;
+  for (const ch of matched) {
+    if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+    }
+  }
+  while (depth < 0 && matched.endsWith(")")) {
+    matched = matched.slice(0, -1);
+    depth++;
+  }
+  return {
+    index: match.index,
+    length: matched.length,
+    text: matched,
+    url: matched.startsWith("http") ? matched : `https://${matched}`
+  };
+};
+var autoLinkEmailMatcher = createLinkMatcherWithRegExp(EMAIL_REGEX, (text) => `mailto:${text}`);
+function findFirstMatch(text, matchers) {
+  for (let i2 = 0; i2 < matchers.length; i2++) {
+    const match = matchers[i2](text);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+var PUNCTUATION_OR_SPACE = /[.,;\s]/;
+function isSeparator(char, separatorRegex) {
+  return separatorRegex.test(char);
+}
+function endsWithSeparator(textContent, separatorRegex) {
+  return isSeparator(textContent[textContent.length - 1], separatorRegex);
+}
+function startsWithSeparator(textContent, separatorRegex) {
+  return isSeparator(textContent[0], separatorRegex);
+}
+function startsWithTLD(textContent, isEmail) {
+  if (isEmail) {
+    return /^\.[a-zA-Z]{2,}/.test(textContent);
+  } else {
+    return /^\.[a-zA-Z0-9]{1,}/.test(textContent);
+  }
+}
+function isPreviousNodeValid(node, separatorRegex) {
+  let previousNode = node.getPreviousSibling();
+  if ($isElementNode2(previousNode)) {
+    previousNode = previousNode.getLastDescendant();
+  }
+  return previousNode === null || $isLineBreakNode2(previousNode) || $isTextNode2(previousNode) && endsWithSeparator(previousNode.getTextContent(), separatorRegex);
+}
+function isNextNodeValid(node, separatorRegex) {
+  let nextNode = node.getNextSibling();
+  if ($isElementNode2(nextNode)) {
+    nextNode = nextNode.getFirstDescendant();
+  }
+  return nextNode === null || $isLineBreakNode2(nextNode) || $isTextNode2(nextNode) && startsWithSeparator(nextNode.getTextContent(), separatorRegex);
+}
+function isContentAroundIsValid(matchStart, matchEnd, separatorRegex, text, nodes) {
+  const contentBeforeIsValid = matchStart > 0 ? isSeparator(text[matchStart - 1], separatorRegex) : isPreviousNodeValid(nodes[0], separatorRegex);
+  if (!contentBeforeIsValid) {
+    return false;
+  }
+  const contentAfterIsValid = matchEnd < text.length ? isSeparator(text[matchEnd], separatorRegex) : isNextNodeValid(nodes[nodes.length - 1], separatorRegex);
+  return contentAfterIsValid;
+}
+function extractMatchingNodes(nodes, startIndex, endIndex) {
+  const unmodifiedBeforeNodes = [];
+  const matchingNodes = [];
+  const unmodifiedAfterNodes = [];
+  let matchingOffset = 0;
+  let currentOffset = 0;
+  const currentNodes = [...nodes];
+  while (currentNodes.length > 0) {
+    const currentNode = currentNodes[0];
+    const currentNodeText = currentNode.getTextContent();
+    const currentNodeLength = currentNodeText.length;
+    const currentNodeStart = currentOffset;
+    const currentNodeEnd = currentOffset + currentNodeLength;
+    if (currentNodeEnd <= startIndex) {
+      unmodifiedBeforeNodes.push(currentNode);
+      matchingOffset += currentNodeLength;
+    } else if (currentNodeStart >= endIndex) {
+      unmodifiedAfterNodes.push(currentNode);
+    } else {
+      matchingNodes.push(currentNode);
+    }
+    currentOffset += currentNodeLength;
+    currentNodes.shift();
+  }
+  return [matchingOffset, unmodifiedBeforeNodes, matchingNodes, unmodifiedAfterNodes];
+}
+function $createAutoLinkNode_(nodes, startIndex, endIndex, match) {
+  const linkNode = $createAutoLinkNode(match.url, match.attributes);
+  if (nodes.length === 1) {
+    let remainingTextNode = nodes[0];
+    let linkTextNode;
+    if (startIndex === 0) {
+      [linkTextNode, remainingTextNode] = remainingTextNode.splitText(endIndex);
+    } else {
+      [, linkTextNode, remainingTextNode] = remainingTextNode.splitText(startIndex, endIndex);
+    }
+    const textNode = $createTextNode2(match.text);
+    textNode.setFormat(linkTextNode.getFormat());
+    textNode.setDetail(linkTextNode.getDetail());
+    textNode.setStyle(linkTextNode.getStyle());
+    linkNode.append(textNode);
+    linkTextNode.replace(linkNode);
+    return remainingTextNode;
+  } else if (nodes.length > 1) {
+    const firstTextNode = nodes[0];
+    let offset = firstTextNode.getTextContent().length;
+    let firstLinkTextNode;
+    if (startIndex === 0) {
+      firstLinkTextNode = firstTextNode;
+    } else {
+      [, firstLinkTextNode] = firstTextNode.splitText(startIndex);
+    }
+    const linkNodes = [];
+    let remainingTextNode;
+    for (let i2 = 1; i2 < nodes.length; i2++) {
+      const currentNode = nodes[i2];
+      const currentNodeText = currentNode.getTextContent();
+      const currentNodeLength = currentNodeText.length;
+      const currentNodeStart = offset;
+      const currentNodeEnd = offset + currentNodeLength;
+      if (currentNodeStart < endIndex) {
+        if (currentNodeEnd <= endIndex) {
+          linkNodes.push(currentNode);
+        } else {
+          const [linkTextNode, endNode] = currentNode.splitText(endIndex - currentNodeStart);
+          linkNodes.push(linkTextNode);
+          remainingTextNode = endNode;
+        }
+      }
+      offset += currentNodeLength;
+    }
+    const selection = $getSelection2();
+    const selectedTextNode = selection ? selection.getNodes().find($isTextNode2) : void 0;
+    const textNode = $createTextNode2(firstLinkTextNode.getTextContent());
+    textNode.setFormat(firstLinkTextNode.getFormat());
+    textNode.setDetail(firstLinkTextNode.getDetail());
+    textNode.setStyle(firstLinkTextNode.getStyle());
+    linkNode.append(textNode, ...linkNodes);
+    if (selectedTextNode && selectedTextNode === firstLinkTextNode) {
+      if ($isRangeSelection2(selection)) {
+        textNode.select(selection.anchor.offset, selection.focus.offset);
+      } else if ($isNodeSelection2(selection)) {
+        textNode.select(0, textNode.getTextContent().length);
+      }
+    }
+    firstLinkTextNode.replace(linkNode);
+    return remainingTextNode;
+  }
+  return void 0;
+}
+function $handleLinkCreation(nodes, matchers, onChange, separatorRegex) {
+  for (const node of nodes) {
+    const parent = node.getParent();
+    if ($isAutoLinkNode(parent) && !parent.getIsUnlinked()) {
+      return;
+    }
+  }
+  let currentNodes = [...nodes];
+  const initialText = currentNodes.map((node) => node.getTextContent()).join("");
+  let text = initialText;
+  let match;
+  let invalidMatchEnd = 0;
+  while ((match = findFirstMatch(text, matchers)) && match !== null) {
+    const matchStart = match.index;
+    const matchLength = match.length;
+    const matchEnd = matchStart + matchLength;
+    const isValid = isContentAroundIsValid(invalidMatchEnd + matchStart, invalidMatchEnd + matchEnd, separatorRegex, initialText, currentNodes);
+    if (isValid) {
+      const [matchingOffset, , matchingNodes, unmodifiedAfterNodes] = extractMatchingNodes(currentNodes, invalidMatchEnd + matchStart, invalidMatchEnd + matchEnd);
+      let alreadyLinked = false;
+      for (const node of matchingNodes) {
+        const parent = node.getParent();
+        if ($isAutoLinkNode(parent) && !parent.getIsUnlinked()) {
+          alreadyLinked = true;
+          break;
+        }
+      }
+      if (alreadyLinked) {
+        invalidMatchEnd += matchEnd;
+        text = text.substring(matchEnd);
+        continue;
+      }
+      const actualMatchStart = invalidMatchEnd + matchStart - matchingOffset;
+      const actualMatchEnd = invalidMatchEnd + matchEnd - matchingOffset;
+      const remainingTextNode = $createAutoLinkNode_(matchingNodes, actualMatchStart, actualMatchEnd, match);
+      currentNodes = remainingTextNode ? [remainingTextNode, ...unmodifiedAfterNodes] : unmodifiedAfterNodes;
+      onChange(match.url, null);
+      invalidMatchEnd = 0;
+    } else {
+      invalidMatchEnd += matchEnd;
+    }
+    text = text.substring(matchEnd);
+  }
+}
+function handleLinkEdit(linkNode, matchers, onChange, separatorRegex) {
+  const children = linkNode.getChildren();
+  const childrenLength = children.length;
+  for (let i2 = 0; i2 < childrenLength; i2++) {
+    const child = children[i2];
+    if (!$isTextNode2(child) || !child.isSimpleText()) {
+      replaceWithChildren(linkNode);
+      onChange(null, linkNode.getURL());
+      return;
+    }
+  }
+  const text = linkNode.getTextContent();
+  const match = findFirstMatch(text, matchers);
+  if (match === null || match.text !== text) {
+    replaceWithChildren(linkNode);
+    onChange(null, linkNode.getURL());
+    return;
+  }
+  if (!isPreviousNodeValid(linkNode, separatorRegex) || !isNextNodeValid(linkNode, separatorRegex)) {
+    replaceWithChildren(linkNode);
+    onChange(null, linkNode.getURL());
+    return;
+  }
+  const url = linkNode.getURL();
+  if (url !== match.url) {
+    linkNode.setURL(match.url);
+    onChange(match.url, url);
+  }
+  if (match.attributes) {
+    if (linkNode.getRel() !== match.attributes.rel) {
+      linkNode.setRel(match.attributes.rel || null);
+    }
+    if (linkNode.getTarget() !== match.attributes.target) {
+      linkNode.setTarget(match.attributes.target || null);
+    }
+    if (linkNode.getTitle() !== match.attributes.title) {
+      linkNode.setTitle(match.attributes.title || null);
+    }
+  }
+}
+function handleBadNeighbors(textNode, matchers, onChange, separatorRegex) {
+  const parent = textNode.getParent();
+  const previousSibling = textNode.getPreviousSibling();
+  const nextSibling = textNode.getNextSibling();
+  const text = textNode.getTextContent();
+  if ($isAutoLinkNode(parent) && !parent.getIsUnlinked()) {
+    return;
+  }
+  if ($isAutoLinkNode(previousSibling) && !previousSibling.getIsUnlinked()) {
+    if (previousSibling.is(textNode.getPreviousSibling()) && textNode.getParent() === previousSibling.getParent()) {
+      if (!startsWithSeparator(text, separatorRegex)) {
+        replaceWithChildren(previousSibling);
+        onChange(null, previousSibling.getURL());
+        return;
+      }
+      if (startsWithTLD(text, previousSibling.isEmailURI())) {
+        const combinedText = previousSibling.getTextContent() + text;
+        const match = findFirstMatch(combinedText, matchers);
+        if (match !== null && match.text === combinedText) {
+          previousSibling.append(textNode);
+          handleLinkEdit(previousSibling, matchers, onChange, separatorRegex);
+          onChange(null, previousSibling.getURL());
+        }
+      }
+    }
+  }
+  if ($isAutoLinkNode(nextSibling) && !nextSibling.getIsUnlinked() && !endsWithSeparator(text, separatorRegex)) {
+    if (nextSibling.is(textNode.getNextSibling()) && textNode.getParent() === nextSibling.getParent()) {
+      replaceWithChildren(nextSibling);
+      onChange(null, nextSibling.getURL());
+    }
+  }
+}
+function replaceWithChildren(node) {
+  const children = node.getChildren();
+  const childrenLength = children.length;
+  for (let j2 = childrenLength - 1; j2 >= 0; j2--) {
+    node.insertAfter(children[j2]);
+  }
+  node.remove();
+  return children.map((child) => child.getLatest());
+}
+function getTextNodesToMatch(textNode) {
+  const textNodesToMatch = [textNode];
+  let nextSibling = textNode.getNextSibling();
+  while (nextSibling !== null && $isTextNode2(nextSibling) && nextSibling.isSimpleText()) {
+    textNodesToMatch.push(nextSibling);
+    if (/[\s]/.test(nextSibling.getTextContent())) {
+      break;
+    }
+    nextSibling = nextSibling.getNextSibling();
+  }
+  return textNodesToMatch;
+}
+var defaultConfig = {
+  changeHandlers: [],
+  excludeParents: [],
+  matchers: [],
+  separatorRegex: PUNCTUATION_OR_SPACE
+};
+function registerAutoLink(editor, config = defaultConfig) {
+  const {
+    matchers,
+    changeHandlers,
+    excludeParents,
+    separatorRegex = PUNCTUATION_OR_SPACE
+  } = config;
+  const onChange = (url, prevUrl) => {
+    for (const handler of changeHandlers) {
+      handler(url, prevUrl);
+    }
+  };
+  return mergeRegister2(editor.registerNodeTransform(TextNode2, (textNode) => {
+    const parent = textNode.getParentOrThrow();
+    const previous = textNode.getPreviousSibling();
+    if ($isAutoLinkNode(parent)) {
+      handleLinkEdit(parent, matchers, onChange, separatorRegex);
+    } else if (!$isLinkNode(parent) && !excludeParents.some((pred) => pred(parent))) {
+      if (textNode.isSimpleText() && (startsWithSeparator(textNode.getTextContent(), separatorRegex) || !$isAutoLinkNode(previous))) {
+        const textNodesToMatch = getTextNodesToMatch(textNode);
+        $handleLinkCreation(textNodesToMatch, matchers, onChange, separatorRegex);
+      }
+      handleBadNeighbors(textNode, matchers, onChange, separatorRegex);
+    }
+  }), editor.registerCommand(
+    TOGGLE_LINK_COMMAND,
+    (payload) => {
+      const selection = $getSelection2();
+      if (payload !== null || !$isRangeSelection2(selection)) {
+        return false;
+      }
+      const nodes = selection.extract();
+      nodes.forEach((node) => {
+        const parent = node.getParent();
+        if ($isAutoLinkNode(parent)) {
+          parent.setIsUnlinked(!parent.getIsUnlinked());
+          parent.markDirty();
+        }
+      });
+      return false;
+    },
+    // Has to be higher than TOGGLE_LINK_COMMAND in LinkExtension
+    COMMAND_PRIORITY_LOW2
+  ));
+}
+var AutoLinkExtension = {
+  config: defaultConfig,
+  dependencies: [AutoLinkAnnounceExtension, LinkExtension],
+  mergeConfig(config, overrides) {
+    const merged = shallowMergeConfig2(config, overrides);
+    for (const k of ["matchers", "changeHandlers", "excludeParents"]) {
+      const v2 = overrides[k];
+      if (Array.isArray(v2)) {
+        merged[k] = [...config[k], ...v2];
+      }
+    }
+    return merged;
+  },
+  name: "@lexical/link/AutoLink",
+  nodes: [AutoLinkNode],
+  register: registerAutoLink
+};
+
+// node_modules/@lexical/link/dist/LexicalLink.mjs
+var mod13 = true ? LexicalLink_dev_exports : LexicalLink_prod_exports;
+var $createAutoLinkNode2 = mod13.$createAutoLinkNode;
+var $createLinkNode2 = mod13.$createLinkNode;
+var $isAutoLinkNode2 = mod13.$isAutoLinkNode;
+var $isLinkNode2 = mod13.$isLinkNode;
+var $toggleLink2 = mod13.$toggleLink;
+var AutoLinkAnnounceExtension2 = mod13.AutoLinkAnnounceExtension;
+var AutoLinkExtension2 = mod13.AutoLinkExtension;
+var AutoLinkNode2 = mod13.AutoLinkNode;
+var ClickableLinkExtension2 = mod13.ClickableLinkExtension;
+var LinkExtension2 = mod13.LinkExtension;
+var LinkImportExtension2 = mod13.LinkImportExtension;
+var LinkImportRules2 = mod13.LinkImportRules;
+var LinkNode2 = mod13.LinkNode;
+var TOGGLE_LINK_COMMAND2 = mod13.TOGGLE_LINK_COMMAND;
+var autoLinkEmailMatcher2 = mod13.autoLinkEmailMatcher;
+var autoLinkUrlMatcher2 = mod13.autoLinkUrlMatcher;
+var createLinkMatcherWithRegExp2 = mod13.createLinkMatcherWithRegExp;
+var formatUrl2 = mod13.formatUrl;
+var registerAutoLink2 = mod13.registerAutoLink;
+var registerClickableLink2 = mod13.registerClickableLink;
+var registerLink2 = mod13.registerLink;
+
+// node_modules/@lexical/markdown/dist/LexicalMarkdown.dev.mjs
+function indexBy(list, callback) {
+  const index = {};
+  for (const item of list) {
+    const key = callback(item);
+    if (!key) {
+      continue;
+    }
+    if (index[key]) {
+      index[key].push(item);
+    } else {
+      index[key] = [item];
+    }
+  }
+  return index;
+}
+function transformersByType(transformers) {
+  const byType = indexBy(transformers, (t2) => t2.type);
+  return {
+    element: byType.element || [],
+    multilineElement: byType["multiline-element"] || [],
+    textFormat: byType["text-format"] || [],
+    textMatch: byType["text-match"] || []
+  };
+}
+var PUNCTUATION_OR_SPACE2 = /[!-/:-@[-`{-~\s]/;
+var WHITESPACE = /\s/;
+var PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~]/;
+var MARKDOWN_EMPTY_LINE_REG_EXP = /^\s{0,3}$/;
+function isEmptyParagraph(node) {
+  if (!$isParagraphNode2(node)) {
+    return false;
+  }
+  const firstChild = node.getFirstChild();
+  return firstChild == null || node.getChildrenSize() === 1 && $isTextNode2(firstChild) && MARKDOWN_EMPTY_LINE_REG_EXP.test(firstChild.getTextContent());
+}
+function unescapeText(value) {
+  return value.replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/&#(\d+);/g, (_2, codePoint) => String.fromCodePoint(Number(codePoint)));
+}
+var ORDERED_LIST_REGEX = /^(\s*)(\d{1,})\.\s/;
+var UNORDERED_LIST_REGEX = /^(\s*)[-*+]\s/;
+var CHECK_LIST_REGEX = /^(\s*)(?:[-*+]\s)?\s?(\[(\s|x)?\])\s/i;
+var HEADING_REGEX = /^(#{1,6})\s/;
+var QUOTE_REGEX = /^>\s/;
+var CODE_START_REGEX = /^([ \t]*`{3,})([\w-]+)?[ \t]?/;
+var CODE_END_REGEX = /^[ \t]*`{3,}$/;
+var CODE_SINGLE_LINE_REGEX = /^[ \t]*```[^`]+(?:(?:`{1,2}|`{4,})[^`]+)*```(?:[^`]|$)/;
+var TABLE_ROW_REG_EXP = /^(?:\|)(.+)(?:\|)\s?$/;
+function isTableRowDivider(line) {
+  if (line[0] !== "|") {
+    return false;
+  }
+  const {
+    length
+  } = line;
+  let i2 = 1;
+  let cells = 0;
+  while (i2 < length) {
+    let j2 = i2;
+    if (line[j2] === " ") {
+      j2++;
+    }
+    if (line[j2] === ":") {
+      j2++;
+    }
+    while (line[j2] === "-") {
+      j2++;
+    }
+    if (line[j2] === ":") {
+      j2++;
+    }
+    if (line[j2] === " ") {
+      j2++;
+    }
+    if (line[j2] !== "|") {
+      break;
+    }
+    cells++;
+    i2 = j2 + 1;
+  }
+  return cells > 0 && (i2 === length || i2 === length - 1 && /\s/.test(line[i2]));
+}
+var TAG_START_REGEX = /^<[a-z_][\w-]*(?:\s[^<>]*)?\/?>/i;
+var TAG_END_REGEX = /^<\/[a-z_][\w-]*\s*>/i;
+var ENDS_WITH = (regex) => new RegExp(`(?:${regex.source})$`, regex.flags);
+var listMarkerState = /* @__PURE__ */ createState2("mdListMarker", {
+  parse: (v2) => typeof v2 === "string" && /^[-*+]$/.test(v2) ? v2 : "-",
+  resetOnCopyNode: true
+});
+var codeFenceState = /* @__PURE__ */ createState2("mdCodeFence", {
+  parse: (val) => {
+    if (typeof val === "string" && /^`{3,}$/.test(val)) {
+      return val;
+    }
+    return "```";
+  },
+  resetOnCopyNode: true
+});
+var codeMetaState = /* @__PURE__ */ createState2("mdCodeMeta", {
+  parse: (val) => typeof val === "string" ? val : "",
+  resetOnCopyNode: true
+});
+var hardLineBreakState = /* @__PURE__ */ createState2("mdHardLineBreak", {
+  parse: (val) => {
+    if (typeof val === "string" && /^(\\| {2,})$/.test(val)) {
+      return val;
+    }
+    return "";
+  },
+  resetOnCopyNode: true
+});
+function parseMarkdownHardLineBreak(line) {
+  if (line.endsWith("\\")) {
+    let backslashes = 0;
+    for (let i2 = line.length - 1; i2 >= 0 && line[i2] === "\\"; i2--) {
+      backslashes++;
+    }
+    return backslashes % 2 === 1 ? [line.slice(0, -1), "\\"] : null;
+  }
+  const spaces = line.match(/^(.*?\S)( {2,})$/);
+  return spaces ? [spaces[1], spaces[2]] : null;
+}
+function hasNonWhitespaceContentOnLine(children, endIndex) {
+  for (let i2 = endIndex - 1; i2 >= 0; i2--) {
+    if ($isLineBreakNode2(children[i2])) {
+      return false;
+    }
+    if (/\S/.test(children[i2].getTextContent())) {
+      return true;
+    }
+  }
+  return false;
+}
+function $extractMarkdownHardLineBreakMarker(previousNode) {
+  const children = previousNode.getChildren();
+  const lastChildIndex = children.length - 1;
+  const lastChild = children[lastChildIndex];
+  if (!$isTextNode2(lastChild)) {
+    return null;
+  }
+  const lastText = lastChild.getTextContent();
+  const hardLineBreak = parseMarkdownHardLineBreak(lastText);
+  if (hardLineBreak !== null) {
+    const [text, marker] = hardLineBreak;
+    lastChild.setTextContent(text);
+    return marker;
+  }
+  if (/^ {2,}$/.test(lastText) && hasNonWhitespaceContentOnLine(children, lastChildIndex)) {
+    lastChild.setTextContent("");
+    return lastText;
+  }
+  return null;
+}
+function $createMarkdownLineBreakNode(previousNode) {
+  const lineBreakNode = $createLineBreakNode2();
+  const hardLineBreak = $extractMarkdownHardLineBreakMarker(previousNode);
+  if (hardLineBreak !== null) {
+    $setState2(lineBreakNode, hardLineBreakState, hardLineBreak);
+  }
+  return lineBreakNode;
+}
+function $isUnreplaceableBlock(parentNode) {
+  return $isQuoteNode2(parentNode);
+}
+function stripFenceIndent(line, indent) {
+  let index = 0;
+  while (index < indent && (line[index] === " " || line[index] === "	")) {
+    index++;
+  }
+  return line.slice(index);
+}
+function $setCodeMeta(parentNode, meta) {
+  const codeNode = parentNode.getLastChild();
+  if (meta && $isCodeNode2(codeNode)) {
+    $setState2(codeNode, codeMetaState, meta);
+  }
+}
+var createBlockNode = (createNode) => {
+  return (parentNode, children, match, isImport) => {
+    const node = createNode(match);
+    node.append(...children);
+    parentNode.replace(node);
+    if (!isImport) {
+      node.select(0, 0);
+    }
+  };
+};
+var LIST_INDENT_SIZE = 4;
+function getIndent(whitespaces) {
+  const tabs = whitespaces.match(/\t/g);
+  const spaces = whitespaces.match(/ /g);
+  let indent = 0;
+  if (tabs) {
+    indent += tabs.length;
+  }
+  if (spaces) {
+    indent += Math.floor(spaces.length / LIST_INDENT_SIZE);
+  }
+  return indent;
+}
+function getColumn(whitespaces) {
+  let column = 0;
+  for (const char of whitespaces) {
+    column += char === "	" ? LIST_INDENT_SIZE - column % LIST_INDENT_SIZE : 1;
+  }
+  return column;
+}
+var importListColumns = null;
+var importJoinsLooseLists = false;
+function withListIndentColumns(joinLooseLists, fn) {
+  const previousColumns = importListColumns;
+  const previousJoins = importJoinsLooseLists;
+  importListColumns = [];
+  importJoinsLooseLists = joinLooseLists;
+  try {
+    return fn();
+  } finally {
+    importListColumns = previousColumns;
+    importJoinsLooseLists = previousJoins;
+  }
+}
+function getColumnIndent(columns, whitespaces) {
+  const column = getColumn(whitespaces);
+  for (let i2 = columns.length - 1; i2 >= 0; i2--) {
+    if (column >= columns[i2]) {
+      return i2 + 1;
+    }
+  }
+  return 0;
+}
+function getContentColumn(match, listType) {
+  let prefix = match[0];
+  if (listType === "check") {
+    const bullet = prefix.slice(match[1].length).match(/^[-*+]\s/);
+    if (bullet) {
+      prefix = match[1] + bullet[0];
+    }
+  }
+  return Math.min(getColumn(prefix), getColumn(match[1]) + LIST_INDENT_SIZE);
+}
+function setOpenColumn(columns, indent, match, listType) {
+  for (let i2 = columns.length; i2 < indent; i2++) {
+    columns[i2] = (i2 + 1) * LIST_INDENT_SIZE;
+  }
+  columns.length = indent;
+  columns[indent] = getContentColumn(match, listType);
+}
+var listReplace = (listType) => {
+  return (parentNode, children, match, isImport) => {
+    if ($isHeadingNode2(parentNode) || !isImport && $isUnreplaceableBlock(parentNode)) {
+      return false;
+    }
+    const previousNode = parentNode.getPreviousSibling();
+    const nextNode = parentNode.getNextSibling();
+    const listItem = $createListItemNode2(
+      // CHECK_LIST_REGEX matches case-insensitively, so `[X]` is checked too.
+      listType === "check" ? /^x$/i.test(match[3] || "") : void 0
+    );
+    const firstMatchChar = match[0].trim()[0];
+    const listMarker = (listType === "bullet" || listType === "check") && firstMatchChar === listMarkerState.parse(firstMatchChar) ? firstMatchChar : void 0;
+    const columns = importListColumns;
+    let precedingBlock = previousNode;
+    if (columns !== null) {
+      if (importJoinsLooseLists) {
+        while (precedingBlock !== null && isEmptyParagraph(precedingBlock)) {
+          precedingBlock = precedingBlock.getPreviousSibling();
+        }
+      }
+      if (!$isListNode2(precedingBlock)) {
+        columns.length = 0;
+      }
+    }
+    const indent = columns === null || columns.length === 0 ? getIndent(match[1]) : getColumnIndent(columns, match[1]);
+    if ($isListNode2(nextNode) && nextNode.getListType() === listType) {
+      const firstChild = nextNode.getFirstChild();
+      if (firstChild !== null) {
+        firstChild.insertBefore(listItem);
+      } else {
+        nextNode.append(listItem);
+      }
+      if (listType === "number" && indent === 0) {
+        nextNode.setStart(Number(match[2]));
+      }
+      parentNode.remove();
+    } else if ($isListNode2(precedingBlock) && (precedingBlock.getListType() === listType || indent > 0)) {
+      precedingBlock.append(listItem);
+      parentNode.remove();
+    } else {
+      const list = $createListNode2(listType, listType === "number" ? Number(match[2]) : void 0);
+      list.append(listItem);
+      parentNode.replace(list);
+    }
+    listItem.append(...children);
+    if (!isImport) {
+      listItem.select(0, 0);
+    }
+    if (indent) {
+      listItem.setIndent(indent);
+      $retypeNestedList(listItem, listType, match);
+    }
+    const listNode = listItem.getParent();
+    if (listMarker && $isListNode2(listNode)) {
+      $setState2(listNode, listMarkerState, listMarker);
+    }
+    if (columns !== null) {
+      setOpenColumn(columns, indent, match, listType);
+    }
+  };
+};
+function $retypeNestedList(listItem, listType, match) {
+  const nestedList = listItem.getParent();
+  if (!$isListNode2(nestedList) || nestedList.getListType() === listType) {
+    return;
+  }
+  const wrapper = nestedList.getParent();
+  if (!$isListItemNode2(wrapper)) {
+    return;
+  }
+  const retypedList = $createListNode2(listType, listType === "number" ? Number(match[2]) : void 0);
+  const isFirst = listItem.getPreviousSibling() === null;
+  retypedList.append(listItem);
+  const retypedWrapper = $createListItemNode2();
+  retypedWrapper.append(retypedList);
+  if (isFirst) {
+    wrapper.insertBefore(retypedWrapper);
+  } else {
+    wrapper.insertAfter(retypedWrapper);
+  }
+  if (nestedList.getChildrenSize() === 0) {
+    wrapper.remove();
+  }
+}
+var $listExport = (listNode, exportChildren, depth, selection) => {
+  const output = [];
+  const children = listNode.getChildren();
+  let index = 0;
+  for (const listItemNode of children) {
+    if ($isListItemNode2(listItemNode)) {
+      if (listItemNode.getChildrenSize() === 1) {
+        const firstChild = listItemNode.getFirstChild();
+        if ($isListNode2(firstChild)) {
+          const nestedResult = $listExport(firstChild, exportChildren, depth + 1, selection);
+          if (nestedResult) {
+            output.push(nestedResult);
+          }
+          continue;
+        }
+      }
+      if (selection && !listItemNode.getChildren().some((child) => child.isSelected(selection))) {
+        continue;
+      }
+      const indent = " ".repeat(depth * LIST_INDENT_SIZE);
+      const listType = listNode.getListType();
+      const listMarker = $getState2(listNode, listMarkerState);
+      const prefix = listType === "number" ? `${listNode.getStart() + index}. ` : listType === "check" ? `${listMarker} [${listItemNode.getChecked() ? "x" : " "}] ` : listMarker + " ";
+      let childrenText = exportChildren(listItemNode);
+      if (listType !== "number") {
+        childrenText = childrenText.replace(/^(\s{0,3}\d+)(\.\s)/, "$1\\$2");
+      }
+      output.push(indent + prefix + childrenText);
+      index++;
+    }
+  }
+  return output.join("\n");
+};
+var $replaceWithHeading = createBlockNode((match) => {
+  const tag = "h" + match[1].length;
+  return $createHeadingNode2(tag);
+});
+var HEADING = {
+  dependencies: [HeadingNode2],
+  export: (node, exportChildren) => {
+    if (!$isHeadingNode2(node)) {
+      return null;
+    }
+    const level = Number(node.getTag().slice(1));
+    return "#".repeat(level) + " " + exportChildren(node);
+  },
+  regExp: HEADING_REGEX,
+  replace: (parentNode, children, match, isImport) => {
+    if (!isImport && $isUnreplaceableBlock(parentNode)) {
+      return false;
+    }
+    return $replaceWithHeading(parentNode, children, match, isImport);
+  },
+  triggerOnEnter: true,
+  type: "element"
+};
+var QUOTE = {
+  dependencies: [QuoteNode2],
+  export: (node, exportChildren) => {
+    if (!$isQuoteNode2(node)) {
+      return null;
+    }
+    const lines = exportChildren(node).split("\n");
+    const output = [];
+    for (const line of lines) {
+      output.push("> " + line);
+    }
+    return output.join("\n");
+  },
+  regExp: QUOTE_REGEX,
+  replace: (parentNode, children, _match, isImport) => {
+    if (isImport) {
+      const previousNode = parentNode.getPreviousSibling();
+      if ($isQuoteNode2(previousNode)) {
+        previousNode.splice(previousNode.getChildrenSize(), 0, [$createMarkdownLineBreakNode(previousNode), ...children]);
+        parentNode.remove();
+        return;
+      }
+    }
+    const node = $createQuoteNode2();
+    node.append(...children);
+    parentNode.replace(node);
+    if (!isImport) {
+      node.select(0, 0);
+    }
+  },
+  triggerOnEnter: true,
+  type: "element"
+};
+var CODE = {
+  dependencies: [CodeNode2],
+  export: (node) => {
+    if (!$isCodeNode2(node)) {
+      return null;
+    }
+    const textContent = node.getTextContent();
+    let fence = $getState2(node, codeFenceState);
+    if (textContent.indexOf(fence) > -1) {
+      const backticks = textContent.match(/`{3,}/g);
+      if (backticks) {
+        const maxLength = Math.max(...backticks.map((b2) => b2.length));
+        fence = "`".repeat(maxLength + 1);
+      }
+    }
+    const language = node.getLanguage() || "";
+    const meta = language ? $getState2(node, codeMetaState) : "";
+    return fence + language + (meta ? " " + meta : "") + (textContent ? "\n" + textContent : "") + "\n" + fence;
+  },
+  handleImportAfterStartMatch: ({
+    lines,
+    rootNode,
+    startLineIndex,
+    startMatch
+  }) => {
+    const fence = startMatch[1];
+    const fenceLength = fence.trim().length;
+    const currentLine = lines[startLineIndex];
+    const afterFenceIndex = startMatch.index + fence.length;
+    const afterFence = currentLine.slice(afterFenceIndex);
+    const singleLineEndRegex = new RegExp(`\`{${fenceLength},}$`);
+    if (singleLineEndRegex.test(afterFence)) {
+      const endMatch = afterFence.match(singleLineEndRegex);
+      const content = afterFence.slice(0, afterFence.lastIndexOf(endMatch[0]));
+      const fakeStartMatch = [...startMatch];
+      fakeStartMatch[2] = "";
+      CODE.replace(rootNode, null, fakeStartMatch, endMatch, [content], true);
+      return [true, startLineIndex];
+    }
+    const multilineEndRegex = new RegExp(`^[ \\t]*\`{${fenceLength},}$`);
+    for (let i2 = startLineIndex + 1; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      if (multilineEndRegex.test(line)) {
+        const endMatch = line.match(multilineEndRegex);
+        const linesInBetween2 = lines.slice(startLineIndex + 1, i2);
+        const meta = startMatch[2] ? currentLine.slice(startMatch[0].length).trim() : "";
+        linesInBetween2.unshift(meta ? "" : currentLine.slice(startMatch[0].length));
+        CODE.replace(rootNode, null, startMatch, endMatch, linesInBetween2, true);
+        $setCodeMeta(rootNode, meta);
+        return [true, i2];
+      }
+    }
+    const linesInBetween = lines.slice(startLineIndex + 1);
+    linesInBetween.unshift(currentLine.slice(startMatch[0].length));
+    CODE.replace(rootNode, null, startMatch, null, linesInBetween, true);
+    return [true, lines.length - 1];
+  },
+  regExpEnd: {
+    optional: true,
+    regExp: CODE_END_REGEX
+  },
+  regExpStart: CODE_START_REGEX,
+  replace: (rootNode, children, startMatch, endMatch, linesInBetween, isImport) => {
+    let codeBlockNode;
+    let code;
+    const fence = startMatch[1] ? startMatch[1].trim() : "```";
+    const language = startMatch[2] || void 0;
+    const fenceIndent = startMatch[1] ? startMatch[1].length - startMatch[1].trimStart().length : 0;
+    if (!children && linesInBetween) {
+      if (linesInBetween.length === 1) {
+        if (endMatch) {
+          codeBlockNode = $createCodeNode2(language);
+          code = stripFenceIndent(linesInBetween[0], fenceIndent);
+        } else {
+          codeBlockNode = $createCodeNode2(language);
+          code = linesInBetween[0].startsWith(" ") ? linesInBetween[0].slice(1) : linesInBetween[0];
+        }
+      } else {
+        codeBlockNode = $createCodeNode2(language);
+        if (linesInBetween.length > 0) {
+          if (linesInBetween[0].trim().length === 0) {
+            linesInBetween.shift();
+          } else if (linesInBetween[0].startsWith(" ")) {
+            linesInBetween[0] = linesInBetween[0].slice(1);
+          }
+        }
+        while (linesInBetween.length > 0 && !linesInBetween[linesInBetween.length - 1].length) {
+          linesInBetween.pop();
+        }
+        code = linesInBetween.map((line) => stripFenceIndent(line, fenceIndent)).join("\n");
+      }
+      $setState2(codeBlockNode, codeFenceState, fence);
+      const textNode = $createTextNode2(code);
+      codeBlockNode.append(textNode);
+      rootNode.append(codeBlockNode);
+    } else if (children) {
+      if (!isImport && $isUnreplaceableBlock(rootNode)) {
+        return false;
+      }
+      createBlockNode((match) => {
+        return $createCodeNode2(match ? match[2] : void 0);
+      })(rootNode, children, startMatch, isImport);
+    }
+  },
+  type: "multiline-element"
+};
+var UNORDERED_LIST = {
+  dependencies: [ListNode2, ListItemNode2],
+  export: (node, exportChildren, selection) => {
+    return $isListNode2(node) ? $listExport(node, exportChildren, 0, selection) : null;
+  },
+  regExp: UNORDERED_LIST_REGEX,
+  replace: listReplace("bullet"),
+  triggerOnEnter: true,
+  type: "element"
+};
+var CHECK_LIST = {
+  dependencies: [ListNode2, ListItemNode2],
+  export: (node, exportChildren, selection) => {
+    return $isListNode2(node) ? $listExport(node, exportChildren, 0, selection) : null;
+  },
+  regExp: CHECK_LIST_REGEX,
+  replace: listReplace("check"),
+  triggerOnEnter: true,
+  type: "element"
+};
+var ORDERED_LIST = {
+  dependencies: [ListNode2, ListItemNode2],
+  export: (node, exportChildren, selection) => {
+    return $isListNode2(node) ? $listExport(node, exportChildren, 0, selection) : null;
+  },
+  regExp: ORDERED_LIST_REGEX,
+  replace: listReplace("number"),
+  triggerOnEnter: true,
+  type: "element"
+};
+var INLINE_CODE = {
+  format: ["code"],
+  tag: "`",
+  type: "text-format"
+};
+function getCodeSpanDelimiter(content) {
+  const backtickRuns = content.match(/`+/g);
+  const longestRun = backtickRuns ? Math.max(...backtickRuns.map((run) => run.length)) : 0;
+  const fence = "`".repeat(longestRun + 1);
+  const needsPadding = content.length === 0 || content.includes("`") || /^\s/.test(content) && /\s$/.test(content);
+  const padded = needsPadding ? ` ${content} ` : content;
+  return {
+    fence,
+    padded
+  };
+}
+var HIGHLIGHT = {
+  format: ["highlight"],
+  tag: "==",
+  type: "text-format"
+};
+var BOLD_ITALIC_STAR = {
+  format: ["bold", "italic"],
+  tag: "***",
+  type: "text-format"
+};
+var BOLD_ITALIC_UNDERSCORE = {
+  format: ["bold", "italic"],
+  intraword: false,
+  tag: "___",
+  type: "text-format"
+};
+var BOLD_STAR = {
+  format: ["bold"],
+  tag: "**",
+  type: "text-format"
+};
+var BOLD_UNDERSCORE = {
+  format: ["bold"],
+  intraword: false,
+  tag: "__",
+  type: "text-format"
+};
+var STRIKETHROUGH = {
+  format: ["strikethrough"],
+  tag: "~~",
+  type: "text-format"
+};
+var ITALIC_STAR = {
+  format: ["italic"],
+  tag: "*",
+  type: "text-format"
+};
+var ITALIC_UNDERSCORE = {
+  format: ["italic"],
+  intraword: false,
+  tag: "_",
+  type: "text-format"
+};
+function escapeCharacterReferences(value) {
+  return value.replace(/&(?=#\d+;|#[Xx][\dA-Fa-f]+;|[A-Za-z][\dA-Za-z]*;)/g, "&#38;");
+}
+var LINK = {
+  dependencies: [LinkNode2],
+  export: (node, exportChildren, exportFormat) => {
+    if (!$isLinkNode2(node) || $isAutoLinkNode2(node)) {
+      return null;
+    }
+    const textContent = exportChildren(node);
+    let title = node.getTitle();
+    if (title != null) {
+      title = escapeCharacterReferences(title).replace(/([\\"])/g, "\\$1");
+    }
+    const rawUrl = node.getURL();
+    const escapedUrl = escapeCharacterReferences(rawUrl);
+    const url = rawUrl === "" || /\s/.test(rawUrl) ? `<${escapedUrl.replace(/([\\<>])/g, "\\$1").replace(/\r/g, "&#13;").replace(/\n/g, "&#10;")}>` : escapedUrl.replace(/([\\()])/g, "\\$1").replace(/^</, "\\<");
+    const linkContent = title ? `[${textContent}](${url} "${title}")` : `[${textContent}](${url})`;
+    return linkContent;
+  },
+  // A link destination comes in two shapes, is itself optional, and may have
+  // whitespace on either side of it inside the parentheses. Between `<` and
+  // `>` it holds anything but a line ending and an unescaped angle bracket,
+  // whitespace included. Written raw it may not begin with `<`, and it holds a
+  // backslash and whatever follows it, a balanced pair of parentheses, or any
+  // other character that is not a space, a parenthesis or a backslash. An
+  // angle bracket anywhere but the first character is an ordinary character
+  // there. A backslash in front of whitespace escapes nothing, so that branch
+  // takes the backslash on its own and lets the whitespace end the
+  // destination.
+  //
+  // The parentheses nest three deep. A regular expression cannot count them,
+  // so the depth is a limit written down rather than a general rule, and no
+  // URL in the wild reaches past the one level a disambiguated Wikipedia
+  // article needs.
+  //
+  // A title comes after the destination and whitespace, in any of the three
+  // spellings CommonMark gives it. Inside every shape here no two alternatives
+  // can match at the same place, so none of them has anything to backtrack
+  // over.
+  //
+  // The trailing whitespace sits inside the optional group with the
+  // destination rather than after it. Outside, it would neighbour the leading
+  // `\s*` whenever the destination is absent, and two runs of the same
+  // whitespace side by side can be split between them in as many ways as there
+  // are characters, which costs a quadratic walk of every run that never
+  // reaches the closing parenthesis.
+  importRegExp: /(?:\[(.+?)\])(?:\(\s*(?:(?:<((?:\\.|[^<>\n\\])*)>|((?!<)(?:\\[^\s]|\\(?=\s)|\((?:\\[^\s]|[^\s()\\]|\((?:\\[^\s]|[^\s()\\]|\((?:\\[^\s]|[^\s()\\])*\))*\))*\)|[^\s()\\])+))(?:\s+(?:"((?:[^"]*\\")*[^"]*)"|'((?:[^']*\\')*[^']*)'|\(((?:\\.|[^()\\])*)\)))?\s*)?\))/,
+  regExp: /(?:\[([^[\]]*(?:\[[^[\]]*\][^[\]]*)*)\])(?:\(\s*(?:(?:<((?:\\.|[^<>\n\\])*)>|((?!<)(?:\\[^\s]|\\(?=\s)|\((?:\\[^\s]|[^\s()\\]|\((?:\\[^\s]|[^\s()\\]|\((?:\\[^\s]|[^\s()\\])*\))*\))*\)|[^\s()\\])+))(?:\s+(?:"((?:[^"]*\\")*[^"]*)"|'((?:[^']*\\')*[^']*)'|\(((?:\\.|[^()\\])*)\)))?\s*)?\))$/,
+  replace: (textNode, match) => {
+    if ($findMatchingParent2(textNode, $isLinkNode2)) {
+      return;
+    }
+    const [, linkText, pointyLinkUrl, rawLinkUrl, quotedTitle, apostrophedTitle, parenthesizedTitle] = match;
+    const linkUrl = unescapeText(pointyLinkUrl ?? rawLinkUrl ?? "");
+    const rawLinkTitle = quotedTitle ?? apostrophedTitle ?? parenthesizedTitle;
+    const linkTitle = rawLinkTitle != null ? unescapeText(rawLinkTitle) : void 0;
+    const linkNode = $createLinkNode2(linkUrl, {
+      title: linkTitle
+    });
+    const openBracketAmount = linkText.split("[").length - 1;
+    const closeBracketAmount = linkText.split("]").length - 1;
+    let parsedLinkText = linkText;
+    let outsideLinkText = "";
+    if (openBracketAmount < closeBracketAmount) {
+      return;
+    } else if (openBracketAmount > closeBracketAmount) {
+      const linkTextParts = linkText.split("[");
+      outsideLinkText = "[" + linkTextParts[0];
+      parsedLinkText = linkTextParts.slice(1).join("[");
+    }
+    const linkTextNode = $createTextNode2(parsedLinkText);
+    linkTextNode.setFormat(textNode.getFormat());
+    linkNode.append(linkTextNode);
+    textNode.replace(linkNode);
+    if (outsideLinkText) {
+      linkNode.insertBefore($createTextNode2(outsideLinkText));
+    }
+    return linkTextNode;
+  },
+  trigger: ")",
+  type: "text-match"
+};
+var ELEMENT_TRANSFORMERS = [HEADING, QUOTE, UNORDERED_LIST, ORDERED_LIST];
+var MULTILINE_ELEMENT_TRANSFORMERS = [CODE];
+var TEXT_FORMAT_TRANSFORMERS = [INLINE_CODE, BOLD_ITALIC_STAR, BOLD_ITALIC_UNDERSCORE, BOLD_STAR, BOLD_UNDERSCORE, HIGHLIGHT, ITALIC_STAR, ITALIC_UNDERSCORE, STRIKETHROUGH];
+var TEXT_MATCH_TRANSFORMERS = [LINK];
+var TRANSFORMERS = [...ELEMENT_TRANSFORMERS, ...MULTILINE_ELEMENT_TRANSFORMERS, ...TEXT_FORMAT_TRANSFORMERS, ...TEXT_MATCH_TRANSFORMERS];
+function normalizeMarkdown(input, shouldMergeAdjacentLines = false) {
+  const lines = input.split("\n");
+  let codeBlockFenceLength = 0;
+  const sanitizedLines = [];
+  for (let i2 = 0; i2 < lines.length; i2++) {
+    const rawLine = lines[i2];
+    const line = rawLine.trimEnd();
+    const lastLine = sanitizedLines[sanitizedLines.length - 1];
+    const hardLineBreak = i2 < lines.length - 1 ? parseMarkdownHardLineBreak(rawLine) : null;
+    const lastLineHasHardLineBreak = lastLine !== void 0 && parseMarkdownHardLineBreak(lastLine) !== null;
+    if (CODE_SINGLE_LINE_REGEX.test(line)) {
+      sanitizedLines.push(line);
+      continue;
+    }
+    if (codeBlockFenceLength === 0) {
+      const openMatch = line.match(CODE_START_REGEX);
+      if (openMatch) {
+        codeBlockFenceLength = openMatch[1].trim().length;
+        sanitizedLines.push(line);
+        continue;
+      }
+    } else {
+      if (CODE_END_REGEX.test(line) && line.trim().length >= codeBlockFenceLength) {
+        codeBlockFenceLength = 0;
+        sanitizedLines.push(line);
+        continue;
+      }
+      sanitizedLines.push(rawLine);
+      continue;
+    }
+    if (line === "" || lastLine === "" || !lastLine || HEADING_REGEX.test(lastLine) || HEADING_REGEX.test(line) || QUOTE_REGEX.test(line) || ORDERED_LIST_REGEX.test(line) || UNORDERED_LIST_REGEX.test(line) || CHECK_LIST_REGEX.test(line) || TABLE_ROW_REG_EXP.test(line) || isTableRowDivider(line) || lastLineHasHardLineBreak || !shouldMergeAdjacentLines || TAG_START_REGEX.test(line) || TAG_END_REGEX.test(line) || ENDS_WITH(TAG_END_REGEX).test(lastLine) || ENDS_WITH(TAG_START_REGEX).test(lastLine) || CODE_END_REGEX.test(lastLine)) {
+      sanitizedLines.push(!shouldMergeAdjacentLines && line !== "" || hardLineBreak !== null ? rawLine : line);
+    } else {
+      sanitizedLines[sanitizedLines.length - 1] = lastLine + " " + (hardLineBreak === null ? line : rawLine).trimStart();
+    }
+  }
+  return sanitizedLines.join("\n");
+}
+function createMarkdownExport(transformers, shouldPreserveNewLines = false) {
+  const byType = transformersByType(transformers);
+  const elementTransformers = [...byType.multilineElement, ...byType.element];
+  const isNewlineDelimited = !shouldPreserveNewLines;
+  const textFormatTransformers = byType.textFormat.filter((transformer) => transformer.format.length === 1).sort((a2, b2) => {
+    return Number(a2.format.includes("code")) - Number(b2.format.includes("code"));
+  });
+  return (node) => {
+    const output = [];
+    const children = (node || $getRoot2()).getChildren();
+    for (let i2 = 0; i2 < children.length; i2++) {
+      const child = children[i2];
+      const result = $exportTopLevelElements(child, elementTransformers, textFormatTransformers, byType.textMatch, shouldPreserveNewLines);
+      if (result != null) {
+        output.push(
+          // separate consecutive group of texts with a line break: eg. ["hello", "world"] -> ["hello", "/nworld"]
+          isNewlineDelimited && i2 > 0 && !isEmptyParagraph(child) && !isEmptyParagraph(children[i2 - 1]) ? "\n".concat(result) : result
+        );
+      }
+    }
+    return output.join("\n");
+  };
+}
+function createSelectionMarkdownExport(transformers, shouldPreserveNewLines = false) {
+  const byType = transformersByType(transformers);
+  const elementTransformers = [...byType.multilineElement, ...byType.element];
+  const isNewlineDelimited = !shouldPreserveNewLines;
+  const textFormatTransformers = byType.textFormat.filter((transformer) => transformer.format.length === 1).sort((a2, b2) => {
+    return Number(a2.format.includes("code")) - Number(b2.format.includes("code"));
+  });
+  return (selection) => {
+    const output = [];
+    let previousExported = null;
+    for (const child of $getRoot2().getChildren()) {
+      const {
+        shouldInclude,
+        markdown
+      } = $processNodeForSelection(child, selection, elementTransformers, textFormatTransformers, byType.textMatch, shouldPreserveNewLines);
+      if (shouldInclude && markdown != null) {
+        output.push(isNewlineDelimited && previousExported !== null && !isEmptyParagraph(child) && !isEmptyParagraph(previousExported) ? "\n".concat(markdown) : markdown);
+        previousExported = child;
+      }
+    }
+    return output.join("\n");
+  };
+}
+function $processNodeForSelection(node, selection, elementTransformers, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines) {
+  let shouldInclude = node.isSelected(selection);
+  for (const transformer of elementTransformers) {
+    if (!transformer.export) {
+      continue;
+    }
+    const result = transformer.export(node, (node_) => $exportChildrenForSelection(node_, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines).markdown, selection);
+    if (result != null) {
+      if (!shouldInclude) {
+        if ($isElementNode2(node)) {
+          const childResult = $exportChildrenForSelection(node, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines);
+          if (childResult.shouldInclude) {
+            shouldInclude = true;
+          }
+        }
+      }
+      return {
+        markdown: result,
+        shouldInclude
+      };
+    }
+  }
+  if ($isElementNode2(node)) {
+    const childResult = $exportChildrenForSelection(node, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines);
+    return {
+      markdown: childResult.markdown,
+      shouldInclude: shouldInclude || childResult.shouldInclude
+    };
+  } else if ($isDecoratorNode2(node)) {
+    return {
+      markdown: node.getTextContent(),
+      shouldInclude
+    };
+  } else {
+    return {
+      markdown: null,
+      shouldInclude
+    };
+  }
+}
+function $exportChildrenForSelection(node, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines, unclosedTags, unclosableTags) {
+  const output = [];
+  const children = node.getChildren();
+  let anyChildIncluded = false;
+  if (!unclosedTags) {
+    unclosedTags = [];
+  }
+  if (!unclosableTags) {
+    unclosableTags = [];
+  }
+  mainLoop: for (const child of children) {
+    let childIncluded = child.isSelected(selection);
+    for (const transformer of textMatchTransformers) {
+      if (!transformer.export) {
+        continue;
+      }
+      const result = transformer.export(child, (parentNode) => $exportChildrenForSelection(parentNode, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines, unclosedTags, [...unclosableTags, ...unclosedTags]).markdown, (textNode, textContent) => {
+        const slicedNode = $sliceSelectedTextNodeContent2(selection, textNode, "clone");
+        return exportTextFormat(textNode, slicedNode.getTextContent(), textFormatTransformers, unclosedTags, unclosableTags, shouldPreserveNewLines);
+      });
+      if (result != null) {
+        if (!childIncluded && $isElementNode2(child) && child.getChildren().some((c2) => c2.isSelected(selection)) && child.extractWithChild(child, selection, "html")) {
+          childIncluded = true;
+        }
+        if (childIncluded) {
+          output.push(result);
+          anyChildIncluded = true;
+        }
+        continue mainLoop;
+      }
+    }
+    if ($isLineBreakNode2(child)) {
+      if (childIncluded) {
+        output.push($exportLineBreak(child));
+        anyChildIncluded = true;
+      }
+    } else if ($isTextNode2(child)) {
+      if (childIncluded) {
+        const target = $sliceSelectedTextNodeContent2(selection, child, "clone");
+        output.push(exportTextFormat(child, target.getTextContent(), textFormatTransformers, unclosedTags, unclosableTags, shouldPreserveNewLines));
+        anyChildIncluded = true;
+      }
+    } else if ($isElementNode2(child)) {
+      const childResult = $exportChildrenForSelection(child, selection, textFormatTransformers, textMatchTransformers, shouldPreserveNewLines, unclosedTags, unclosableTags);
+      if (!childIncluded && childResult.shouldInclude && child.extractWithChild(child, selection, "html")) {
+        childIncluded = true;
+      }
+      if (childIncluded || childResult.shouldInclude) {
+        output.push(childResult.markdown);
+        anyChildIncluded = true;
+      }
+    } else if ($isDecoratorNode2(child)) {
+      if (childIncluded) {
+        output.push(child.getTextContent());
+        anyChildIncluded = true;
+      }
+    }
+  }
+  return {
+    markdown: output.join(""),
+    shouldInclude: anyChildIncluded
+  };
+}
+function $exportTopLevelElements(node, elementTransformers, textTransformersIndex, textMatchTransformers, shouldPreserveNewLines) {
+  for (const transformer of elementTransformers) {
+    if (!transformer.export) {
+      continue;
+    }
+    const result = transformer.export(node, (_node) => $exportChildren(_node, textTransformersIndex, textMatchTransformers, void 0, void 0, shouldPreserveNewLines));
+    if (result != null) {
+      return result;
+    }
+  }
+  if ($isElementNode2(node)) {
+    return $exportChildren(node, textTransformersIndex, textMatchTransformers, void 0, void 0, shouldPreserveNewLines);
+  } else if ($isDecoratorNode2(node)) {
+    return node.getTextContent();
+  } else {
+    return null;
+  }
+}
+function $exportChildren(node, textTransformersIndex, textMatchTransformers, unclosedTags, unclosableTags, shouldPreserveNewLines = false) {
+  const output = [];
+  const children = node.getChildren();
+  if (!unclosedTags) {
+    unclosedTags = [];
+  }
+  if (!unclosableTags) {
+    unclosableTags = [];
+  }
+  mainLoop: for (const child of children) {
+    for (const transformer of textMatchTransformers) {
+      if (!transformer.export) {
+        continue;
+      }
+      const result = transformer.export(child, (parentNode) => $exportChildren(
+        parentNode,
+        textTransformersIndex,
+        textMatchTransformers,
+        unclosedTags,
+        // Add current unclosed tags to the list of unclosable tags - we don't want nested tags from
+        // textmatch transformers to close the outer ones, as that may result in invalid markdown.
+        // E.g. **text [text**](https://lexical.io)
+        // is invalid markdown, as the closing ** is inside the link.
+        //
+        [...unclosableTags, ...unclosedTags],
+        shouldPreserveNewLines
+      ), (textNode, textContent) => exportTextFormat(textNode, textContent, textTransformersIndex, unclosedTags, unclosableTags, shouldPreserveNewLines));
+      if (result != null) {
+        output.push(result);
+        continue mainLoop;
+      }
+    }
+    if ($isLineBreakNode2(child)) {
+      output.push($exportLineBreak(child));
+    } else if ($isTextNode2(child)) {
+      output.push(exportTextFormat(child, child.getTextContent(), textTransformersIndex, unclosedTags, unclosableTags, shouldPreserveNewLines));
+    } else if ($isElementNode2(child)) {
+      output.push($exportChildren(child, textTransformersIndex, textMatchTransformers, unclosedTags, unclosableTags, shouldPreserveNewLines));
+    } else if ($isDecoratorNode2(child)) {
+      output.push(child.getTextContent());
+    }
+  }
+  return output.join("");
+}
+function $exportLineBreak(node) {
+  return $getState2(node, hardLineBreakState) + "\n";
+}
+function exportTextFormat(node, textContent, textTransformers, unclosedTags, unclosableTags, shouldPreserveNewLines = false) {
+  const isCode = node.hasFormat("code");
+  let output = textContent;
+  if (!isCode) {
+    output = shouldPreserveNewLines ? output.replace(/([*_`~])/g, "\\$1") : output.replace(/([*_`~\\])/g, "\\$1");
+  }
+  let leadingSpace;
+  let trimmedOutput;
+  let trailingSpace;
+  let isWhitespaceOnly;
+  if (isCode) {
+    const {
+      fence,
+      padded
+    } = getCodeSpanDelimiter(textContent);
+    leadingSpace = "";
+    trailingSpace = "";
+    trimmedOutput = fence + padded + fence;
+    isWhitespaceOnly = false;
+  } else {
+    const match = output.match(/^(\s*)(.*?)(\s*)$/s) || ["", "", output, ""];
+    leadingSpace = match[1];
+    trimmedOutput = match[2];
+    trailingSpace = match[3];
+    isWhitespaceOnly = trimmedOutput === "";
+  }
+  let openingTags = "";
+  let closingTagsBefore = "";
+  let closingTagsAfter = "";
+  const prevNode = getTextSibling(node, true);
+  const nextNode = getTextSibling(node, false);
+  const applied = /* @__PURE__ */ new Set();
+  for (const transformer of textTransformers) {
+    const format = transformer.format[0];
+    const tag = transformer.tag;
+    if (format === "code") {
+      continue;
+    }
+    if (!isWhitespaceOnly && checkHasFormat(node, format) && !applied.has(format)) {
+      applied.add(format);
+      if (!checkHasFormat(prevNode, format) || !unclosedTags.find((element) => element.tag === tag)) {
+        unclosedTags.push({
+          format,
+          tag
+        });
+        openingTags += tag;
+      }
+    }
+  }
+  for (let i2 = 0; i2 < unclosedTags.length; i2++) {
+    const nodeHasFormat = hasFormat(node, unclosedTags[i2].format);
+    const nextNodeHasFormat = hasFormat(nextNode, unclosedTags[i2].format);
+    if (nodeHasFormat && nextNodeHasFormat) {
+      continue;
+    }
+    const unhandledUnclosedTags = [...unclosedTags];
+    while (unhandledUnclosedTags.length > i2) {
+      const unclosedTag = unhandledUnclosedTags.pop();
+      if (unclosableTags && unclosedTag && unclosableTags.find((element) => element.tag === unclosedTag.tag)) {
+        continue;
+      }
+      if (unclosedTag && typeof unclosedTag.tag === "string") {
+        if (!nodeHasFormat) {
+          closingTagsBefore += unclosedTag.tag;
+        } else if (!nextNodeHasFormat) {
+          closingTagsAfter += unclosedTag.tag;
+        }
+      }
+      unclosedTags.pop();
+    }
+    break;
+  }
+  if (isWhitespaceOnly && !node.hasFormat("code")) {
+    return closingTagsBefore + output;
+  }
+  return closingTagsBefore + leadingSpace + openingTags + trimmedOutput + closingTagsAfter + trailingSpace;
+}
+function getTextSibling(node, backward) {
+  const sibling = backward ? node.getPreviousSibling() : node.getNextSibling();
+  if ($isTextNode2(sibling)) {
+    return sibling;
+  }
+  return null;
+}
+function hasFormat(node, format) {
+  return $isTextNode2(node) && node.hasFormat(format);
+}
+function checkHasFormat(n2, f) {
+  if (!hasFormat(n2, f)) {
+    return false;
+  }
+  if (f === "code") {
+    return true;
+  }
+  if (n2 && /^\s*$/.test(n2.getTextContent())) {
+    return false;
+  }
+  return true;
+}
+function findOutermostTextFormatTransformer(textNode, textFormatTransformersIndex) {
+  const textContent = textNode.getTextContent();
+  const codeTransformer = textFormatTransformersIndex.transformersByTag["`"];
+  const excludeRanges = [];
+  let codeMatch = null;
+  if (codeTransformer) {
+    const codeSpans = scanCodeSpans(textContent);
+    for (const span of codeSpans) {
+      if (!codeMatch) {
+        codeMatch = {
+          content: span.content,
+          endIndex: span.endIndex,
+          startIndex: span.startIndex,
+          tag: "`"
+        };
+      }
+      excludeRanges.push({
+        end: span.endIndex,
+        start: span.startIndex
+      });
+    }
+  }
+  const delimiters = scanDelimiters(textContent, textFormatTransformersIndex, excludeRanges);
+  const emphasisMatch = delimiters.length > 0 ? processEmphasis(textContent, delimiters, textFormatTransformersIndex) : null;
+  let resultMatch = null;
+  let resultTransformer = null;
+  if (codeMatch && emphasisMatch) {
+    if (emphasisMatch.startIndex <= codeMatch.startIndex && emphasisMatch.endIndex >= codeMatch.endIndex) {
+      resultMatch = emphasisMatch;
+      resultTransformer = textFormatTransformersIndex.transformersByTag[emphasisMatch.tag];
+    } else {
+      resultMatch = codeMatch;
+      resultTransformer = codeTransformer;
+    }
+  } else if (codeMatch) {
+    resultMatch = codeMatch;
+    resultTransformer = codeTransformer;
+  } else if (emphasisMatch) {
+    resultMatch = emphasisMatch;
+    resultTransformer = textFormatTransformersIndex.transformersByTag[emphasisMatch.tag];
+  }
+  if (!resultMatch || !resultTransformer) {
+    return null;
+  }
+  const regexMatch = [textContent.slice(resultMatch.startIndex, resultMatch.endIndex), resultMatch.tag, resultMatch.content];
+  regexMatch.index = resultMatch.startIndex;
+  regexMatch.input = textContent;
+  return {
+    endIndex: resultMatch.endIndex,
+    // resultTransformer is the registered code transformer (by identity)
+    // exactly when the chosen match is the code span.
+    isCodeSpan: resultTransformer === codeTransformer,
+    match: regexMatch,
+    startIndex: resultMatch.startIndex,
+    transformer: resultTransformer
+  };
+}
+function scanCodeSpans(text) {
+  const isEscaped = (index) => {
+    let count = 0;
+    for (let i3 = index - 1; i3 >= 0 && text[i3] === "\\"; i3--) {
+      count++;
+    }
+    return count % 2 === 1;
+  };
+  const runs = [];
+  let i2 = 0;
+  while (i2 < text.length) {
+    if (text[i2] === "`") {
+      let length = 1;
+      while (i2 + length < text.length && text[i2 + length] === "`") {
+        length++;
+      }
+      runs.push({
+        index: i2,
+        length
+      });
+      i2 += length;
+    } else {
+      i2++;
+    }
+  }
+  const spans = [];
+  let openIdx = 0;
+  while (openIdx < runs.length) {
+    const opener = runs[openIdx];
+    if (isEscaped(opener.index)) {
+      openIdx++;
+      continue;
+    }
+    let closeIdx = -1;
+    for (let c2 = openIdx + 1; c2 < runs.length; c2++) {
+      if (runs[c2].length === opener.length) {
+        closeIdx = c2;
+        break;
+      }
+    }
+    if (closeIdx === -1) {
+      openIdx++;
+      continue;
+    }
+    const closer = runs[closeIdx];
+    let content = text.slice(opener.index + opener.length, closer.index);
+    if (content.length >= 2 && content.startsWith(" ") && content.endsWith(" ") && /[^ ]/.test(content)) {
+      content = content.slice(1, -1);
+    }
+    spans.push({
+      content,
+      endIndex: closer.index + closer.length,
+      startIndex: opener.index
+    });
+    openIdx = closeIdx + 1;
+  }
+  return spans;
+}
+function scanDelimiters(text, transformersIndex, excludeRanges = []) {
+  const delimiters = [];
+  const delimiterChars = new Set(Object.keys(transformersIndex.transformersByTag).filter((tag) => tag[0] !== "`").map((tag) => tag[0]));
+  const isEscaped = (index) => {
+    let count = 0;
+    for (let i3 = index - 1; i3 >= 0 && text[i3] === "\\"; i3--) {
+      count++;
+    }
+    return count % 2 === 1;
+  };
+  const isInExcludedRange = (index) => {
+    return excludeRanges.some((range) => index >= range.start && index < range.end);
+  };
+  let i2 = 0;
+  while (i2 < text.length) {
+    const char = text[i2];
+    if (!delimiterChars.has(char) || isEscaped(i2) || isInExcludedRange(i2)) {
+      i2++;
+      continue;
+    }
+    let len = 1;
+    while (i2 + len < text.length && text[i2 + len] === char) {
+      len++;
+    }
+    const canOpen = canEmphasis(char, text, i2, len, true);
+    const canClose = canEmphasis(char, text, i2, len, false);
+    if (canOpen || canClose) {
+      delimiters.push({
+        active: true,
+        canClose,
+        canOpen,
+        char,
+        index: i2,
+        length: len
+      });
+    }
+    i2 += len;
+  }
+  return delimiters;
+}
+function processEmphasis(text, delimiters, transformersIndex) {
+  const openersBottom = {};
+  let currentPos = 0;
+  let result = null;
+  while (currentPos < delimiters.length) {
+    const closer = delimiters[currentPos];
+    if (!closer.active || !closer.canClose || closer.length === 0) {
+      currentPos++;
+      continue;
+    }
+    const bottomKey = `${closer.char}${closer.canOpen}${closer.length % 3}`;
+    const bottom = openersBottom[bottomKey] ?? -1;
+    let foundOpener = false;
+    for (let openIdx = currentPos - 1; openIdx > bottom; openIdx--) {
+      const opener = delimiters[openIdx];
+      if (!opener.active || !opener.canOpen || opener.length === 0 || opener.char !== closer.char) {
+        continue;
+      }
+      if (opener.canClose || closer.canOpen) {
+        const sum = opener.length + closer.length;
+        if (sum % 3 === 0 && opener.length % 3 !== 0 && closer.length % 3 !== 0) {
+          continue;
+        }
+      }
+      const maxLen = Math.min(opener.length, closer.length);
+      const matchedTag = Object.keys(transformersIndex.transformersByTag).filter((t2) => t2[0] === opener.char && t2.length <= maxLen).sort((a2, b2) => b2.length - a2.length)[0];
+      if (!matchedTag) {
+        continue;
+      }
+      foundOpener = true;
+      const matchLen = matchedTag.length;
+      const match = {
+        content: text.slice(opener.index + opener.length, closer.index),
+        endIndex: closer.index + matchLen,
+        startIndex: opener.index + (opener.length - matchLen),
+        tag: matchedTag
+      };
+      if (!result || match.startIndex < result.startIndex || match.startIndex === result.startIndex && match.endIndex > result.endIndex) {
+        result = match;
+      }
+      for (let j2 = openIdx + 1; j2 < currentPos; j2++) {
+        delimiters[j2].active = false;
+      }
+      opener.length -= matchLen;
+      closer.length -= matchLen;
+      opener.active = opener.length > 0;
+      if (closer.length > 0) {
+        closer.index += matchLen;
+      } else {
+        closer.active = false;
+        currentPos++;
+      }
+      break;
+    }
+    if (!foundOpener) {
+      openersBottom[bottomKey] = currentPos - 1;
+      if (!closer.canOpen) {
+        closer.active = false;
+      }
+      currentPos++;
+    }
+  }
+  return result;
+}
+function canEmphasis(char, text, index, length, isOpen) {
+  if (!isFlanking(text, index, length, isOpen)) {
+    return false;
+  }
+  if (char === "*") {
+    return true;
+  }
+  if (char === "_") {
+    if (!isFlanking(text, index, length, !isOpen)) {
+      return true;
+    }
+    const adjacentChar = isOpen ? text[index - 1] : text[index + length];
+    return adjacentChar !== void 0 && PUNCTUATION.test(adjacentChar);
+  }
+  return true;
+}
+function isFlanking(text, index, length, isLeft) {
+  const charBefore = text[index - 1];
+  const charAfter = text[index + length];
+  const [primary, secondary] = isLeft ? [charAfter, charBefore] : [charBefore, charAfter];
+  if (primary === void 0 || WHITESPACE.test(primary)) {
+    return false;
+  }
+  if (!PUNCTUATION.test(primary)) {
+    return true;
+  }
+  return secondary === void 0 || WHITESPACE.test(secondary) || PUNCTUATION.test(secondary);
+}
+function importTextFormatTransformer(textNode, startIndex, endIndex, transformer, match) {
+  const textContent = textNode.getTextContent();
+  let transformedNode, nodeAfter, nodeBefore;
+  if (match[0] === textContent) {
+    transformedNode = textNode;
+  } else {
+    if (startIndex === 0) {
+      [transformedNode, nodeAfter] = textNode.splitText(endIndex);
+    } else {
+      [nodeBefore, transformedNode, nodeAfter] = textNode.splitText(startIndex, endIndex);
+    }
+  }
+  transformedNode.setTextContent(match[2]);
+  if (transformer) {
+    for (const format of transformer.format) {
+      if (!transformedNode.hasFormat(format)) {
+        transformedNode.toggleFormat(format);
+      }
+    }
+  }
+  return {
+    nodeAfter,
+    nodeBefore,
+    transformedNode
+  };
+}
+function findOutermostTextMatchTransformer(textNode_, textMatchTransformers) {
+  const textNode = textNode_;
+  let foundMatchStartIndex = void 0;
+  let foundMatchEndIndex = void 0;
+  let foundMatchTransformer = void 0;
+  let foundMatch = void 0;
+  for (const transformer of textMatchTransformers) {
+    if (!transformer.replace || !transformer.importRegExp) {
+      continue;
+    }
+    const match = textNode.getTextContent().match(transformer.importRegExp);
+    if (!match) {
+      continue;
+    }
+    const startIndex = match.index || 0;
+    const endIndex = transformer.getEndIndex ? transformer.getEndIndex(textNode, match) : startIndex + match[0].length;
+    if (endIndex === false) {
+      continue;
+    }
+    if (foundMatchStartIndex === void 0 || foundMatchEndIndex === void 0 || // Wraps previous match or is strictly before it.
+    startIndex < foundMatchStartIndex && (endIndex > foundMatchEndIndex || endIndex <= foundMatchStartIndex)) {
+      foundMatchStartIndex = startIndex;
+      foundMatchEndIndex = endIndex;
+      foundMatchTransformer = transformer;
+      foundMatch = match;
+    }
+  }
+  if (foundMatchStartIndex === void 0 || foundMatchEndIndex === void 0 || foundMatchTransformer === void 0 || foundMatch === void 0) {
+    return null;
+  }
+  return {
+    endIndex: foundMatchEndIndex,
+    match: foundMatch,
+    startIndex: foundMatchStartIndex,
+    transformer: foundMatchTransformer
+  };
+}
+function importFoundTextMatchTransformer(textNode, startIndex, endIndex, transformer, match) {
+  let transformedNode, nodeAfter, nodeBefore;
+  if (startIndex === 0) {
+    [transformedNode, nodeAfter] = textNode.splitText(endIndex);
+  } else {
+    [nodeBefore, transformedNode, nodeAfter] = textNode.splitText(startIndex, endIndex);
+  }
+  if (!transformer.replace) {
+    return null;
+  }
+  const potentialTransformedNode = transformer.replace(transformedNode, match);
+  return {
+    nodeAfter,
+    nodeBefore,
+    transformedNode: potentialTransformedNode || void 0
+  };
+}
+function canContainTransformableMarkdown(node) {
+  return $isTextNode2(node) && !node.hasFormat("code");
+}
+function importTextTransformers(textNode, textFormatTransformersIndex, textMatchTransformers) {
+  let foundTextFormat = findOutermostTextFormatTransformer(textNode, textFormatTransformersIndex);
+  let foundTextMatch = findOutermostTextMatchTransformer(textNode, textMatchTransformers);
+  if (foundTextFormat && foundTextMatch) {
+    if (foundTextFormat.isCodeSpan) {
+      if (foundTextMatch.startIndex <= foundTextFormat.startIndex && foundTextMatch.endIndex >= foundTextFormat.endIndex) {
+        foundTextFormat = null;
+      } else {
+        foundTextMatch = null;
+      }
+    } else if (
+      // Find the outermost transformer
+      foundTextFormat.startIndex <= foundTextMatch.startIndex && foundTextFormat.endIndex >= foundTextMatch.endIndex || // foundTextMatch is not contained within foundTextFormat
+      foundTextMatch.startIndex > foundTextFormat.endIndex
+    ) {
+      foundTextMatch = null;
+    } else {
+      foundTextFormat = null;
+    }
+  }
+  if (foundTextFormat) {
+    const result = importTextFormatTransformer(textNode, foundTextFormat.startIndex, foundTextFormat.endIndex, foundTextFormat.transformer, foundTextFormat.match);
+    if (canContainTransformableMarkdown(result.nodeAfter)) {
+      importTextTransformers(result.nodeAfter, textFormatTransformersIndex, textMatchTransformers);
+    }
+    if (canContainTransformableMarkdown(result.nodeBefore)) {
+      importTextTransformers(result.nodeBefore, textFormatTransformersIndex, textMatchTransformers);
+    }
+    if (canContainTransformableMarkdown(result.transformedNode)) {
+      importTextTransformers(result.transformedNode, textFormatTransformersIndex, textMatchTransformers);
+    }
+  } else if (foundTextMatch) {
+    const result = importFoundTextMatchTransformer(textNode, foundTextMatch.startIndex, foundTextMatch.endIndex, foundTextMatch.transformer, foundTextMatch.match);
+    if (!result) {
+      return;
+    }
+    if (canContainTransformableMarkdown(result.nodeAfter)) {
+      importTextTransformers(result.nodeAfter, textFormatTransformersIndex, textMatchTransformers);
+    }
+    if (canContainTransformableMarkdown(result.nodeBefore)) {
+      importTextTransformers(result.nodeBefore, textFormatTransformersIndex, textMatchTransformers);
+    }
+    if (canContainTransformableMarkdown(result.transformedNode)) {
+      importTextTransformers(result.transformedNode, textFormatTransformersIndex, textMatchTransformers);
+    }
+  }
+  const textContent = textNode.getTextContent();
+  const unescapedText = unescapeText(textContent);
+  textNode.setTextContent(unescapedText);
+}
+function $importMarkdownNodes(markdownString, container, transformers, shouldPreserveNewLines = false) {
+  const byType = transformersByType(transformers);
+  const textFormatTransformersIndex = createTextFormatTransformersIndex(byType.textFormat);
+  const lines = markdownString.split("\n");
+  const linesLength = lines.length;
+  withListIndentColumns(!shouldPreserveNewLines, () => {
+    for (let i2 = 0; i2 < linesLength; i2++) {
+      const lineText = lines[i2];
+      const [imported, shiftedIndex] = $importMultiline(lines, i2, byType.multilineElement, container);
+      if (imported) {
+        i2 = shiftedIndex;
+        continue;
+      }
+      $importBlocks(lineText, container, byType.element, textFormatTransformersIndex, byType.textMatch, shouldPreserveNewLines);
+    }
+  });
+  const children = container.getChildren();
+  for (const child of children) {
+    if (!shouldPreserveNewLines && isEmptyParagraph(child) && container.getChildrenSize() > 1) {
+      child.remove();
+      continue;
+    }
+    if ($isElementNode2(child)) {
+      for (const textNode of child.getAllTextNodes()) {
+        $normalizeMarkdownTextNode(textNode);
+      }
+    }
+  }
+}
+function $importMultiline(lines, startLineIndex, multilineElementTransformers, rootNode) {
+  for (const transformer of multilineElementTransformers) {
+    const {
+      handleImportAfterStartMatch,
+      regExpEnd,
+      regExpStart,
+      replace
+    } = transformer;
+    const startMatch = lines[startLineIndex].match(regExpStart);
+    if (!startMatch) {
+      continue;
+    }
+    if (handleImportAfterStartMatch) {
+      const result = handleImportAfterStartMatch({
+        lines,
+        rootNode,
+        startLineIndex,
+        startMatch,
+        transformer
+      });
+      if (result === null) {
+        continue;
+      } else if (result) {
+        return result;
+      }
+    }
+    const regexpEndRegex = typeof regExpEnd === "object" && "regExp" in regExpEnd ? regExpEnd.regExp : regExpEnd;
+    const isEndOptional = regExpEnd && typeof regExpEnd === "object" && "optional" in regExpEnd ? regExpEnd.optional : !regExpEnd;
+    let endLineIndex = startLineIndex;
+    const linesLength = lines.length;
+    while (endLineIndex < linesLength) {
+      const endMatch = regexpEndRegex ? lines[endLineIndex].match(regexpEndRegex) : null;
+      if (!endMatch) {
+        if (!isEndOptional || isEndOptional && endLineIndex < linesLength - 1) {
+          endLineIndex++;
+          continue;
+        }
+      }
+      if (endMatch && startLineIndex === endLineIndex && endMatch.index === startMatch.index) {
+        endLineIndex++;
+        continue;
+      }
+      const linesInBetween = [];
+      if (endMatch && startLineIndex === endLineIndex) {
+        linesInBetween.push(lines[startLineIndex].slice(startMatch[0].length, -endMatch[0].length));
+      } else {
+        for (let i2 = startLineIndex; i2 <= endLineIndex; i2++) {
+          if (i2 === startLineIndex) {
+            const text = lines[i2].slice(startMatch[0].length);
+            linesInBetween.push(text);
+          } else if (i2 === endLineIndex && endMatch) {
+            const text = lines[i2].slice(0, -endMatch[0].length);
+            linesInBetween.push(text);
+          } else {
+            linesInBetween.push(lines[i2]);
+          }
+        }
+      }
+      if (replace(rootNode, null, startMatch, endMatch, linesInBetween, true) !== false) {
+        return [true, endLineIndex];
+      }
+      break;
+    }
+  }
+  return [false, startLineIndex];
+}
+function $importBlocks(lineText, rootNode, elementTransformers, textFormatTransformersIndex, textMatchTransformers, shouldPreserveNewLines) {
+  const textNode = $createTextNode2(lineText);
+  const elementNode = $createParagraphNode2();
+  elementNode.append(textNode);
+  rootNode.append(elementNode);
+  for (const {
+    regExp,
+    replace
+  } of elementTransformers) {
+    const match = lineText.match(regExp);
+    if (match) {
+      textNode.setTextContent(lineText.slice(match[0].length));
+      if (replace(elementNode, [textNode], match, true) !== false) {
+        break;
+      }
+    }
+  }
+  importTextTransformers(textNode, textFormatTransformersIndex, textMatchTransformers);
+  if (elementNode.getParent() !== null && lineText.length > 0) {
+    const previousNode = elementNode.getPreviousSibling();
+    if (!shouldPreserveNewLines && // Only append if we're not preserving newlines
+    ($isParagraphNode2(previousNode) || $isQuoteNode2(previousNode) || $isListNode2(previousNode))) {
+      let targetNode = previousNode;
+      if ($isListNode2(previousNode)) {
+        const lastDescendant = previousNode.getLastDescendant();
+        if (lastDescendant == null) {
+          targetNode = null;
+        } else {
+          targetNode = $findMatchingParent2(lastDescendant, $isListItemNode2);
+        }
+      }
+      if (targetNode != null && targetNode.getTextContentSize() > 0) {
+        targetNode.splice(targetNode.getChildrenSize(), 0, [$createMarkdownLineBreakNode(targetNode), ...elementNode.getChildren()]);
+        elementNode.remove();
+      }
+    }
+  }
+}
+function $normalizeMarkdownTextNode(textNode) {
+  if ($isTabNode2(textNode)) {
+    return;
+  }
+  const text = textNode.getTextContent();
+  if (!text.includes("	")) {
+    return;
+  }
+  const format = textNode.getFormat();
+  const style = textNode.getStyle();
+  const nodes = [];
+  let start = 0;
+  for (let index = text.indexOf("	"); index !== -1; index = text.indexOf("	", index + 1)) {
+    if (index > start) {
+      nodes.push($createTextNode2(text.slice(start, index)).setFormat(format).setStyle(style));
+    }
+    nodes.push($createTabNode2());
+    start = index + 1;
+  }
+  if (start < text.length) {
+    nodes.push($createTextNode2(text.slice(start)).setFormat(format).setStyle(style));
+  }
+  textNode.getParentOrThrow().splice(textNode.getIndexWithinParent(), 1, nodes);
+}
+function createTextFormatTransformersIndex(textTransformers) {
+  const transformersByTag = {};
+  const fullMatchRegExpByTag = {};
+  const openTagsRegExp = [];
+  for (const transformer of textTransformers) {
+    const {
+      tag
+    } = transformer;
+    transformersByTag[tag] = transformer;
+    const tagRegExp = tag.replace(/(\*|\^|\+)/g, "\\$1");
+    openTagsRegExp.push(tagRegExp);
+    if (tag.length === 1) {
+      if (tag === "`") {
+        fullMatchRegExpByTag[tag] = new RegExp(`(^|[^\\\\\`])(\`)((?:\\\\\`|[^\`])+?)(\`)(?!\`)`);
+      } else {
+        fullMatchRegExpByTag[tag] = new RegExp(`(^|[^\\\\${tagRegExp}])(${tagRegExp})((\\\\${tagRegExp})?.*?[^${tagRegExp}\\s](\\\\${tagRegExp})?)(${tagRegExp})(?![\\\\${tagRegExp}])`);
+      }
+    } else {
+      fullMatchRegExpByTag[tag] = new RegExp(`(^|[^\\\\])(${tagRegExp})((\\\\${tagRegExp})?.*?[^\\s](\\\\${tagRegExp})?)(${tagRegExp})(?!\\\\)`);
+    }
+  }
+  return {
+    // Reg exp to find open tag + content + close tag
+    fullMatchRegExpByTag,
+    // Regexp to locate *any* potential opening tag (longest first).
+    // The former (?<!\\) escape guard has been removed — the delimiter
+    // scanner's isEscaped() check handles escape filtering at match time.
+    openTagsRegExp: new RegExp(`(${openTagsRegExp.join("|")})`, "g"),
+    transformersByTag
+  };
+}
+function formatDevErrorMessage10(message) {
+  throw new Error(message);
+}
+function runElementTransformers(parentNode, anchorNode, anchorOffset, elementTransformers, triggerOnEnter) {
+  const grandParentNode = parentNode.getParent();
+  if (!$isRootOrShadowRoot2(grandParentNode) || parentNode.getFirstChild() !== anchorNode) {
+    return false;
+  }
+  const textContent = anchorNode.getTextContent();
+  if (!triggerOnEnter) {
+    if (textContent[anchorOffset - 1] !== " ") {
+      return false;
+    }
+  }
+  for (const {
+    regExp,
+    replace
+  } of elementTransformers) {
+    const match = textContent.match(regExp);
+    const expectedMatchLength = triggerOnEnter || match && match[0].endsWith(" ") ? anchorOffset : anchorOffset - 1;
+    if (match && match[0].length === expectedMatchLength) {
+      const nextSiblings = anchorNode.getNextSiblings();
+      const [leadingNode, remainderNode] = anchorNode.splitText(anchorOffset);
+      const siblings = remainderNode ? [remainderNode, ...nextSiblings] : nextSiblings;
+      if (replace(parentNode, siblings, match, false) !== false) {
+        leadingNode.remove();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function runMultilineElementTransformers(parentNode, anchorNode, anchorOffset, elementTransformers, triggerOnEnter) {
+  const grandParentNode = parentNode.getParent();
+  if (!$isRootOrShadowRoot2(grandParentNode) || parentNode.getFirstChild() !== anchorNode) {
+    return false;
+  }
+  const textContent = anchorNode.getTextContent();
+  if (!triggerOnEnter) {
+    if (textContent[anchorOffset - 1] !== " ") {
+      return false;
+    }
+  }
+  for (const {
+    regExpStart,
+    replace,
+    regExpEnd
+  } of elementTransformers) {
+    if (regExpEnd && !("optional" in regExpEnd) || regExpEnd && "optional" in regExpEnd && !regExpEnd.optional) {
+      continue;
+    }
+    const match = textContent.match(regExpStart);
+    if (match) {
+      const matchLength = triggerOnEnter || match[0].endsWith(" ") ? anchorOffset : anchorOffset - 1;
+      if (match[0].length !== matchLength) {
+        continue;
+      }
+      const nextSiblings = anchorNode.getNextSiblings();
+      const [leadingNode, remainderNode] = anchorNode.splitText(anchorOffset);
+      const siblings = remainderNode ? [remainderNode, ...nextSiblings] : nextSiblings;
+      if (replace(parentNode, siblings, match, null, null, false) !== false) {
+        leadingNode.remove();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function runTextMatchTransformers(anchorNode, anchorOffset, transformersByTrigger) {
+  let textContent = anchorNode.getTextContent();
+  const lastChar = textContent[anchorOffset - 1];
+  const transformers = transformersByTrigger[lastChar];
+  if (transformers == null) {
+    return false;
+  }
+  if (anchorOffset < textContent.length) {
+    textContent = textContent.slice(0, anchorOffset);
+  }
+  for (const transformer of transformers) {
+    if (!transformer.replace || !transformer.regExp) {
+      continue;
+    }
+    const match = textContent.match(transformer.regExp);
+    if (match === null) {
+      continue;
+    }
+    const startIndex = match.index || 0;
+    const endIndex = startIndex + match[0].length;
+    let replaceNode;
+    if (startIndex === 0) {
+      [replaceNode] = anchorNode.splitText(endIndex);
+    } else {
+      [, replaceNode] = anchorNode.splitText(startIndex, endIndex);
+    }
+    replaceNode.selectNext(0, 0);
+    transformer.replace(replaceNode, match);
+    return true;
+  }
+  return false;
+}
+function $runTextFormatTransformers(anchorNode, anchorOffset, textFormatTransformers) {
+  const textContent = anchorNode.getTextContent();
+  const closeTagEndIndex = anchorOffset - 1;
+  const closeChar = textContent[closeTagEndIndex];
+  const matchers = textFormatTransformers[closeChar];
+  if (!matchers) {
+    return false;
+  }
+  for (const matcher of matchers) {
+    const {
+      tag
+    } = matcher;
+    const tagLength = tag.length;
+    const closeTagStartIndex = closeTagEndIndex - tagLength + 1;
+    if (tagLength > 1) {
+      if (!isEqualSubString(textContent, closeTagStartIndex, tag, 0, tagLength)) {
+        continue;
+      }
+    }
+    if (textContent[closeTagStartIndex - 1] === " ") {
+      continue;
+    }
+    const afterCloseTagChar = textContent[closeTagEndIndex + 1];
+    if (matcher.intraword === false && afterCloseTagChar && !PUNCTUATION_OR_SPACE2.test(afterCloseTagChar)) {
+      continue;
+    }
+    const closeNode = anchorNode;
+    let openNode = closeNode;
+    let openTagStartIndex = getOpenTagStartIndex(textContent, closeTagStartIndex, tag);
+    let sibling = openNode;
+    while (openTagStartIndex < 0 && (sibling = sibling.getPreviousSibling())) {
+      if ($isLineBreakNode2(sibling)) {
+        break;
+      }
+      if ($isTextNode2(sibling)) {
+        if (sibling.hasFormat("code")) {
+          continue;
+        }
+        const siblingTextContent = sibling.getTextContent();
+        openNode = sibling;
+        openTagStartIndex = getOpenTagStartIndex(siblingTextContent, siblingTextContent.length, tag);
+      }
+    }
+    if (openTagStartIndex < 0) {
+      continue;
+    }
+    if (openNode === closeNode && openTagStartIndex + tagLength === closeTagStartIndex) {
+      continue;
+    }
+    const prevOpenNodeText = openNode.getTextContent();
+    if (openTagStartIndex > 0 && prevOpenNodeText[openTagStartIndex - 1] === closeChar) {
+      continue;
+    }
+    const beforeOpenTagChar = prevOpenNodeText[openTagStartIndex - 1];
+    if (matcher.intraword === false && beforeOpenTagChar && !PUNCTUATION_OR_SPACE2.test(beforeOpenTagChar)) {
+      continue;
+    }
+    if (!matcher.format.includes("code") && $isInsideUnclosedCodeSpan(openNode, openTagStartIndex)) {
+      continue;
+    }
+    const prevCloseNodeText = closeNode.getTextContent();
+    const closeNodeText = prevCloseNodeText.slice(0, closeTagStartIndex) + prevCloseNodeText.slice(closeTagEndIndex + 1);
+    closeNode.setTextContent(closeNodeText);
+    const openNodeText = openNode === closeNode ? closeNodeText : prevOpenNodeText;
+    openNode.setTextContent(openNodeText.slice(0, openTagStartIndex) + openNodeText.slice(openTagStartIndex + tagLength));
+    const selection = $getSelection2();
+    const nextSelection = $createRangeSelection2();
+    $setSelection2(nextSelection);
+    const newOffset = closeTagEndIndex - tagLength * (openNode === closeNode ? 2 : 1) + 1;
+    nextSelection.anchor.set(openNode.__key, openTagStartIndex, "text");
+    nextSelection.focus.set(closeNode.__key, newOffset, "text");
+    for (const format of matcher.format) {
+      nextSelection.formatText(format, TEXT_TYPE_TO_FORMAT2[format]);
+    }
+    nextSelection.anchor.set(nextSelection.focus.key, nextSelection.focus.offset, nextSelection.focus.type);
+    for (const format of matcher.format) {
+      if (nextSelection.hasFormat(format)) {
+        nextSelection.toggleFormat(format);
+      }
+    }
+    if ($isRangeSelection2(selection)) {
+      nextSelection.format = selection.format;
+    }
+    return true;
+  }
+  return false;
+}
+function $isInsideUnclosedCodeSpan(node, offset) {
+  let backtickCount = 0;
+  const text = node.getTextContent();
+  for (let i2 = 0; i2 < offset; i2++) {
+    if (text[i2] === "`") {
+      backtickCount++;
+    }
+  }
+  return backtickCount % 2 !== 0;
+}
+function getOpenTagStartIndex(string, maxIndex, tag) {
+  const tagLength = tag.length;
+  for (let i2 = maxIndex; i2 >= tagLength; i2--) {
+    const startIndex = i2 - tagLength;
+    if (isEqualSubString(string, startIndex, tag, 0, tagLength) && // Space after opening tag cancels transformation
+    string[startIndex + tagLength] !== " ") {
+      return startIndex;
+    }
+  }
+  return -1;
+}
+function $getOffsetInParent(point) {
+  const node = point.getNode();
+  let offset = 0;
+  if ($isTextNode2(node)) {
+    offset = point.offset;
+  } else if ($isElementNode2(node)) {
+    for (const child of node.getChildren().slice(0, point.offset)) {
+      offset += child.getTextContentSize();
+    }
+  }
+  for (let sibling = node.getPreviousSibling(); sibling !== null; sibling = sibling.getPreviousSibling()) {
+    offset += sibling.getTextContentSize();
+  }
+  return offset;
+}
+function isEqualSubString(stringA, aStart, stringB, bStart, length) {
+  for (let i2 = 0; i2 < length; i2++) {
+    if (stringA[aStart + i2] !== stringB[bStart + i2]) {
+      return false;
+    }
+  }
+  return true;
+}
+function registerMarkdownShortcuts(editor, transformers = TRANSFORMERS) {
+  const byType = transformersByType(transformers);
+  const elementTransformersForEnter = byType.element.filter((t2) => t2.triggerOnEnter);
+  const textFormatTransformersByTrigger = indexBy(byType.textFormat, ({
+    tag
+  }) => tag[tag.length - 1]);
+  const textMatchTransformersByTrigger = indexBy(byType.textMatch, ({
+    trigger
+  }) => trigger);
+  const compositionEndTriggerChars = /* @__PURE__ */ new Set([" "]);
+  for (const t2 of byType.textFormat) {
+    compositionEndTriggerChars.add(t2.tag.slice(-1));
+  }
+  for (const t2 of byType.textMatch) {
+    if (t2.trigger !== void 0) {
+      compositionEndTriggerChars.add(t2.trigger);
+    }
+  }
+  for (const transformer of transformers) {
+    const type = transformer.type;
+    if (type === "element" || type === "text-match" || type === "multiline-element") {
+      const dependencies = transformer.dependencies;
+      for (const node of dependencies) {
+        if (!editor.hasNode(node)) {
+          {
+            formatDevErrorMessage10(`MarkdownShortcuts: missing dependency ${node.getType()} for transformer. Ensure node dependency is included in editor initial config.`);
+          }
+        }
+      }
+    }
+  }
+  const $transform = (parentNode, anchorNode, anchorOffset) => {
+    if (runElementTransformers(parentNode, anchorNode, anchorOffset, byType.element)) {
+      return true;
+    }
+    if (runMultilineElementTransformers(parentNode, anchorNode, anchorOffset, byType.multilineElement)) {
+      return true;
+    }
+    if (runTextMatchTransformers(anchorNode, anchorOffset, textMatchTransformersByTrigger)) {
+      return true;
+    }
+    if ($runTextFormatTransformers(anchorNode, anchorOffset, textFormatTransformersByTrigger)) {
+      return true;
+    }
+    return false;
+  };
+  return mergeRegister2(editor.registerUpdateListener(({
+    tags,
+    dirtyLeaves,
+    editorState,
+    prevEditorState
+  }) => {
+    if (tags.has(COLLABORATION_TAG2) || tags.has(HISTORIC_TAG2)) {
+      return;
+    }
+    if (editor.isComposing()) {
+      return;
+    }
+    const isCompositionEnd = tags.has(COMPOSITION_END_TAG2);
+    const selection = editorState.read($getSelection2);
+    const prevSelection = prevEditorState.read($getSelection2);
+    if (!$isRangeSelection2(prevSelection) || !$isRangeSelection2(selection) || !selection.isCollapsed() || selection.is(prevSelection) && !isCompositionEnd) {
+      return;
+    }
+    const anchorKey = selection.anchor.key;
+    const anchorOffset = selection.anchor.offset;
+    const anchorNode = editorState._nodeMap.get(anchorKey);
+    if (!$isTextNode2(anchorNode) || !dirtyLeaves.has(anchorKey)) {
+      return;
+    }
+    if (!isCompositionEnd && anchorOffset !== 1 && editorState.read(() => $getOffsetInParent(selection.anchor)) > prevEditorState.read(() => $getOffsetInParent(prevSelection.anchor)) + 1) {
+      return;
+    }
+    if (isCompositionEnd) {
+      const closeChar = editorState.read(() => anchorNode.getTextContent())[anchorOffset - 1];
+      if (!compositionEndTriggerChars.has(closeChar)) {
+        return;
+      }
+    }
+    editor.update(() => {
+      if (!canContainTransformableMarkdown(anchorNode)) {
+        return;
+      }
+      const parentNode = anchorNode.getParent();
+      if (parentNode === null || $isCodeNode2(parentNode)) {
+        return;
+      }
+      if ($transform(parentNode, anchorNode, selection.anchor.offset)) {
+        $addUpdateTag2(HISTORY_PUSH_TAG2);
+      }
+    });
+  }), editor.registerCommand(KEY_ENTER_COMMAND2, (event) => {
+    if (event !== null && event.shiftKey) {
+      return false;
+    }
+    const selection = $getSelection2();
+    if (!$isRangeSelection2(selection) || !selection.isCollapsed()) {
+      return false;
+    }
+    const anchorOffset = selection.anchor.offset;
+    const anchorNode = selection.anchor.getNode();
+    if (!$isTextNode2(anchorNode) || !canContainTransformableMarkdown(anchorNode)) {
+      return false;
+    }
+    const parentNode = anchorNode.getParent();
+    if (parentNode === null || $isCodeNode2(parentNode)) {
+      return false;
+    }
+    const textContent = anchorNode.getTextContent();
+    if (anchorOffset !== textContent.length) {
+      return false;
+    }
+    if (runMultilineElementTransformers(parentNode, anchorNode, anchorOffset, byType.multilineElement, true) || runElementTransformers(parentNode, anchorNode, anchorOffset, elementTransformersForEnter, true)) {
+      if (event !== null) {
+        event.preventDefault();
+      }
+      return true;
+    }
+    return false;
+  }, COMMAND_PRIORITY_LOW2));
+}
+function $convertFromMarkdownString(markdown, transformers = TRANSFORMERS, node, shouldPreserveNewLines = false, shouldMergeAdjacentLines = false) {
+  const sanitizedMarkdown = shouldPreserveNewLines ? markdown : normalizeMarkdown(markdown, shouldMergeAdjacentLines);
+  const root = node || $getRoot2();
+  root.clear();
+  $importMarkdownNodes(sanitizedMarkdown, root, transformers, shouldPreserveNewLines);
+  if ($getSelection2() !== null) {
+    root.selectStart();
+  }
+}
+function $generateNodesFromMarkdownString(markdown, transformers = TRANSFORMERS, shouldPreserveNewLines = false, shouldMergeAdjacentLines = false) {
+  const sanitizedMarkdown = shouldPreserveNewLines ? markdown : normalizeMarkdown(markdown, shouldMergeAdjacentLines);
+  const container = new ArtificialNode__DO_NOT_USE2();
+  $importMarkdownNodes(sanitizedMarkdown, container, transformers, shouldPreserveNewLines);
+  return container.getChildren();
+}
+function $convertToMarkdownString(transformers = TRANSFORMERS, node, shouldPreserveNewLines = false) {
+  const exportMarkdown = createMarkdownExport(transformers, shouldPreserveNewLines);
+  return exportMarkdown(node);
+}
+function $convertSelectionToMarkdownString(transformers = TRANSFORMERS, selection, shouldPreserveNewLines = false) {
+  if (!selection || $isRangeSelection2(selection) && selection.isCollapsed()) {
+    return "";
+  }
+  const exportMarkdown = createSelectionMarkdownExport(transformers, shouldPreserveNewLines);
+  return exportMarkdown(selection);
+}
+
+// node_modules/@lexical/markdown/dist/LexicalMarkdown.mjs
+var mod14 = true ? LexicalMarkdown_dev_exports : LexicalMarkdown_prod_exports;
+var $convertFromMarkdownString2 = mod14.$convertFromMarkdownString;
+var $convertSelectionToMarkdownString2 = mod14.$convertSelectionToMarkdownString;
+var $convertToMarkdownString2 = mod14.$convertToMarkdownString;
+var $generateNodesFromMarkdownString2 = mod14.$generateNodesFromMarkdownString;
+var BOLD_ITALIC_STAR2 = mod14.BOLD_ITALIC_STAR;
+var BOLD_ITALIC_UNDERSCORE2 = mod14.BOLD_ITALIC_UNDERSCORE;
+var BOLD_STAR2 = mod14.BOLD_STAR;
+var BOLD_UNDERSCORE2 = mod14.BOLD_UNDERSCORE;
+var CHECK_LIST2 = mod14.CHECK_LIST;
+var CODE2 = mod14.CODE;
+var ELEMENT_TRANSFORMERS2 = mod14.ELEMENT_TRANSFORMERS;
+var HEADING2 = mod14.HEADING;
+var HIGHLIGHT2 = mod14.HIGHLIGHT;
+var INLINE_CODE2 = mod14.INLINE_CODE;
+var ITALIC_STAR2 = mod14.ITALIC_STAR;
+var ITALIC_UNDERSCORE2 = mod14.ITALIC_UNDERSCORE;
+var LINK2 = mod14.LINK;
+var MULTILINE_ELEMENT_TRANSFORMERS2 = mod14.MULTILINE_ELEMENT_TRANSFORMERS;
+var ORDERED_LIST2 = mod14.ORDERED_LIST;
+var QUOTE2 = mod14.QUOTE;
+var STRIKETHROUGH2 = mod14.STRIKETHROUGH;
+var TEXT_FORMAT_TRANSFORMERS2 = mod14.TEXT_FORMAT_TRANSFORMERS;
+var TEXT_MATCH_TRANSFORMERS2 = mod14.TEXT_MATCH_TRANSFORMERS;
+var TRANSFORMERS2 = mod14.TRANSFORMERS;
+var UNORDERED_LIST2 = mod14.UNORDERED_LIST;
+var isTableRowDivider2 = mod14.isTableRowDivider;
+var registerMarkdownShortcuts2 = mod14.registerMarkdownShortcuts;
 export {
   $applyNodeReplacement2 as $applyNodeReplacement,
   $createNodeSelection2 as $createNodeSelection,
@@ -25574,15 +32107,24 @@ export {
   $getSelection2 as $getSelection,
   $getSelectionStyleValueForProperty2 as $getSelectionStyleValueForProperty,
   $insertNodes2 as $insertNodes,
+  $isListItemNode2 as $isListItemNode,
   $isRangeSelection2 as $isRangeSelection,
   $patchStyleText2 as $patchStyleText,
   $setSelection2 as $setSelection,
   COMMAND_PRIORITY_HIGH2 as COMMAND_PRIORITY_HIGH,
   DecoratorNode2 as DecoratorNode,
   FORMAT_TEXT_COMMAND2 as FORMAT_TEXT_COMMAND,
+  INDENT_CONTENT_COMMAND2 as INDENT_CONTENT_COMMAND,
+  KEY_TAB_COMMAND2 as KEY_TAB_COMMAND,
+  ListItemNode2 as ListItemNode,
+  ListNode2 as ListNode,
+  OUTDENT_CONTENT_COMMAND2 as OUTDENT_CONTENT_COMMAND,
   PASTE_COMMAND2 as PASTE_COMMAND,
+  UNORDERED_LIST2 as UNORDERED_LIST,
   createEditor2 as createEditor,
   createEmptyHistoryState2 as createEmptyHistoryState,
   registerHistory2 as registerHistory,
+  registerList2 as registerList,
+  registerMarkdownShortcuts2 as registerMarkdownShortcuts,
   registerRichText2 as registerRichText
 };

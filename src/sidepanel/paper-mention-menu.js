@@ -1,4 +1,5 @@
 import { listLibraryPapers } from "../storage/library-store.js";
+import { createMenuKeyboardHint } from "./prompt-preset-menu.js";
 
 export function createPaperMentionMenuController({
   textarea,
@@ -70,10 +71,14 @@ export function createPaperMentionMenuController({
     }
 
     if (!papers) {
-      if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key)) {
+      if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter", "Escape"].includes(event.key)) {
         event.preventDefault();
         if (event.key === "Escape") {
           hide();
+        } else if (event.key === "ArrowRight" && request.mode === "paper") {
+          switchMode(request, "label");
+        } else if (event.key === "ArrowLeft" && request.mode === "label") {
+          switchMode(request, "paper");
         }
         return true;
       }
@@ -82,10 +87,14 @@ export function createPaperMentionMenuController({
 
     const options = getOptions(request);
     if (!options.length) {
-      if (["Enter", "Escape", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      if (["Enter", "Escape", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) {
         event.preventDefault();
         if (event.key === "Escape") {
           hide();
+        } else if (event.key === "ArrowRight" && request.mode === "paper") {
+          switchMode(request, "label");
+        } else if (event.key === "ArrowLeft" && request.mode === "label") {
+          switchMode(request, "paper");
         }
         return true;
       }
@@ -102,6 +111,16 @@ export function createPaperMentionMenuController({
       event.preventDefault();
       activeIndex = (activeIndex - 1 + options.length) % options.length;
       render(options, request);
+      return true;
+    }
+    if (event.key === "ArrowRight" && request.mode === "paper") {
+      event.preventDefault();
+      switchMode(request, "label");
+      return true;
+    }
+    if (event.key === "ArrowLeft" && request.mode === "label") {
+      event.preventDefault();
+      switchMode(request, "paper");
       return true;
     }
     if (event.key === "Enter") {
@@ -128,7 +147,7 @@ export function createPaperMentionMenuController({
       const empty = document.createElement("div");
       empty.className = "prompt-preset-empty muted";
       empty.textContent = request.mode === "label" ? "No matching labels." : "No matching papers.";
-      menuElement.append(empty);
+      menuElement.append(empty, createMenuKeyboardHint());
       menuElement.hidden = false;
       return;
     }
@@ -136,7 +155,7 @@ export function createPaperMentionMenuController({
     options.forEach((option, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "prompt-preset-option paper-mention-option";
+      button.className = "click-menu-item prompt-preset-option paper-mention-option";
       button.classList.toggle("active", index === activeIndex);
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(index === activeIndex));
@@ -149,15 +168,24 @@ export function createPaperMentionMenuController({
 
       button.addEventListener("mouseenter", () => {
         activeIndex = index;
-        render(options, request);
+        updateActiveOption();
       });
       button.addEventListener("click", () => selectOption(option, request));
       menuElement.append(button);
     });
 
+    menuElement.append(createMenuKeyboardHint());
     menuElement.hidden = false;
-    menuElement.querySelector(".prompt-preset-option.active")?.scrollIntoView({
+    menuElement.querySelector(".click-menu-item.active")?.scrollIntoView({
       block: "nearest"
+    });
+  }
+
+  function updateActiveOption() {
+    menuElement.querySelectorAll(".click-menu-item").forEach((option, index) => {
+      const active = index === activeIndex;
+      option.classList.toggle("active", active);
+      option.setAttribute("aria-selected", String(active));
     });
   }
 
@@ -182,7 +210,7 @@ export function createPaperMentionMenuController({
       if (!request.query) {
         return true;
       }
-      return normalizeQuery(`${paper.title} ${paper.group || ""}`).includes(request.query);
+      return normalizeQuery(paper.title).includes(request.query);
     }).map((paper) => ({ type: "paper", paper }));
   }
 
@@ -230,6 +258,7 @@ export function createPaperMentionMenuController({
       lineStart,
       cursor,
       mode: labelMode ? "label" : "paper",
+      queryText: labelMode ? command.slice(1) : command,
       query: normalizeQuery(labelMode ? command.slice(1) : command)
     };
   }
@@ -247,6 +276,18 @@ export function createPaperMentionMenuController({
     Promise.resolve(selection)
       .then(() => update())
       .catch((error) => onError?.(error));
+  }
+
+  function switchMode(request, mode) {
+    const value = textarea.value;
+    const replacement = mode === "label" ? `@#${request.queryText}` : `@${request.queryText}`;
+    textarea.value = `${value.slice(0, request.lineStart)}${replacement}${value.slice(request.cursor)}`;
+    const nextCursor = request.lineStart + replacement.length;
+    textarea.setSelectionRange(nextCursor, nextCursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.focus();
+    activeIndex = 0;
+    update();
   }
 
   function hide() {
@@ -268,8 +309,7 @@ export function createPaperMentionMenuController({
 function renderPaperOption(button, paper) {
   const title = document.createElement("strong");
   title.textContent = paper.title;
-  const label = createLabelElement(paper.group || "Unlabeled", paper.groupTone, !paper.group);
-  button.append(title, label);
+  button.append(title);
 }
 
 function renderLabelOption(button, option) {
@@ -278,7 +318,7 @@ function renderLabelOption(button, option) {
   const count = document.createElement("span");
   count.className = "paper-mention-count";
   count.textContent = `${option.documentKeys.length} paper${option.documentKeys.length === 1 ? "" : "s"}`;
-  button.append(label, count);
+  button.append(count, label);
 }
 
 function createLabelElement(text, tone, empty) {

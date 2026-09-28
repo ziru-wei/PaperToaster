@@ -4,23 +4,13 @@ import {
   prepareAiResponseMarkdownForCopy
 } from "../markdown/normalize-ai-response-markdown.js";
 import { annotate } from "../../vendor/rough-notation/rough-notation.mjs";
-import { createToasterEmptyState } from "./toaster-empty-state.js";
 import { createPaperNoteEditor, disposePaperNoteEditor } from "./paper-note-editor.js";
 import { createQuestionResponseMap, getChronologicalMessageEntries } from "../conversation/message-state.js";
 
 const highlightBarCleanups = new WeakMap();
-const questionCloudAnimationFrames = new WeakMap();
-const questionCloudResizeObservers = new WeakMap();
-const questionCloudLayouts = new WeakMap();
-const pendingPreservedQuestionCloudPositions = new WeakMap();
-const questionCloudExpansionFrames = new WeakMap();
-const questionCloudAnswerResizeObservers = new WeakMap();
 const pendingResponseVisualFrames = new WeakMap();
 
 export function renderConversationMessages(threadElement, messages, options = {}) {
-  const preservedQuestionCloudPositions = options.preserveQuestionCloudLayout
-    ? captureQuestionCloudPositions(threadElement)
-    : null;
   highlightBarCleanups.get(threadElement)?.();
   highlightBarCleanups.delete(threadElement);
   const paperNote = threadElement.querySelector(".saved-paper-user-note");
@@ -35,9 +25,7 @@ export function renderConversationMessages(threadElement, messages, options = {}
     : new Set();
   const responseMessageIndexesByQuestion = createQuestionResponseMap(messages);
 
-  const messageEntries = options.chronologicalMode
-    ? getChronologicalMessageEntries(messages)
-    : messages.map((message, messageIndex) => ({ message, messageIndex }));
+  const messageEntries = getChronologicalMessageEntries(messages);
   messageEntries.forEach(({ message, messageIndex }) => {
     const item = document.createElement("article");
     item.className = `conversation-message ${message.role}`;
@@ -94,7 +82,8 @@ export function renderConversationMessages(threadElement, messages, options = {}
         text.classList.add("conversation-response-toggle");
         text.setAttribute("aria-expanded", String(!collapsedAssistantMessageIndexes.has(assistantMessageIndex)));
         item.addEventListener("click", (event) => {
-          if (event.target.closest("button, textarea, a, [contenteditable=\"true\"], .conversation-selection")) {
+          const clickedSelection = event.target.closest(".conversation-selection");
+          if (event.target.closest("button, textarea, a, [contenteditable=\"true\"]") || clickedSelection) {
             return;
           }
           const response = threadElement.querySelector(
@@ -106,7 +95,6 @@ export function renderConversationMessages(threadElement, messages, options = {}
           const collapsed = response.classList.toggle("assistant-response-collapsed");
           text.setAttribute("aria-expanded", String(!collapsed));
           options.onAssistantResponseCollapseChange(messageIndex, assistantMessageIndex, collapsed);
-          scheduleConversationQuestionCloudExpansion(threadElement);
         });
       }
     }
@@ -133,7 +121,8 @@ export function renderConversationMessages(threadElement, messages, options = {}
             : null
         });
         editBars.push(editBar);
-        content.append(editBar.bar);
+        document.body.append(editBar.bar);
+        cleanupCallbacks.push(() => editBar.bar.remove());
       }
       content.append(createAssistantActionRow({
         message,
@@ -148,7 +137,6 @@ export function renderConversationMessages(threadElement, messages, options = {}
 
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
   schedulePendingResponseVisualState(threadElement, messages.some((message) => message?.role === "assistant" && message.pending));
-  scheduleConversationQuestionCloudLayout(threadElement, { preservedQuestionCloudPositions });
 }
 
 export function updatePendingConversationMessageText(threadElement, messageIndex, text) {
@@ -158,20 +146,6 @@ export function updatePendingConversationMessageText(threadElement, messageIndex
   if (!textElement) return false;
   textElement.textContent = String(text || "Toasting the pages...");
   return true;
-}
-
-export function orderConversationMessageElements(threadElement, messages, chronologicalMode = false) {
-  const elementsByIndex = new Map(
-    Array.from(threadElement.querySelectorAll(":scope > .conversation-message"))
-      .map((element) => [Number(element.dataset.messageIndex), element])
-  );
-  const entries = chronologicalMode
-    ? getChronologicalMessageEntries(messages)
-    : messages.map((message, messageIndex) => ({ message, messageIndex }));
-  entries.forEach(({ messageIndex }) => {
-    const element = elementsByIndex.get(messageIndex);
-    if (element) threadElement.append(element);
-  });
 }
 
 function schedulePendingResponseVisualState(threadElement, pending) {
@@ -184,378 +158,6 @@ function schedulePendingResponseVisualState(threadElement, pending) {
     threadElement.classList.toggle("awaiting-ai-response", pending);
   });
   pendingResponseVisualFrames.set(threadElement, frame);
-}
-
-export function scheduleConversationQuestionCloudLayout(threadElement, options = {}) {
-  if (Object.prototype.hasOwnProperty.call(options, "preservedQuestionCloudPositions")) {
-    if (options.preservedQuestionCloudPositions?.size) {
-      pendingPreservedQuestionCloudPositions.set(threadElement, options.preservedQuestionCloudPositions);
-    } else {
-      pendingPreservedQuestionCloudPositions.delete(threadElement);
-    }
-  }
-  if (typeof ResizeObserver === "function" && !questionCloudResizeObservers.has(threadElement)) {
-    const observer = new ResizeObserver(() => scheduleConversationQuestionCloudLayout(threadElement));
-    observer.observe(threadElement);
-    questionCloudResizeObservers.set(threadElement, observer);
-  }
-  const pendingFrame = questionCloudAnimationFrames.get(threadElement);
-  if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
-  const frame = window.requestAnimationFrame(() => {
-    questionCloudAnimationFrames.delete(threadElement);
-    const preservedPositions = pendingPreservedQuestionCloudPositions.get(threadElement) || null;
-    pendingPreservedQuestionCloudPositions.delete(threadElement);
-    layoutConversationQuestionCloud(threadElement, preservedPositions);
-  });
-  questionCloudAnimationFrames.set(threadElement, frame);
-}
-
-function captureQuestionCloudPositions(threadElement) {
-  const layout = questionCloudLayouts.get(threadElement);
-  const positions = new Map();
-  if (!layout) return positions;
-  for (const [question, rect] of layout.positions) {
-    const messageIndex = Number(question.dataset.messageIndex);
-    if (Number.isInteger(messageIndex) && messageIndex >= 0) {
-      positions.set(messageIndex, { ...rect });
-    }
-  }
-  return positions;
-}
-
-function layoutConversationQuestionCloud(threadElement, preservedPositions = null) {
-  const questions = Array.from(threadElement.querySelectorAll(".conversation-message.user"));
-  const assistants = Array.from(threadElement.querySelectorAll(".conversation-message.assistant"));
-  questions.forEach((question, index) => {
-    question.classList.remove("cloud-question-expanded");
-    question.dataset.cloudWidth = question.classList.contains("saved-unit")
-      ? "wide"
-      : ["compact", "medium", "wide", "compact", "medium"][index % 5];
-    question.style.removeProperty("left");
-    question.style.removeProperty("top");
-  });
-  assistants.forEach((assistant) => {
-    assistant.style.removeProperty("left");
-    assistant.style.removeProperty("top");
-    assistant.style.removeProperty("width");
-  });
-  if (!threadElement.classList.contains("question-cloud-mode") || !questions.length) {
-    questionCloudLayouts.delete(threadElement);
-    disconnectQuestionCloudAnswerResizeObserver(threadElement);
-    threadElement.style.removeProperty("--question-cloud-scroll-height");
-    return;
-  }
-
-  const insets = getCloudHorizontalInsets(threadElement);
-  const availableWidth = Math.max(120, threadElement.clientWidth - insets.left - insets.right);
-  const halfWidth = availableWidth / 2;
-  const gap = 7;
-  const orderedQuestions = questions
-    .map((element, index) => ({
-      element,
-      index,
-      messageIndex: Number(element.dataset.messageIndex),
-      saved: element.classList.contains("saved-unit"),
-      width: element.getBoundingClientRect().width,
-      height: element.getBoundingClientRect().height
-    }))
-    .sort((left, right) => Number(right.saved) - Number(left.saved) || left.index - right.index);
-  const cloudCenterX = insets.left + halfWidth;
-  const shouldPreservePositions = preservedPositions instanceof Map && preservedPositions.size > 0;
-  const placed = shouldPreservePositions
-    ? orderedQuestions
-        .filter((question) => preservedPositions.has(question.messageIndex))
-        .map((question) => {
-          const previous = preservedPositions.get(question.messageIndex);
-          return {
-            x: previous.x - cloudCenterX,
-            y: previous.y,
-            width: question.width,
-            height: question.height,
-            element: question.element
-          };
-        })
-    : [];
-  const questionsToPlace = shouldPreservePositions
-    ? orderedQuestions.filter((question) => !preservedPositions.has(question.messageIndex))
-    : orderedQuestions;
-
-  questionsToPlace.forEach((question, questionIndex) => {
-    const appendBelowPreservedCloud = shouldPreservePositions &&
-      question.element.classList.contains("pending-question") &&
-      placed.length > 0;
-    let position;
-    if (appendBelowPreservedCloud) {
-      const bottom = placed.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
-      position = centeredCloudRect(question, 0, bottom + gap + question.height / 2);
-    } else {
-      position = questionIndex === 0 && !placed.length
-        ? centeredCloudRect(question, 0, 0)
-        : findPackedCloudRect(question, questionIndex, placed, halfWidth, gap, {
-            minimumY: shouldPreservePositions ? 4 : -Infinity
-          });
-    }
-    if (!position) {
-      const bottom = placed.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
-      position = centeredCloudRect(question, 0, bottom + gap + question.height / 2);
-    }
-    placed.push({ ...position, element: question.element });
-  });
-
-  const minX = Math.min(...placed.map((rect) => rect.x));
-  const maxX = Math.max(...placed.map((rect) => rect.x + rect.width));
-  const minY = Math.min(...placed.map((rect) => rect.y));
-  const maxY = Math.max(...placed.map((rect) => rect.y + rect.height));
-  const cloudWidth = maxX - minX;
-  const cloudHeight = maxY - minY;
-  const cloudLeft = insets.left + Math.max(0, (availableWidth - cloudWidth) / 2);
-  const cloudTop = Math.max(12, (threadElement.clientHeight - cloudHeight) * 0.1);
-
-  placed.forEach((rect) => {
-    rect.x = shouldPreservePositions ? cloudCenterX + rect.x : cloudLeft + rect.x - minX;
-    rect.y = shouldPreservePositions ? rect.y : cloudTop + rect.y - minY;
-    rect.element.style.left = `${Math.round(rect.x)}px`;
-    rect.element.style.top = `${Math.round(rect.y)}px`;
-  });
-  questionCloudLayouts.set(threadElement, {
-    gap,
-    insets,
-    positions: new Map(placed.map((rect) => [rect.element, { ...rect }]))
-  });
-  applyConversationQuestionCloudExpansion(threadElement);
-}
-
-function findPackedCloudRect(question, questionIndex, placed, halfWidth, gap, options = {}) {
-  const minimumY = Number.isFinite(options.minimumY) ? options.minimumY : -Infinity;
-  const horizontalCandidates = createAdjacentCloudCandidates(question, questionIndex, placed, gap, true)
-    .filter((candidate) => cloudRectFits(candidate, placed, halfWidth, gap, minimumY));
-  if (horizontalCandidates.length) return chooseCompactCloudCandidate(horizontalCandidates);
-
-  const verticalCandidates = createAdjacentCloudCandidates(question, questionIndex, placed, gap, false)
-    .filter((candidate) => cloudRectFits(candidate, placed, halfWidth, gap, minimumY));
-  if (verticalCandidates.length) return chooseCompactCloudCandidate(verticalCandidates);
-
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  for (let step = 1; step <= 6000; step += 1) {
-    const radius = 5.2 * Math.sqrt(step);
-    const angle = step * goldenAngle + questionIndex * 0.83;
-    const centerX = Math.cos(angle) * radius;
-    const centerY = Math.sin(angle) * radius * 0.68;
-    const candidate = centeredCloudRect(question, centerX, centerY);
-    if (candidate.y < minimumY) continue;
-    if (candidate.x < -halfWidth || candidate.x + candidate.width > halfWidth) continue;
-    if (placed.every((rect) => !cloudRectsOverlap(candidate, rect, gap))) return candidate;
-  }
-  return null;
-}
-
-function createAdjacentCloudCandidates(question, questionIndex, placed, gap, horizontal) {
-  const candidates = [];
-  const direction = questionIndex % 2 === 0 ? -1 : 1;
-  for (const anchor of placed) {
-    if (horizontal) {
-      const yOffsets = [
-        direction * Math.min(question.height, anchor.height) * 0.28,
-        0,
-        -direction * Math.min(question.height, anchor.height) * 0.42
-      ];
-      for (const yOffset of yOffsets) {
-        const y = anchor.y + (anchor.height - question.height) / 2 + yOffset;
-        candidates.push({ x: anchor.x + anchor.width + gap, y, width: question.width, height: question.height });
-        candidates.push({ x: anchor.x - question.width - gap, y, width: question.width, height: question.height });
-      }
-    } else {
-      const xOffsets = [
-        direction * Math.min(question.width, anchor.width) * 0.24,
-        -direction * Math.min(question.width, anchor.width) * 0.18,
-        0
-      ];
-      for (const xOffset of xOffsets) {
-        const x = anchor.x + (anchor.width - question.width) / 2 + xOffset;
-        candidates.push({ x, y: anchor.y - question.height - gap, width: question.width, height: question.height });
-        candidates.push({ x, y: anchor.y + anchor.height + gap, width: question.width, height: question.height });
-      }
-    }
-  }
-  return candidates;
-}
-
-function cloudRectFits(candidate, placed, halfWidth, gap, minimumY = -Infinity) {
-  return candidate.y >= minimumY &&
-    candidate.x >= -halfWidth &&
-    candidate.x + candidate.width <= halfWidth &&
-    placed.every((rect) => !cloudRectsOverlap(candidate, rect, gap));
-}
-
-function chooseCompactCloudCandidate(candidates) {
-  return candidates.reduce((best, candidate) => {
-    const centerX = candidate.x + candidate.width / 2;
-    const centerY = candidate.y + candidate.height / 2;
-    const score = Math.abs(centerX) * 0.82 + Math.abs(centerY) * 1.18;
-    return !best || score < best.score ? { ...candidate, score } : best;
-  }, null);
-}
-
-function scheduleConversationQuestionCloudExpansion(threadElement) {
-  const pendingFrame = questionCloudExpansionFrames.get(threadElement);
-  if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
-  const frame = window.requestAnimationFrame(() => {
-    questionCloudExpansionFrames.delete(threadElement);
-    applyConversationQuestionCloudExpansion(threadElement);
-  });
-  questionCloudExpansionFrames.set(threadElement, frame);
-}
-
-function applyConversationQuestionCloudExpansion(threadElement) {
-  const layout = questionCloudLayouts.get(threadElement);
-  if (!layout || !threadElement.classList.contains("question-cloud-mode")) return;
-  const questions = [...layout.positions.keys()];
-  const assistants = Array.from(threadElement.querySelectorAll(".conversation-message.assistant"));
-  for (const [question, rect] of layout.positions) {
-    question.classList.remove("cloud-question-expanded");
-    question.style.left = `${Math.round(rect.x)}px`;
-    question.style.top = `${Math.round(rect.y)}px`;
-  }
-  assistants.forEach((assistant) => {
-    assistant.style.removeProperty("left");
-    assistant.style.removeProperty("top");
-    assistant.style.removeProperty("width");
-  });
-
-  const expandedQuestions = questions.filter((question) => {
-    const responseIndex = question.dataset.responseMessageIndex;
-    const response = responseIndex === undefined
-      ? null
-      : threadElement.querySelector(`.conversation-message.assistant[data-message-index="${responseIndex}"]`);
-    return response && !response.classList.contains("assistant-response-collapsed");
-  });
-  if (!expandedQuestions.length) {
-    disconnectQuestionCloudAnswerResizeObserver(threadElement);
-    updateQuestionCloudScrollHeight(threadElement, [...layout.positions.values()]);
-    return;
-  }
-
-  const insets = getCloudHorizontalInsets(threadElement);
-  const answerWidth = Math.max(1, threadElement.clientWidth - insets.left - insets.right);
-  const expandedUnits = expandedQuestions
-    .map((question) => {
-      const base = layout.positions.get(question);
-      const responseIndex = question.dataset.responseMessageIndex;
-      const answer = threadElement.querySelector(`.conversation-message.assistant[data-message-index="${responseIndex}"]`);
-      question.classList.add("cloud-question-expanded");
-      const questionWidth = question.getBoundingClientRect().width;
-      const questionX = threadElement.clientWidth - insets.right - questionWidth;
-      question.style.left = `${Math.round(questionX)}px`;
-      answer.style.left = `${Math.round(insets.left)}px`;
-      answer.style.width = `${Math.round(answerWidth)}px`;
-      return { question, answer, base, questionX, questionWidth };
-    })
-    .sort((left, right) => left.base.y - right.base.y);
-
-  let expandedBottom = -Infinity;
-  for (const unit of expandedUnits) {
-    const questionHeight = unit.question.getBoundingClientRect().height;
-    const top = Math.max(unit.base.y, expandedBottom + layout.gap);
-    const answerY = top + questionHeight + layout.gap;
-    unit.question.style.top = `${Math.round(top)}px`;
-    unit.answer.style.top = `${Math.round(answerY)}px`;
-    const answerContent = unit.answer.querySelector(".conversation-assistant-content");
-    const answerStyle = window.getComputedStyle(unit.answer);
-    const verticalPadding = (Number.parseFloat(answerStyle.paddingTop) || 0) +
-      (Number.parseFloat(answerStyle.paddingBottom) || 0);
-    const answerHeight = Math.max(
-      unit.answer.getBoundingClientRect().height,
-      unit.answer.scrollHeight,
-      (answerContent?.scrollHeight || 0) + verticalPadding
-    );
-    unit.top = top;
-    unit.questionHeight = questionHeight;
-    unit.answerY = answerY;
-    unit.answerHeight = answerHeight;
-    unit.bottom = answerY + answerHeight;
-    expandedBottom = unit.bottom;
-  }
-
-  observeExpandedQuestionCloudAnswers(threadElement, expandedUnits.map(({ answer }) => answer));
-  const positionedRects = [];
-  const collapsedItems = questions
-    .filter((question) => !expandedQuestions.includes(question))
-    .map((question) => ({ question, rect: layout.positions.get(question) }))
-    .sort((left, right) => left.rect.y - right.rect.y);
-  for (const { question, rect } of collapsedItems) {
-    let y = rect.y;
-    let shifted;
-    do {
-      shifted = false;
-      for (const unit of expandedUnits) {
-        if (y + rect.height + layout.gap > unit.top && y < unit.bottom + layout.gap) {
-          y = unit.bottom + layout.gap;
-          shifted = true;
-        }
-      }
-      const collision = positionedRects.find((placed) => cloudRectsOverlap({ ...rect, y }, placed, layout.gap));
-      if (collision) {
-        y = collision.y + collision.height + layout.gap;
-        shifted = true;
-      }
-    } while (shifted);
-    question.style.top = `${Math.round(y)}px`;
-    positionedRects.push({ ...rect, y });
-  }
-
-  updateQuestionCloudScrollHeight(threadElement, [
-    ...positionedRects,
-    ...expandedUnits.flatMap((unit) => [
-      { x: unit.questionX, y: unit.top, width: unit.questionWidth, height: unit.questionHeight },
-      { x: insets.left, y: unit.answerY, width: answerWidth, height: unit.answerHeight }
-    ])
-  ]);
-}
-
-function getCloudHorizontalInsets(threadElement) {
-  const style = window.getComputedStyle(threadElement);
-  return {
-    left: Math.max(4, Number.parseFloat(style.paddingLeft) || 0),
-    right: Math.max(4, Number.parseFloat(style.paddingRight) || 0)
-  };
-}
-
-function updateQuestionCloudScrollHeight(threadElement, rects) {
-  const bottom = rects.reduce((value, rect) => Math.max(value, rect.y + rect.height), 0);
-  threadElement.style.setProperty("--question-cloud-scroll-height", `${Math.ceil(bottom + 28)}px`);
-}
-
-function observeExpandedQuestionCloudAnswers(threadElement, answers) {
-  if (typeof ResizeObserver !== "function") return;
-  const current = questionCloudAnswerResizeObservers.get(threadElement);
-  if (current?.answers.length === answers.length && current.answers.every((answer, index) => answer === answers[index])) return;
-  current?.observer.disconnect();
-  const observer = new ResizeObserver(() => scheduleConversationQuestionCloudExpansion(threadElement));
-  answers.forEach((answer) => observer.observe(answer.querySelector(".conversation-assistant-content") || answer));
-  questionCloudAnswerResizeObservers.set(threadElement, { answers, observer });
-}
-
-function disconnectQuestionCloudAnswerResizeObserver(threadElement) {
-  questionCloudAnswerResizeObservers.get(threadElement)?.observer.disconnect();
-  questionCloudAnswerResizeObservers.delete(threadElement);
-}
-
-function centeredCloudRect(question, centerX, centerY) {
-  return {
-    x: centerX - question.width / 2,
-    y: centerY - question.height / 2,
-    width: question.width,
-    height: question.height
-  };
-}
-
-function cloudRectsOverlap(left, right, gap) {
-  return !(
-    left.x + left.width + gap <= right.x ||
-    right.x + right.width + gap <= left.x ||
-    left.y + left.height + gap <= right.y ||
-    right.y + right.height + gap <= left.y
-  );
 }
 
 function createUserMessageMetaRow({ item, message, messageIndex, textElement, onEditUserMessage }) {
@@ -610,13 +212,8 @@ function beginUserMessageEdit({
   questionLabel.setAttribute("aria-multiline", "true");
   editButton.classList.add("confirm");
   editButton.setAttribute("aria-label", "Confirm question edit");
-  scheduleEditedQuestionCloudExpansion(item);
   questionLabel.focus();
   moveCaretToEnd(questionLabel);
-
-  questionLabel.oninput = () => {
-    scheduleEditedQuestionCloudExpansion(item);
-  };
   questionLabel.onkeydown = (event) => {
     if (
       event.key === "Enter" &&
@@ -681,13 +278,7 @@ function cancelUserMessageEdit({ item, textElement, editButton }) {
   item.classList.remove("editing-user-message");
   editButton.classList.remove("confirm");
   editButton.setAttribute("aria-label", "Edit question");
-  scheduleEditedQuestionCloudExpansion(item);
   editButton.focus();
-}
-
-function scheduleEditedQuestionCloudExpansion(item) {
-  const threadElement = item.closest(".question-cloud-mode");
-  if (threadElement) scheduleConversationQuestionCloudExpansion(threadElement);
 }
 
 function moveCaretToEnd(element) {
@@ -742,20 +333,14 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
   threadElement.hidden = false;
   threadElement.append(createPaperUserNoteElement(options));
 
-  if (!units.length) {
-    const emptySlot = document.createElement("div");
-    emptySlot.className = "saved-qa-empty-slot";
-    emptySlot.append(createToasterEmptyState("Toaster is plugged in...", {
-      className: "saved-qa-empty"
-    }));
-    threadElement.append(emptySlot);
-    return;
-  }
+  if (!units.length) return;
 
   const pinnedRow = document.createElement("div");
   pinnedRow.className = "saved-qa-pinned-row";
   const track = document.createElement("div");
   track.className = "saved-qa-track";
+  const floatingLayer = document.createElement("div");
+  floatingLayer.className = "saved-qa-floating-layer";
   const editBars = [];
   const cleanupCallbacks = [];
   const normalItems = [];
@@ -782,10 +367,13 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
     .sort(compareSavedQuestionAnswerUnitItemsByAge)
     .forEach((item) => track.append(item.element));
   if (pinnedRow.children.length) {
-    threadElement.append(pinnedRow);
+    floatingLayer.append(pinnedRow);
   }
   if (track.children.length) {
-    threadElement.append(track);
+    floatingLayer.append(track);
+  }
+  if (floatingLayer.children.length) {
+    threadElement.append(floatingLayer);
   }
   registerHighlightEditBars(threadElement, editBars, cleanupCallbacks);
 }
@@ -905,7 +493,8 @@ function createSavedQuestionAnswerUnitElement({ unit, options, editBars, cleanup
         : null
     });
     editBars.push(editBar);
-    unitElement.append(editBar.bar);
+    document.body.append(editBar.bar);
+    cleanupCallbacks.push(() => editBar.bar.remove());
   }
 
   if (unit.selectionText) {
@@ -1223,11 +812,13 @@ function registerHighlightEditBars(threadElement, editBars, cleanupCallbacks = [
   document.addEventListener("pointerup", update);
   threadElement.addEventListener("keyup", update);
   document.addEventListener("pointerdown", hide);
+  document.addEventListener("scroll", update, true);
   window.addEventListener("resize", update);
   highlightBarCleanups.set(threadElement, () => {
     document.removeEventListener("pointerup", update);
     threadElement.removeEventListener("keyup", update);
     document.removeEventListener("pointerdown", hide);
+    document.removeEventListener("scroll", update, true);
     window.removeEventListener("resize", update);
     cleanupCallbacks.forEach((cleanup) => cleanup());
   });
@@ -1662,14 +1253,14 @@ function updateAssistantEditBarPosition(editBar) {
   const barHeight = bar.offsetHeight || 24;
   const padding = 3;
   const left = clamp(
-    selectionRect.right - itemRect.left - barWidth * 0.45,
-    padding,
-    Math.max(padding, itemRect.width - barWidth - padding)
+    selectionRect.right - barWidth * 0.45,
+    itemRect.left + padding,
+    Math.max(itemRect.left + padding, itemRect.right - barWidth - padding)
   );
   const top = clamp(
-    selectionRect.bottom - itemRect.top - 3,
-    padding,
-    Math.max(padding, itemRect.height - barHeight - padding)
+    selectionRect.bottom - 3,
+    itemRect.top + padding,
+    Math.max(itemRect.top + padding, itemRect.bottom - barHeight - padding)
   );
 
   bar.style.setProperty("--conversation-edit-left", `${left}px`);

@@ -113,15 +113,12 @@ export function createComposerController({
   }
 
   function getActiveMenu() {
-    if (isModelMenuCommand()) {
-      return promptPresetMenu;
-    }
-    return usePaperMentionMenu() && paperMentionMenu
+    return usePaperMentionMenu() && paperMentionMenu && isPaperMentionCommand()
       ? paperMentionMenu
       : promptPresetMenu;
   }
 
-  function isModelMenuCommand() {
+  function isPaperMentionCommand() {
     const cursor = textarea.selectionStart;
     if (cursor === null || cursor === undefined) {
       return false;
@@ -129,11 +126,7 @@ export function createComposerController({
     const value = textarea.value;
     const lineStart = value.lastIndexOf("\n", Math.max(0, cursor - 1)) + 1;
     const linePrefix = value.slice(lineStart, cursor);
-    const normalizedPrefix = linePrefix.toLowerCase();
-    return /^\/model(?:\s|$)/i.test(linePrefix)
-      || (normalizedPrefix.length >= 2
-        && normalizedPrefix.length < "/model".length
-        && "/model".startsWith(normalizedPrefix));
+    return linePrefix.startsWith("@");
   }
 
   function getInactiveMenu() {

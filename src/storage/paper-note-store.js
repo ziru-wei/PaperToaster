@@ -210,7 +210,7 @@ function collectLexicalText(node) {
   if (!node || typeof node !== "object") return "";
   if (node.type === "text") return String(node.text || "");
   if (!Array.isArray(node.children)) return "";
-  const separator = node.type === "root" ? "\n" : "";
+  const separator = node.type === "root" || node.type === "list" ? "\n" : "";
   return node.children.map(collectLexicalText).filter(Boolean).join(separator);
 }
 

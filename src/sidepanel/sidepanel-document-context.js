@@ -104,7 +104,7 @@ export function createSidePanelDocumentContext({
       if (cached) {
         await renderDocumentIfCurrent(cached, request);
       } else {
-        await renderDocumentIfCurrent(null, request);
+        await renderDocumentIfCurrent(null, request, { preserveConversationView: true });
         const parsingSettings = await getParsingSettings();
         if (!isCurrentDocumentRequest(request)) {
           return;
@@ -322,7 +322,7 @@ export function createSidePanelDocumentContext({
     const documentKey = String(response.context?.documentKey || "").trim();
     const mode = String(response.context?.mode || "").trim();
     if (mode !== "library-paper" || !documentKey) {
-      await renderDocumentIfCurrent(null, request);
+      await renderDocumentIfCurrent(null, request, { preserveConversationView: true });
       await onComparativeReadingContext?.(response.context || {});
       return;
     }
@@ -345,21 +345,23 @@ export function createSidePanelDocumentContext({
     await renderDocumentIfCurrent(mergeLibraryDocument(document, paper, response.context), request);
   }
 
-  async function renderDocumentIfCurrent(document, request) {
+  async function renderDocumentIfCurrent(document, request, options = {}) {
     if (!isCurrentDocumentRequest(request)) {
       return;
     }
 
-    await renderDocument(document);
+    await renderDocument(document, options);
   }
 
-  async function renderDocument(document) {
+  async function renderDocument(document, options = {}) {
     if (!document) {
       currentDocument = null;
       await conversation.setDocumentUrl("");
-      await conversation.setSavedQuestionAnswerViewActive(false);
+      if (!options.preserveConversationView) {
+        await conversation.setSavedQuestionAnswerViewActive(false);
+      }
       renderDocumentTitle(null);
-      await onDocumentChange?.(null);
+      await onDocumentChange?.(null, options);
       renderContextReady(false);
       elements.downloadPaperArtifacts.disabled = true;
       elements.pdfStatus.textContent = "";
@@ -377,7 +379,7 @@ export function createSidePanelDocumentContext({
     await conversation.setDocumentUrl(document.url, {
       documentKey: document.documentKey
     });
-    await onDocumentChange?.(document);
+    await onDocumentChange?.(document, options);
     onAskReadinessChange?.();
   }
 
@@ -629,12 +631,9 @@ export function createSidePanelDocumentContext({
     document.body.classList.toggle("idle-mode", Boolean(isIdle));
     document.body.classList.toggle("manual-parse-mode", manualParseReady);
     elements.idleState.hidden = !isIdle;
-    elements.idleDashboardMessage.hidden = manualParseReady;
-    elements.manualParseMessage.hidden = !manualParseReady;
-    elements.idleState.querySelector(".idle-bubble")?.setAttribute(
-      "aria-label",
-      manualParseReady ? "Light the stove" : "Where is my food?"
-    );
+    elements.idleOpenDashboard.hidden = manualParseReady;
+    elements.idleState.querySelector(".idle-bubble").hidden = !manualParseReady;
+    elements.manualParseTrigger.hidden = !manualParseReady;
 
     if (!isIdle) {
       return;

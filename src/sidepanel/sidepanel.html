@@ -5,43 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Paper Toaster</title>
     <link rel="stylesheet" href="../../vendor/markdown-renderer/katex.min.css">
-    <link rel="stylesheet" href="../components/paper-label-control.css">
+    <link rel="stylesheet" href="../components/click-menu.css">
+    <link rel="stylesheet" href="../components/glass-button.css">
     <link rel="stylesheet" href="./sidepanel.css">
+    <link rel="stylesheet" href="../components/paper-label-control.css">
   </head>
   <body>
     <main>
       <header>
         <div class="title-stack">
-          <div class="url-row">
-            <button id="openDashboard" class="mini-icon-button" type="button" aria-label="Reading Dashboard">
-              <span class="icon-mask dashboard-entry-icon" aria-hidden="true"></span>
-            </button>
-            <button id="reloadPdf" class="mini-icon-button" type="button" aria-label="Reload PDF">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                <path d="M3 3v5h5"></path>
-              </svg>
-            </button>
-            <button id="downloadPaperArtifacts" class="mini-icon-button" type="button" aria-label="Download parser artifacts" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M12 20v-9"></path>
-                <path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"></path>
-                <path d="M14.12 3.88 16 2"></path>
-                <path d="M21 21a4 4 0 0 0-3.81-4"></path>
-                <path d="M21 5a4 4 0 0 1-3.55 3.97"></path>
-                <path d="M22 13h-4"></path>
-                <path d="M3 21a4 4 0 0 1 3.81-4"></path>
-                <path d="M3 5a4 4 0 0 0 3.55 3.97"></path>
-                <path d="M6 13H2"></path>
-                <path d="m8 2 1.88 1.88"></path>
-                <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"></path>
-              </svg>
-            </button>
-            <button id="conversationThreadArchive" class="mini-icon-button thread-archive-button" type="button" aria-label="Conversation history">
-              <span class="icon-mask thread-archive-icon" aria-hidden="true"></span>
-            </button>
-            <div id="conversationThreadWheel" class="thread-wheel" aria-label="Conversation history" hidden></div>
-          </div>
           <div class="title-row">
             <button id="openPaperUrl" class="mini-icon-button title-link-button" type="button" aria-label="Open paper" disabled>
               <span class="icon-mask open-paper-icon" aria-hidden="true"></span>
@@ -54,10 +26,49 @@
             </span>
           </div>
           <div class="paper-meta-row">
+            <button id="openDashboard" class="mini-icon-button" type="button" aria-label="Reading Dashboard">
+              <span class="icon-mask dashboard-entry-icon" aria-hidden="true"></span>
+            </button>
+            <div id="documentLabel" class="header-paper-label"></div>
             <button id="documentStar" class="document-star" type="button" aria-label="Star paper" disabled>
               <span aria-hidden="true"></span>
             </button>
-            <div id="documentLabel" class="header-paper-label"></div>
+            <div class="paper-meta-actions">
+              <button id="conversationThreadArchive" class="mini-icon-button thread-archive-button" type="button" aria-label="Conversation history" hidden>
+                <span class="icon-mask thread-archive-icon" aria-hidden="true"></span>
+              </button>
+              <div class="header-more-control">
+                <button id="headerMoreButton" class="mini-icon-button header-more-button" type="button" aria-label="More paper actions" aria-expanded="false">
+                  <span class="icon-mask header-more-icon" aria-hidden="true"></span>
+                </button>
+                <div id="headerMoreMenu" class="click-menu prompt-preset-menu header-more-menu" role="menu" hidden>
+                  <button id="reloadPdf" class="click-menu-item model-menu-option header-more-menu-item" type="button" role="menuitem" aria-label="Reload PDF">
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                      <path d="M3 3v5h5"></path>
+                    </svg>
+                    <span>Reload PDF</span>
+                  </button>
+                  <button id="downloadPaperArtifacts" class="click-menu-item model-menu-option header-more-menu-item" type="button" role="menuitem" aria-label="Download parser artifacts" disabled>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 20v-9"></path>
+                      <path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"></path>
+                      <path d="M14.12 3.88 16 2"></path>
+                      <path d="M21 21a4 4 0 0 0-3.81-4"></path>
+                      <path d="M21 5a4 4 0 0 1-3.55 3.97"></path>
+                      <path d="M22 13h-4"></path>
+                      <path d="M3 21a4 4 0 0 1 3.81-4"></path>
+                      <path d="M3 5a4 4 0 0 0 3.55 3.97"></path>
+                      <path d="M6 13H2"></path>
+                      <path d="m8 2 1.88 1.88"></path>
+                      <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"></path>
+                    </svg>
+                    <span>Debug</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="conversationThreadWheel" class="thread-wheel" aria-label="Conversation history" hidden></div>
           </div>
           <div id="comparisonContextBar" class="comparison-context-bar" hidden>
             <div id="comparisonStatus" class="comparison-status muted"></div>
@@ -67,7 +78,7 @@
             <div id="agentConnectionHelp" class="agent-connection-popover" role="dialog" aria-label="Agent connection help">
               <p>Run in your terminal to connect with agents</p>
               <div class="agent-connection-command-row">
-                <code id="agentConnectionCommand">cd "/Users/ziru/Documents/GitHub/chromePaperChat" &amp;&amp; PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js</code>
+                <code id="agentConnectionCommand">cd "/Users/ziru/Documents/GitHub/PaperToaster" &amp;&amp; PAPER_CHAT_LOCAL_AGENT_TOKEN="paper-chat-local" node scripts/local-agent-server.js</code>
                 <button id="copyAgentConnectionCommand" class="agent-connection-copy" type="button">
                   <span class="agent-connection-copy-icon" aria-hidden="true"></span>
                   <span class="agent-connection-copy-label">Copy</span>
@@ -79,22 +90,21 @@
       </header>
 
       <section class="chat-panel">
+        <div class="chat-content-blur chat-content-blur-bottom" aria-hidden="true"></div>
         <div id="idleState" class="idle-state toaster-empty" hidden>
-          <div class="idle-bubble toaster-empty-bubble" aria-label="Where is my food?">
-            <pre id="idleDashboardMessage">.--------------------------.
-| Where is my food? |
-'-------------v------------'</pre>
-            <pre id="manualParseMessage" hidden>.--------------------------.
+          <pre id="idleOpenDashboard" class="toaster-empty-bread idle-bread" role="button" tabindex="0" aria-label="Open Paper Toaster dashboard"></pre>
+          <div class="idle-bubble toaster-empty-bubble" aria-label="Light the stove" hidden>
+            <pre id="manualParseMessage">.--------------------------.
 |     <em>Light the stove</em>      |
 '-------------v------------'</pre>
           </div>
-          <img id="idleOpenDashboard" class="idle-icon toaster-empty-icon" src="../assets/extension/icon-128.png" alt="" role="button" tabindex="0" aria-label="Open Paper Toaster dashboard">
+          <img id="manualParseTrigger" class="idle-icon toaster-empty-icon" src="../assets/extension/icon-128.png" alt="" role="button" tabindex="0" aria-label="Parse this PDF">
         </div>
         <div id="conversationThread" class="conversation-thread" hidden></div>
         <div class="composer">
           <div id="comparisonPaperChips" class="comparison-paper-chips" aria-label="Selected comparison papers" hidden></div>
           <div class="composer-input-stack">
-            <button id="scrollToLatest" class="scroll-to-latest" type="button" aria-label="Scroll to latest" hidden>
+            <button id="scrollToLatest" class="glass-button scroll-to-latest" type="button" aria-label="Scroll to latest" hidden>
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 5v14"></path>
                 <path d="m19 12-7 7-7-7"></path>
@@ -110,7 +120,7 @@
                 <span id="modelCommandCompletion" class="model-command-completion" aria-hidden="true" hidden></span>
                 <span id="currentModelIndicator" class="current-model-indicator" hidden></span>
                 <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden>Press ↵ to start a new thread</div>
-                <div id="promptPresetMenu" class="prompt-preset-menu" role="listbox" hidden></div>
+                <div id="promptPresetMenu" class="click-menu prompt-preset-menu" role="listbox" hidden></div>
               </div>
             </form>
           </div>
@@ -120,14 +130,11 @@
         </div>
       </section>
     </main>
-    <footer class="saved-qa-footer" aria-hidden="true">
-      <span>Press</span><kbd>↵</kbd><span>Enter for querying</span>
-    </footer>
     <div id="savedQaControls" class="saved-qa-controls" hidden>
-      <button id="savedQaToggle" class="saved-qa-toggle" type="button" aria-label="Saved Q&A">
+      <button id="savedQaToggle" class="glass-button saved-qa-toggle" type="button" aria-label="Saved Q&A">
         <span class="icon-mask saved-qa-toggle-icon" aria-hidden="true"></span>
       </button>
-      <button id="savedQaCollapseToggle" class="saved-qa-collapse-toggle" type="button" aria-label="Collapse notes" hidden>
+      <button id="savedQaCollapseToggle" class="glass-button saved-qa-collapse-toggle" type="button" aria-label="Collapse notes" hidden>
         <span class="icon-mask saved-qa-collapse-icon" aria-hidden="true"></span>
       </button>
     </div>

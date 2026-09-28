@@ -11,6 +11,31 @@ const PAPER_GROUP_TONE_COUNT = 5;
 export const LIBRARY_SCOPE_BOARD = "board";
 export const LIBRARY_SCOPE_ARCHIVE = "archive";
 
+export async function listLibraryPaperTitleUrlMappings(options = {}) {
+  const scope = normalizeTitleUrlMappingScope(options.scope);
+  const db = await openPaperDatabase();
+  const [papers, documents] = await Promise.all([
+    getAllFromStore(db, PAPER_STORE),
+    getAllFromStore(db, DOCUMENT_STORE)
+  ]);
+  const documentsByKey = groupDocumentsByKey(documents);
+  const papersByKey = new Map(papers
+    .filter((paper) => paper?.documentKey)
+    .map((paper) => [paper.documentKey, paper]));
+  const documentKeys = new Set([...papersByKey.keys(), ...documentsByKey.keys()]);
+
+  return [...documentKeys].flatMap((documentKey) => {
+    const paper = papersByKey.get(documentKey);
+    const document = documentsByKey.get(documentKey);
+    if (!matchesTitleUrlMappingScope(paper, scope)) {
+      return [];
+    }
+    const title = String(paper?.title || document?.title || "").trim();
+    const url = String(paper?.canonicalUrl || document?.url || "").trim();
+    return title && url ? [{ title, url }] : [];
+  }).sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+}
+
 export async function listLibraryPapers(options = {}) {
   const db = await openPaperDatabase();
   const [papers, documents, threads] = await Promise.all([
@@ -325,6 +350,7 @@ function createPaperSummary({ paper, document, threads }) {
     domain: getDomain(canonicalUrl),
     hasMarkdown: Boolean(document?.markdown),
     parserId: document?.parserId || "",
+    parsedAt: getTime(document?.parsedAt),
     pageCount: Number(document?.pageCount) || 0,
     byteLength,
     threadCount: nonEmptyThreads.length,
@@ -375,18 +401,13 @@ function compareLibraryPapers(left, right, options) {
   const direction = options.sortDirection === "asc" ? 1 : -1;
   const sortBy = options.sortBy || "latestThread";
 
-  if (sortBy === "title") {
-    return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
+  const starredComparison = compareBoolean(left.isStarred, right.isStarred);
+  if (starredComparison) {
+    return -starredComparison;
   }
 
-  if (sortBy === "starred") {
-    const starredComparison = compareBoolean(left.isStarred, right.isStarred);
-    if (starredComparison) {
-      return starredComparison * direction;
-    }
-
-    const latestComparison = compareNumber(left.lastThreadStartedAt || 0, right.lastThreadStartedAt || 0, "desc");
-    return latestComparison || compareTitle(left, right);
+  if (sortBy === "title") {
+    return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
   }
 
   const leftValue = getSortValue(left, sortBy);
@@ -405,6 +426,10 @@ function getSortValue(paper, sortBy) {
 
   if (sortBy === "latestThread") {
     return paper.lastThreadStartedAt || 0;
+  }
+
+  if (sortBy === "latestAdded") {
+    return paper.parsedAt || 0;
   }
 
   if (sortBy === "messageCount") {
@@ -475,6 +500,20 @@ function normalizeLibraryPaperLabelState(value) {
 
 function normalizeLibraryScope(scope) {
   return scope === LIBRARY_SCOPE_ARCHIVE ? LIBRARY_SCOPE_ARCHIVE : LIBRARY_SCOPE_BOARD;
+}
+
+function normalizeTitleUrlMappingScope(scope) {
+  if (scope === LIBRARY_SCOPE_BOARD || scope === LIBRARY_SCOPE_ARCHIVE) {
+    return scope;
+  }
+  return "all";
+}
+
+function matchesTitleUrlMappingScope(paper, scope) {
+  if (scope === "all") {
+    return true;
+  }
+  return matchesRecordScope(paper, scope);
 }
 
 function normalizeArchivedAt(value) {

@@ -13,37 +13,47 @@ const MODE_REFERENCES = Object.freeze({
   "comparative-reading": "comparative-reading.md"
 });
 
-export function inferPaperReadingMode(contextPack) {
-  const mode = String(contextPack?.mode || "").trim();
-  if (mode === "comparative-reading" || contextPack?.kind === "comparison-context-pack") {
-    return "comparative-reading";
+// Skill files are static for the lifetime of the bridge process. The combined
+// markdown below is written into AGENTS.md (see local-agent-agents-file.js)
+// instead of being injected into every first-turn prompt, so Codex picks up
+// edits to these files on its next invocation without needing a bridge
+// restart or a session-invalidating "skill changed" check. Cache it once per
+// process; restart the bridge if you edit the skill files during development.
+let cachedSkillMarkdown = null;
+
+export async function loadPaperReadingSkillMarkdown() {
+  if (!cachedSkillMarkdown) {
+    cachedSkillMarkdown = buildSkillMarkdown().catch((error) => {
+      cachedSkillMarkdown = null;
+      throw error;
+    });
   }
-  return "single-paper";
+  return cachedSkillMarkdown;
 }
 
-export async function loadPaperReadingSkillPrompt(contextPack) {
-  const mode = inferPaperReadingMode(contextPack);
-  return buildSkillPrompt(mode);
-}
-
-async function buildSkillPrompt(mode) {
-  const modeReference = MODE_REFERENCES[mode];
-  const [entrypoint, sharedGuidance, modeGuidance] = await Promise.all([
+async function buildSkillMarkdown() {
+  const [entrypoint, sharedGuidance, singlePaperGuidance, comparativeGuidance] = await Promise.all([
     readSkillFile("SKILL.md"),
     readSkillFile("references", SHARED_REFERENCE),
-    readSkillFile("references", modeReference)
+    readSkillFile("references", MODE_REFERENCES["single-paper"]),
+    readSkillFile("references", MODE_REFERENCES["comparative-reading"])
   ]);
 
   return [
-    "Paper-reading skill instructions:",
-    "The references required for this request are embedded below; do not try to read them from disk.",
+    "Paper-reading skill instructions.",
+    "Every request states its mode with a `Mode: single-paper` or `Mode: comparative-reading` line;" +
+      " apply only the mode reference section below that matches it.",
+    "",
     stripYamlFrontmatter(entrypoint),
     "",
     `Shared reference (${SHARED_REFERENCE}):`,
     sharedGuidance,
     "",
-    `Mode reference (${modeReference}):`,
-    modeGuidance
+    `Mode reference for "single-paper" (${MODE_REFERENCES["single-paper"]}):`,
+    singlePaperGuidance,
+    "",
+    `Mode reference for "comparative-reading" (${MODE_REFERENCES["comparative-reading"]}):`,
+    comparativeGuidance
   ].join("\n").trim();
 }
 

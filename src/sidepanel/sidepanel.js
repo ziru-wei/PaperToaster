@@ -1,6 +1,9 @@
 import { MessageType } from "../shared/messages.js";
 import { openExtensionPageInExistingTab, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
-import { PROMPT_PRESETS_KEY } from "../storage/prompt-presets-store.js";
+import {
+  COMPARATIVE_PROMPT_PRESETS_KEY,
+  PROMPT_PRESETS_KEY
+} from "../storage/prompt-presets-store.js";
 import {
   COMPARISON_SETTINGS_KEY,
   normalizeComparisonSettings
@@ -23,6 +26,7 @@ import { createPaperActionsController } from "./paper-actions-controller.js";
 import { createPaperMentionMenuController } from "./paper-mention-menu.js";
 import { createPromptPresetMenuController } from "./prompt-preset-menu.js";
 import { createScrollToLatestController } from "./scroll-to-latest-controller.js";
+import { hydrateBreadTextElement } from "./bread-text.js";
 import { createSelectionPanelController } from "./selection-panel-controller.js";
 import { createSidePanelDocumentContext } from "./sidepanel-document-context.js";
 import { getSidePanelElements } from "./sidepanel-elements.js";
@@ -38,6 +42,8 @@ let paperMentionMenu = null;
 let lastAutoOpenedSavedContextId = "";
 let savedQaFeedbackTimer = null;
 let currentDocumentContextKind = "none";
+let savedQaDocumentKey = "";
+let directPdfChatOverrideDocumentKey = "";
 
 const scrollToLatest = createScrollToLatestController({
   threadElement: elements.conversationThread,
@@ -77,6 +83,7 @@ const promptPresetMenu = createPromptPresetMenuController({
   menuElement: elements.promptPresetMenu,
   commandCompletionElement: elements.modelCommandCompletion,
   modelIndicator: elements.currentModelIndicator,
+  isComparativeReading: () => comparativeReading?.isActive() || false,
   onError: (error) => console.debug("[PDF AI] Prompt presets unavailable", error)
 });
 
@@ -106,16 +113,45 @@ const documentContext = createSidePanelDocumentContext({
   elements,
   conversation,
   selectionPanel,
-  onDocumentChange: async (document) => {
+  onDocumentChange: async (document, options = {}) => {
+    const nextDocumentKey = String(document?.documentKey || "").trim();
     currentDocumentContextKind = getDocumentContextKind(document);
+    if (!options.preserveConversationView && currentDocumentContextKind !== "direct-pdf") {
+      directPdfChatOverrideDocumentKey = "";
+    } else if (
+      currentDocumentContextKind === "direct-pdf" &&
+      directPdfChatOverrideDocumentKey &&
+      directPdfChatOverrideDocumentKey !== nextDocumentKey
+    ) {
+      directPdfChatOverrideDocumentKey = "";
+    }
+    if (!options.preserveConversationView && !nextDocumentKey) {
+      lastAutoOpenedSavedContextId = "";
+    }
+    const shouldCloseSavedView = !options.preserveConversationView &&
+      conversation.isSavedQuestionAnswerViewActive() &&
+      savedQaDocumentKey && savedQaDocumentKey !== nextDocumentKey;
     composer?.hideMenus();
     comparativeReading.hide();
     await paperActions?.render(document);
-    if (currentDocumentContextKind === "direct-pdf") {
+    if (shouldCloseSavedView) {
       await conversation.setSavedQuestionAnswerViewActive(false);
+      savedQaDocumentKey = "";
     }
     if (shouldAutoOpenSavedQuestionAnswerView(document)) {
       await conversation.setSavedQuestionAnswerViewActive(true);
+      savedQaDocumentKey = nextDocumentKey;
+    }
+    if (currentDocumentContextKind === "direct-pdf" && nextDocumentKey) {
+      if (directPdfChatOverrideDocumentKey === nextDocumentKey) {
+        if (conversation.isSavedQuestionAnswerViewActive()) {
+          await conversation.setSavedQuestionAnswerViewActive(false);
+          savedQaDocumentKey = "";
+        }
+      } else if (!conversation.isSavedQuestionAnswerViewActive()) {
+        await conversation.setSavedQuestionAnswerViewActive(true);
+        savedQaDocumentKey = nextDocumentKey;
+      }
     }
     syncSavedQuestionAnswerMode();
   },
@@ -204,7 +240,7 @@ document.addEventListener("keydown", async (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   if (savedQuestionAnswerViewActive) {
-    await conversation.setSavedQuestionAnswerViewActive(false);
+    await closeSavedQuestionAnswerView();
     syncSavedQuestionAnswerMode();
   }
   if (!composerIsVisible && !savedQuestionAnswerViewActive) {
@@ -214,6 +250,26 @@ document.addEventListener("keydown", async (event) => {
 }, true);
 
 elements.openDashboard.addEventListener("click", handleHeaderToasterClick);
+elements.headerMoreButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setHeaderMoreMenuOpen(elements.headerMoreMenu.hidden);
+});
+elements.headerMoreMenu.addEventListener("click", (event) => {
+  if (event.target.closest("button")) {
+    setHeaderMoreMenuOpen(false);
+  }
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest(".header-more-control")) {
+    setHeaderMoreMenuOpen(false);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.headerMoreMenu.hidden) {
+    setHeaderMoreMenuOpen(false);
+    elements.headerMoreButton.focus({ preventScroll: true });
+  }
+});
 elements.idleOpenDashboard.addEventListener("click", activateIdleToaster);
 elements.idleOpenDashboard.addEventListener("keydown", async (event) => {
   if (event.key !== "Enter" && event.key !== " ") {
@@ -222,6 +278,15 @@ elements.idleOpenDashboard.addEventListener("keydown", async (event) => {
   event.preventDefault();
   await activateIdleToaster();
 });
+elements.manualParseTrigger.addEventListener("click", activateIdleToaster);
+elements.manualParseTrigger.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  await activateIdleToaster();
+});
+void hydrateBreadTextElement(elements.idleOpenDashboard);
 const savedQaToggleDrag = createFloatingButtonPositionController({
   button: elements.savedQaControls,
   storageKey: SAVED_QA_TOGGLE_TOP_KEY
@@ -232,6 +297,16 @@ elements.savedQaToggle.addEventListener("click", async () => {
   }
 
   await conversation.toggleSavedQuestionAnswerView();
+  const toggledDocumentKey = String(documentContext.getCurrentDocument()?.documentKey || "").trim();
+  if (conversation.isSavedQuestionAnswerViewActive()) {
+    savedQaDocumentKey = toggledDocumentKey;
+    directPdfChatOverrideDocumentKey = "";
+  } else {
+    savedQaDocumentKey = "";
+    if (currentDocumentContextKind === "direct-pdf") {
+      directPdfChatOverrideDocumentKey = toggledDocumentKey;
+    }
+  }
   syncSavedQuestionAnswerMode();
 });
 elements.savedQaCollapseToggle.addEventListener("click", () => {
@@ -279,10 +354,6 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function handlePdfSelectionChanged() {
-  if (conversation.isSavedQuestionAnswerViewActive()) {
-    await conversation.setSavedQuestionAnswerViewActive(false);
-    syncSavedQuestionAnswerMode();
-  }
   await documentContext.refreshSelection();
 }
 
@@ -291,7 +362,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
-  if (changes[PROMPT_PRESETS_KEY]) {
+  if (changes[PROMPT_PRESETS_KEY] || changes[COMPARATIVE_PROMPT_PRESETS_KEY]) {
     promptPresetMenu.load();
   }
 
@@ -305,6 +376,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     conversation.setSavedQaPerPaperLimit(settings.perPaperLimit);
     comparativeReading.setSavedQaPerPaperLimit(settings.perPaperLimit);
   }
+
 });
 
 promptPresetMenu.load();
@@ -337,10 +409,13 @@ function syncSavedQuestionAnswerMode() {
   document.body.classList.toggle("saved-qa-mode", savedModeActive);
   elements.savedQaControls.hidden = !isComparative && !hasDocument;
   elements.savedQaToggle.hidden = isComparative;
-  elements.savedQaToggle.classList.toggle("active", savedModeActive && currentDocumentContextKind === "dashboard-paper");
+  elements.savedQaToggle.classList.toggle("active", savedModeActive);
   const savedToggleLabel = isActive ? "Back to chat" : "Saved Q&A";
   elements.savedQaToggle.removeAttribute("title");
   elements.savedQaToggle.setAttribute("aria-label", savedToggleLabel);
+  elements.conversationThreadArchive.hidden = !(
+    conversationModeActive && conversation.hasMultipleSinglePaperThreads()
+  );
   const allCollapsed = isComparative
     ? comparativeReading.areAllAssistantResponsesCollapsed()
     : savedModeActive
@@ -404,6 +479,12 @@ function syncHeaderToasterAction() {
   elements.openDashboard.removeAttribute("title");
 }
 
+function setHeaderMoreMenuOpen(open) {
+  elements.headerMoreMenu.hidden = !open;
+  elements.headerMoreButton.classList.toggle("active", open);
+  elements.headerMoreButton.setAttribute("aria-expanded", String(open));
+}
+
 function shouldAutoOpenSavedQuestionAnswerView(document) {
   if (
     document?.sidePanelContextMode !== "library-paper" ||
@@ -445,10 +526,18 @@ async function handleHeaderToasterClick() {
 async function showComparativeReadingContext(context) {
   composer?.hideMenus();
   lastAutoOpenedSavedContextId = "";
-  await conversation.setSavedQuestionAnswerViewActive(false);
+  await closeSavedQuestionAnswerView({ rememberDirectPdf: false });
   syncSavedQuestionAnswerMode();
   paperActions?.render(null);
   await comparativeReading.show(context);
+}
+
+async function closeSavedQuestionAnswerView({ rememberDirectPdf = true } = {}) {
+  if (rememberDirectPdf && currentDocumentContextKind === "direct-pdf") {
+    directPdfChatOverrideDocumentKey = String(documentContext.getCurrentDocument()?.documentKey || "").trim();
+  }
+  await conversation.setSavedQuestionAnswerViewActive(false);
+  savedQaDocumentKey = "";
 }
 
 async function jumpToComparisonSavedUnit(unit) {

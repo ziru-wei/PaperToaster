@@ -33,13 +33,9 @@ import {
   renderComparativeReadingPanel
 } from "./comparative-reading-renderer.js";
 import { createLoadingMessageRotator, getInitialLoadingMessage } from "./loading-messages.js";
-import { scrollToConversationMessagePair } from "./conversation-navigation.js";
+import { createQuestionScrollScheduler, scrollToConversationMessagePair } from "./conversation-navigation.js";
 import { getHistoricalAssistantMessageIndexes } from "../conversation/message-state.js";
-import {
-  orderConversationMessageElements,
-  scheduleConversationQuestionCloudLayout,
-  updatePendingConversationMessageText
-} from "./conversation-message-renderer.js";
+import { updatePendingConversationMessageText } from "./conversation-message-renderer.js";
 
 export function createComparativeReadingController({
   elements,
@@ -53,7 +49,7 @@ export function createComparativeReadingController({
   onSaveLimitRejected
 }) {
   const TITLE_SAVE_DELAY_MS = 400;
-  let allExpandedChronological = false;
+  let allAssistantResponsesExpanded = false;
   const state = {
     active: false,
     selectedPapers: [],
@@ -68,6 +64,8 @@ export function createComparativeReadingController({
     savedQaPerPaperLimit: 20
   };
   let titleSaveTimer = null;
+  let sessionEpoch = 0;
+  const scheduleNewQuestionAtTop = createQuestionScrollScheduler(elements.conversationThread);
   const pendingTitlesBySession = new Map();
   const collapsedAssistantResponsesBySession = new Map();
 
@@ -86,9 +84,10 @@ export function createComparativeReadingController({
   });
 
   async function show(context = {}) {
+    sessionEpoch += 1;
     await flushTitleSave();
     state.active = true;
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     clearError?.();
     const comparisonId = String(context.comparisonId || "").trim();
     state.activeSessionId = comparisonId;
@@ -137,7 +136,7 @@ export function createComparativeReadingController({
 
     void flushTitleSave();
     state.active = false;
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     state.status = "";
     clearComparativeReadingPanel(elements);
     onChange?.();
@@ -222,7 +221,8 @@ export function createComparativeReadingController({
   }
 
   async function startNewSession() {
-    allExpandedChronological = false;
+    sessionEpoch += 1;
+    allAssistantResponsesExpanded = false;
     state.activeSessionId = "";
     state.selectedPapers = [];
     state.messages = [];
@@ -274,9 +274,13 @@ export function createComparativeReadingController({
       return;
     }
 
+    const askEpoch = sessionEpoch;
+    const isCurrentAsk = () => sessionEpoch === askEpoch;
+    let askPapers = state.selectedPapers;
+
     state.busy = true;
     state.status = "";
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     const previousMessages = state.messages.filter((message) => !message.pending);
     const userCreatedAt = Date.now();
     const pendingAssistantMessage = {
@@ -296,13 +300,17 @@ export function createComparativeReadingController({
     ];
     collapseHistoricalAssistantResponses();
     getComposer().clear();
-    render();
+    render({ scrollToBottom: false });
+    scheduleNewQuestionAtTop(state.messages.length - 2);
 
     let loadingRotator = null;
     let userMessagePersisted = false;
 
     try {
       loadingRotator = createLoadingMessageRotator((text) => {
+        if (!isCurrentAsk()) {
+          return;
+        }
         const pendingIndex = state.messages.findIndex((message) => message.pending);
         if (pendingIndex < 0) {
           return;
@@ -319,9 +327,12 @@ export function createComparativeReadingController({
       const session = await ensureSession(question);
       if (!session) throw new Error("This comparison is no longer available.");
       const sessionPaperKeys = session.documentKeys || [];
-      if (state.selectedPapers.map((paper) => paper.documentKey).join("\0") !== sessionPaperKeys.join("\0")) {
-        state.selectedPapers = await hydratePapers(sessionPaperKeys);
-        if (state.selectedPapers.length < 2) throw new Error("This comparison no longer has two available papers.");
+      if (askPapers.map((paper) => paper.documentKey).join("\0") !== sessionPaperKeys.join("\0")) {
+        askPapers = await hydratePapers(sessionPaperKeys);
+        if (askPapers.length < 2) throw new Error("This comparison no longer has two available papers.");
+        if (isCurrentAsk()) {
+          state.selectedPapers = askPapers;
+        }
       }
       let updatedSession = await appendComparisonMessage(session.comparisonId, {
         role: "user",
@@ -329,22 +340,25 @@ export function createComparativeReadingController({
         createdAt: userCreatedAt
       });
       userMessagePersisted = true;
-      const wasPendingCollapsed = getCollapsedAssistantMessageIndexes().has(state.messages.length - 1);
-      state.activeSessionId = session.comparisonId;
-      state.messages = [
-        ...(updatedSession?.messages || []),
-        {
-          ...pendingAssistantMessage,
-          text: getCurrentPendingLoadingText(state.messages)
+      if (isCurrentAsk()) {
+        const wasPendingCollapsed = getCollapsedAssistantMessageIndexes().has(state.messages.length - 1);
+        state.activeSessionId = session.comparisonId;
+        state.messages = [
+          ...(updatedSession?.messages || []),
+          {
+            ...pendingAssistantMessage,
+            text: getCurrentPendingLoadingText(state.messages)
+          }
+        ];
+        if (allAssistantResponsesExpanded) {
+          getCollapsedAssistantMessageIndexes().clear();
+        } else {
+          collapseHistoricalAssistantResponses();
+          if (wasPendingCollapsed) getCollapsedAssistantMessageIndexes().add(state.messages.length - 1);
         }
-      ];
-      if (allExpandedChronological) {
-        getCollapsedAssistantMessageIndexes().clear();
-      } else {
-        collapseHistoricalAssistantResponses();
-        if (wasPendingCollapsed) getCollapsedAssistantMessageIndexes().add(state.messages.length - 1);
+        render({ scrollToBottom: false });
+        scheduleNewQuestionAtTop(state.messages.length - 2);
       }
-      render();
 
       const aiSettings = await getEffectiveAiSettings();
       if (!usesDebugAiMode(aiSettings) && !hasConfiguredAiProvider(aiSettings)) {
@@ -352,7 +366,7 @@ export function createComparativeReadingController({
       }
 
       const usedShortNames = new Set();
-      const citationShortNames = state.selectedPapers.map((paper) => {
+      const citationShortNames = askPapers.map((paper) => {
         const base = String(paper.citationShortName || createPaperCitationShortName(paper.title)).trim() || "pap";
         let name = base;
         let suffix = 2;
@@ -360,7 +374,7 @@ export function createComparativeReadingController({
         usedShortNames.add(name.toLowerCase());
         return name;
       });
-      const citationContexts = await Promise.all(state.selectedPapers.map(async (paper, index) => {
+      const citationContexts = await Promise.all(askPapers.map(async (paper, index) => {
         const document = await getStoredDocumentByDocumentKey(paper.documentKey);
         if (!document?.markdown || !document.agentDocumentRef) {
           throw new Error(`${paper.title || `Paper ${index + 1}`} has no local agent document reference.`);
@@ -406,32 +420,36 @@ export function createComparativeReadingController({
           version: 1,
           papers: citationContexts.map(({ citationContext }) => citationContext.paper)
         },
-        citedDocumentKeys: state.selectedPapers.map((paper) => paper.documentKey),
+        citedDocumentKeys: askPapers.map((paper) => paper.documentKey),
         createdAt: Date.now()
       });
-      const wasCurrentQuestionCollapsed = getCollapsedAssistantMessageIndexes().has(state.messages.length - 1);
-      state.messages = updatedSession?.messages || [];
-      if (allExpandedChronological) {
-        getCollapsedAssistantMessageIndexes().clear();
-      } else {
-        collapseHistoricalAssistantResponses(state.messages.length - 1);
-        if (wasCurrentQuestionCollapsed && state.messages.at(-1)?.role === "assistant") {
-          getCollapsedAssistantMessageIndexes().add(state.messages.length - 1);
+      if (isCurrentAsk()) {
+        const wasCurrentQuestionCollapsed = getCollapsedAssistantMessageIndexes().has(state.messages.length - 1);
+        state.messages = updatedSession?.messages || [];
+        if (allAssistantResponsesExpanded) {
+          getCollapsedAssistantMessageIndexes().clear();
+        } else {
+          collapseHistoricalAssistantResponses(state.messages.length - 1);
+          if (wasCurrentQuestionCollapsed && state.messages.at(-1)?.role === "assistant") {
+            getCollapsedAssistantMessageIndexes().add(state.messages.length - 1);
+          }
         }
+        state.status = "";
       }
       state.sessions = await listComparisonSessions();
-      state.status = "";
       notifyComparisonActivityChanged();
     } catch (error) {
-      state.messages = userMessagePersisted
-        ? state.messages.filter((message) => !message.pending)
-        : previousMessages;
-      if (allExpandedChronological) {
-        getCollapsedAssistantMessageIndexes().clear();
-      } else {
-        collapseHistoricalAssistantResponses();
+      if (isCurrentAsk()) {
+        state.messages = userMessagePersisted
+          ? state.messages.filter((message) => !message.pending)
+          : previousMessages;
+        if (allAssistantResponsesExpanded) {
+          getCollapsedAssistantMessageIndexes().clear();
+        } else {
+          collapseHistoricalAssistantResponses();
+        }
+        showError?.(error.message || String(error));
       }
-      showError?.(error.message || String(error));
       onDiagnostic?.(`Comparative reading failed: ${error.message || String(error)}`);
     } finally {
       loadingRotator?.stop();
@@ -526,7 +544,6 @@ export function createComparativeReadingController({
       titleEditable: Boolean(activeSession),
       selectedPapers: state.selectedPapers,
       messages: state.messages,
-      chronologicalMode: allExpandedChronological,
       status: state.status,
       emptySubtitle: state.draftIssue === "too-many-papers"
         ? "That's too much."
@@ -553,9 +570,6 @@ export function createComparativeReadingController({
       scrollToLatest,
       scrollToBottom
     });
-    const hasAssistantResponses = getAssistantMessageIndexes().length > 0;
-    elements.conversationThread.classList.toggle("conversation-chronological-mode", hasAssistantResponses && allExpandedChronological);
-    elements.conversationThread.classList.toggle("question-cloud-mode", hasAssistantResponses && !allExpandedChronological);
   }
 
   function handleTitleInput() {
@@ -674,7 +688,7 @@ export function createComparativeReadingController({
   }
 
   function resetAssistantResponsesCollapsed() {
-    allExpandedChronological = false;
+    allAssistantResponsesExpanded = false;
     collapsedAssistantResponsesBySession.set(
       getAssistantCollapseScopeKey(),
       new Set(getAssistantMessageIndexes())
@@ -695,12 +709,14 @@ export function createComparativeReadingController({
     } else {
       collapsedIndexes.delete(assistantMessageIndex);
     }
+    const indexes = getAssistantMessageIndexes();
+    allAssistantResponsesExpanded = indexes.length > 0 && indexes.every((index) => !collapsedIndexes.has(index));
     onChange?.();
   }
 
   function setAllAssistantResponsesCollapsed(collapsed) {
     const indexes = getAssistantMessageIndexes();
-    allExpandedChronological = !collapsed && indexes.length > 0;
+    allAssistantResponsesExpanded = !collapsed && indexes.length > 0;
     const collapsedIndexes = getCollapsedAssistantMessageIndexes();
     collapsedIndexes.clear();
     if (collapsed) {
@@ -712,11 +728,7 @@ export function createComparativeReadingController({
     elements.conversationThread.querySelectorAll(".conversation-response-toggle").forEach((element) => {
       element.setAttribute("aria-expanded", String(!collapsed));
     });
-    elements.conversationThread.classList.toggle("conversation-chronological-mode", allExpandedChronological);
-    elements.conversationThread.classList.toggle("question-cloud-mode", indexes.length > 0 && !allExpandedChronological);
-    orderConversationMessageElements(elements.conversationThread, state.messages, allExpandedChronological);
-    scheduleConversationQuestionCloudLayout(elements.conversationThread);
-    if (allExpandedChronological) elements.conversationThread.scrollTop = 0;
+    if (allAssistantResponsesExpanded) elements.conversationThread.scrollTop = 0;
     window.requestAnimationFrame(() => scrollToLatest?.update());
     onChange?.();
   }

@@ -1,28 +1,31 @@
 import path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
   mkdtemp,
   lstat,
   readFile,
-  readdir,
   rename,
   rm,
   writeFile
 } from "node:fs/promises";
+import { hashText } from "./local-agent-session-store.js";
 
 const DOCUMENT_REF_PATTERN = /^sha256-[a-f0-9]{64}$/;
 const CITATION_ID_PATTERN = /^p\d+-h\d+-c\d+$/;
-const REQUEST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const STALE_REQUEST_AGE_MS = 60 * 60 * 1000;
 
 export function getManagedRoots(agentWorkdir) {
   const root = path.resolve(agentWorkdir, ".paper-toaster");
   return {
     root,
     documents: path.join(root, "documents"),
-    requests: path.join(root, "requests")
+    // Paper files a thread/comparison hands to Codex live here for as long as
+    // the bridge process runs (see materializeThreadDocuments below), rather
+    // than a fresh per-request directory: a stable path across turns lets
+    // Codex recognize it already read this file's content earlier in the
+    // resumed conversation instead of re-ingesting the whole paper every ask.
+    threads: path.join(root, "threads")
   };
 }
 
@@ -123,74 +126,56 @@ export async function deleteManagedDocument(agentWorkdir, documentRef) {
   await rm(getDocumentPaths(agentWorkdir, ref).directory, { recursive: true, force: true });
 }
 
-export async function materializeRequestDocuments({ agentWorkdir, papers }) {
+function getThreadDirectory(agentWorkdir, mode, conversationKey) {
+  const key = hashText(`${mode}\0${conversationKey}`);
+  return path.join(getManagedRoots(agentWorkdir).threads, key);
+}
+
+// Materializes each paper's annotated Markdown at a path that stays the same
+// across every ask for this (mode, conversationKey) for as long as the bridge
+// process keeps running (reset on startup by resetThreadDocumentsRoot, and
+// removed early on explicit thread/comparison deletion by
+// removeThreadDocuments). The annotated content is deterministic given the
+// stored document + citation map, so overwriting the same path in place is
+// safe even when content changes across a paper re-parse or documentKey swap.
+export async function materializeThreadDocuments({ agentWorkdir, mode, conversationKey, papers }) {
   const roots = getManagedRoots(agentWorkdir);
   await ensurePrivateDirectory(roots.root);
-  await ensurePrivateDirectory(roots.requests);
-  const requestId = randomUUID();
-  const requestDirectory = path.join(roots.requests, requestId);
-  await mkdir(requestDirectory, { mode: 0o700 });
+  await ensurePrivateDirectory(roots.threads);
+  const threadDirectory = getThreadDirectory(agentWorkdir, mode, conversationKey);
+  await ensurePrivateDirectory(threadDirectory);
   const files = [];
 
-  try {
-    for (const [index, paper] of (papers || []).entries()) {
-      const stored = await getManagedDocumentStatus(agentWorkdir, paper?.documentRef, { touch: true });
-      if (!stored.exists) {
-        throw createStoreError(`Managed document ${paper?.documentRef || ""} was not found.`, 404);
-      }
-      const citations = validateCitationMap(paper, stored.spans);
-      const annotated = annotateMarkdown(stored.markdown, stored.spans, citations);
-      const paperId = String(paper?.paperId || `p${index + 1}`);
-      const filename = `${paperId}--${slugifyTitle(paper?.title)}.annotated.md`;
-      const absolutePath = path.join(requestDirectory, filename);
-      await writePrivateFile(absolutePath, annotated);
-      files.push({
-        paperId,
-        title: String(paper?.title || "Untitled paper"),
-        absolutePath,
-        relativePath: path.relative(path.resolve(agentWorkdir), absolutePath)
-      });
+  for (const [index, paper] of (papers || []).entries()) {
+    const stored = await getManagedDocumentStatus(agentWorkdir, paper?.documentRef, { touch: true });
+    if (!stored.exists) {
+      throw createStoreError(`Managed document ${paper?.documentRef || ""} was not found.`, 404);
     }
-    return { requestId, requestDirectory, files };
-  } catch (error) {
-    await rm(requestDirectory, { recursive: true, force: true });
-    throw error;
+    const citations = validateCitationMap(paper, stored.spans);
+    const annotated = annotateMarkdown(stored.markdown, stored.spans, citations);
+    const paperId = String(paper?.paperId || `p${index + 1}`);
+    const filename = `${paperId}--${slugifyTitle(paper?.title)}.annotated.md`;
+    const absolutePath = path.join(threadDirectory, filename);
+    await writePrivateFile(absolutePath, annotated);
+    files.push({
+      paperId,
+      title: String(paper?.title || "Untitled paper"),
+      absolutePath,
+      relativePath: path.relative(path.resolve(agentWorkdir), absolutePath)
+    });
   }
+  return { threadDirectory, files };
 }
 
-export async function removeRequestDocuments(requestDirectory) {
-  if (!requestDirectory) return;
-  await rm(requestDirectory, { recursive: true, force: true });
+export async function removeThreadDocuments(agentWorkdir, mode, conversationKey) {
+  await rm(getThreadDirectory(agentWorkdir, mode, conversationKey), { recursive: true, force: true });
 }
 
-export async function cleanupStaleRequestDirectories(agentWorkdir, now = Date.now()) {
-  const requestsRoot = getManagedRoots(agentWorkdir).requests;
-  let rootStatus;
-  try {
-    rootStatus = await lstat(requestsRoot);
-  } catch (error) {
-    if (error?.code === "ENOENT") return 0;
-    throw error;
-  }
-  if (!rootStatus.isDirectory() || rootStatus.isSymbolicLink()) {
-    throw new Error("Managed request root is not a regular directory.");
-  }
-  let removed = 0;
-  for (const entry of await readdir(requestsRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !REQUEST_ID_PATTERN.test(entry.name)) continue;
-    const directory = path.join(requestsRoot, entry.name);
-    let status;
-    try {
-      status = await lstat(directory);
-    } catch (error) {
-      if (error?.code === "ENOENT") continue;
-      throw error;
-    }
-    if (!status.isDirectory() || now - status.mtimeMs < STALE_REQUEST_AGE_MS) continue;
-    await rm(directory, { recursive: true, force: true });
-    removed += 1;
-  }
-  return removed;
+// Called once at bridge startup: gives each new bridge run (approximating a
+// fresh browser session) a clean slate instead of keeping thread-scoped paper
+// copies indefinitely across restarts.
+export async function resetThreadDocumentsRoot(agentWorkdir) {
+  await rm(getManagedRoots(agentWorkdir).threads, { recursive: true, force: true });
 }
 
 function getDocumentPaths(agentWorkdir, ref) {

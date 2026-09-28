@@ -1,0 +1,75 @@
+:root {
+  --shared-glass-button-border: rgba(255, 255, 255, 0.56);
+  --shared-glass-button-border-hover: rgba(255, 255, 255, 0.32);
+  --shared-glass-button-surface:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.31) 0%,
+      rgba(255, 255, 255, 0.16) 38%,
+      rgba(255, 255, 255, 0.07) 68%,
+      rgba(184, 184, 184, 0.035) 100%
+    ),
+    rgba(242, 242, 242, 0.36);
+  --shared-glass-button-surface-hover:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.18) 38%,
+      rgba(255, 255, 255, 0.08) 68%,
+      rgba(163, 163, 163, 0.04) 100%
+    ),
+    rgba(158, 158, 158, 0.28);
+  --shared-glass-button-surface-pressed:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.055) 42%,
+      rgba(116, 116, 116, 0.09) 100%
+    ),
+    rgba(163, 163, 163, 0.22);
+  --shared-glass-button-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    inset 0 -1px 1px rgba(85, 85, 85, 0.04),
+    0 2px 8px rgba(24, 24, 24, 0.028);
+  --shared-glass-button-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    inset 0 -1px 0 rgba(85, 85, 85, 0.06),
+    0 3px 8px rgba(24, 24, 24, 0.045);
+  --shared-glass-button-shadow-pressed:
+    inset 0 1px 2px rgba(85, 85, 85, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.24),
+    0 1px 3px rgba(24, 24, 24, 0.025);
+  --shared-glass-button-blur: blur(10px) saturate(100%);
+  --shared-glass-button-transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease,
+    transform 100ms ease;
+}
+
+.glass-button {
+  border: 1px solid var(--shared-glass-button-border);
+  color: #5b5b5b;
+  background: var(--shared-glass-button-surface);
+  box-shadow: var(--shared-glass-button-shadow);
+  backdrop-filter: var(--shared-glass-button-blur);
+  -webkit-backdrop-filter: var(--shared-glass-button-blur);
+  transition: var(--shared-glass-button-transition);
+}
+
+.glass-button:hover {
+  color: #4b4b4b;
+  border-color: var(--shared-glass-button-border-hover);
+  background: var(--shared-glass-button-surface-hover);
+  box-shadow: var(--shared-glass-button-shadow-hover);
+}
+
+.glass-button.active,
+.glass-button:active {
+  color: #262626;
+  border-color: var(--shared-glass-button-border-hover);
+  background: var(--shared-glass-button-surface-pressed);
+  box-shadow: var(--shared-glass-button-shadow-pressed);
+}
