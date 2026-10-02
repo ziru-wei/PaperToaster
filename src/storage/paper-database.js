@@ -1,5 +1,6 @@
 export const DB_NAME = "pdf-ai-inspector";
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
+export const SYNC_META_STORE = "googleSyncMetadata";
 
 export const PAPER_STORE = "papers";
 export const DOCUMENT_STORE = "documents";
@@ -26,6 +27,7 @@ export function openPaperDatabase() {
     request.onupgradeneeded = () => {
       const db = request.result;
       const transaction = request.transaction;
+      ensureStore(db, transaction, SYNC_META_STORE, { keyPath: "accountId" });
 
       const papers = ensureStore(db, transaction, PAPER_STORE, { keyPath: "documentKey" });
       ensureIndex(papers, "byUpdatedAt", "updatedAt", { unique: false });
@@ -78,7 +80,13 @@ export function openPaperDatabase() {
       backfillSavedDocumentKeys(transaction);
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => {
+        request.result.close();
+        databasePromise = null;
+      };
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error || new Error("Could not open paper database."));
     request.onblocked = () => reject(new Error("Paper database upgrade is blocked by another extension view."));
   });
@@ -144,7 +152,12 @@ export function requestToPromise(request) {
 
 export function transactionDone(transaction) {
   return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (transaction.mode === "readwrite" && !transaction.objectStoreNames.contains(SYNC_META_STORE)) {
+        globalThis.chrome?.runtime?.sendMessage?.({ type: "GOOGLE_SYNC_DIRTY" })?.catch(() => {});
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error || new Error("Paper database transaction failed."));
     transaction.onabort = () => reject(transaction.error || new Error("Paper database transaction aborted."));
   });

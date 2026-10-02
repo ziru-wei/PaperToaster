@@ -81,6 +81,15 @@ button:hover {
   background: #eef2f7;
 }
 
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 input,
 select,
 textarea {

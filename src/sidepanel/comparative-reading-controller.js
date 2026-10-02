@@ -471,6 +471,25 @@ export function createComparativeReadingController({
     return state.busy;
   }
 
+  async function refreshFromSync() {
+    if (!state.active) return true;
+    if (state.busy) return false;
+    await flushTitleSave();
+    await refreshSessions();
+    if (state.activeSessionId) {
+      const session = await getComparisonSession(state.activeSessionId);
+      if (session) await selectSession(state.activeSessionId, { renderAfter: false });
+      else {
+        state.activeSessionId = "";
+        state.messages = [];
+        state.selectedPapers = [];
+      }
+    }
+    render();
+    onChange?.();
+    return true;
+  }
+
   function shouldIgnoreContextRefresh(context = {}) {
     return Boolean(
       state.active &&
@@ -1008,6 +1027,7 @@ export function createComparativeReadingController({
     canAsk,
     isActive,
     isBusy,
+    refreshFromSync,
     shouldIgnoreContextRefresh,
     canAddPapers,
     setPaperLimit,

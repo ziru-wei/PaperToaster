@@ -82,6 +82,138 @@ button:disabled {
   min-width: 0;
 }
 
+.dashboard-google-sync {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 40;
+}
+
+.google-sync-menu-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #777777;
+  list-style: none;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.google-sync-menu-button:hover,
+.dashboard-google-sync[open] .google-sync-menu-button {
+  color: #4b4b4b;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.google-sync-cloud {
+  width: 19px;
+  height: 19px;
+  mask-image: url("../assets/icons/cloud.svg");
+  -webkit-mask-image: url("../assets/icons/cloud.svg");
+}
+
+.google-sync-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #eeeeef;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+[data-state="synced"] .google-sync-dot {
+  background: #57916b;
+}
+
+[data-state="pending"] .google-sync-dot {
+  background: #bd9351;
+}
+
+[data-state="syncing"] .google-sync-dot {
+  background: #6b8fb7;
+  animation: google-sync-pulse 1.2s ease-in-out infinite;
+}
+
+[data-state="error"] .google-sync-dot {
+  background: #c86559;
+}
+
+@keyframes google-sync-pulse {
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-state="syncing"] .google-sync-dot {
+    animation: none;
+  }
+}
+
+.google-sync-menu-button::-webkit-details-marker {
+  display: none;
+}
+
+.google-sync-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(310px, calc(100vw - 48px));
+  padding: 16px;
+  border: 1px solid var(--glass-button-border);
+  border-radius: 14px;
+  background: rgba(248, 248, 248, 0.96);
+  box-shadow: 0 8px 28px rgba(24, 24, 24, 0.12);
+}
+
+.google-sync-popover p {
+  margin: 0 0 12px;
+  color: #707070;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.google-sync-popover .google-sync-account {
+  color: #202020;
+  font-weight: 600;
+}
+
+.google-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.google-sync-actions button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.google-sync-actions button[hidden] {
+  display: none;
+}
+
+.google-sync-popover .google-sync-status {
+  margin-bottom: 0;
+  font-size: 11px;
+}
+
+.google-sync-status.error {
+  color: #b42318;
+}
+
+@media (max-width: 760px) {
+  .dashboard-google-sync {
+    align-self: flex-end;
+  }
+}
+
 .muted {
   color: #707070;
 }

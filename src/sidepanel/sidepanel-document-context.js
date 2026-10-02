@@ -654,6 +654,23 @@ export function createSidePanelDocumentContext({
     return currentDocument;
   }
 
+  async function refreshFromSync() {
+    if (!currentDocument?.documentKey) return;
+    const previous = currentDocument;
+    const requestId = documentRequestId;
+    const [document, paper] = await Promise.all([
+      getStoredDocumentByDocumentKey(previous.documentKey),
+      getLibraryPaperSummary(previous.documentKey)
+    ]);
+    if (requestId !== documentRequestId || currentDocument !== previous) return;
+    await renderDocument(document ? {
+      ...previous,
+      ...document,
+      url: previous.url,
+      title: paper?.title || document.title
+    } : null, { preserveConversationView: true });
+  }
+
   return {
     start,
     scheduleRefreshState,
@@ -664,6 +681,7 @@ export function createSidePanelDocumentContext({
     hasPreservedView,
     resumeActiveTabContext,
     getCurrentDocument,
+    refreshFromSync,
     clearError,
     showError
   };

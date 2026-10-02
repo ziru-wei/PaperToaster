@@ -329,6 +329,11 @@ elements.savedQaCollapseToggle.addEventListener("click", () => {
 elements.conversationThread.addEventListener("saved-qa-unit-collapse-change", syncSavedQuestionAnswerMode);
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "GOOGLE_SYNC_APPLIED") {
+    paperMentionMenu.invalidate();
+    scheduleSyncedViewRefresh();
+    return;
+  }
   if (message?.type === MessageType.PDF_SELECTION_CHANGED) {
     void handlePdfSelectionChanged();
   }
@@ -352,6 +357,28 @@ chrome.runtime.onMessage.addListener((message) => {
     paperActions.refresh();
   }
 });
+
+let syncedViewRefreshTimer = null;
+function scheduleSyncedViewRefresh() {
+  clearTimeout(syncedViewRefreshTimer);
+  syncedViewRefreshTimer = setTimeout(async () => {
+    const editing = document.activeElement?.closest("input, textarea, [contenteditable='true']");
+    if (editing && (elements.conversationThread.contains(editing) || editing === elements.documentTitle)) {
+      scheduleSyncedViewRefresh();
+      return;
+    }
+    try {
+      const refreshed = comparativeReading.isActive()
+        ? await comparativeReading.refreshFromSync()
+        : await conversation.refreshFromSync();
+      if (refreshed && !comparativeReading.isActive()) await documentContext.refreshFromSync();
+      await paperActions.refresh();
+      if (!refreshed) scheduleSyncedViewRefresh();
+    } catch (error) {
+      addDiagnostic(`Could not refresh synced reading: ${error.message}`);
+    }
+  }, 1000);
+}
 
 async function handlePdfSelectionChanged() {
   await documentContext.refreshSelection();

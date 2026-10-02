@@ -18,6 +18,7 @@ import {
 import { MessageType } from "../shared/messages.js";
 import { openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { normalizeDocumentUrl } from "../storage/document-key.js";
+import { initializeGoogleSyncControls } from "../components/google-sync-controls.js";
 
 const SORT_OPTIONS = [
   { id: "latestThread", label: "Latest ask", sortBy: "latestThread", sortDirection: "desc" },
@@ -97,6 +98,7 @@ const bulkActions = createDashboardBulkActions({
   onDeleteComplete: handlePapersDeleted,
   onRenderRequested: renderDashboard
 });
+initializeGoogleSyncControls();
 
 elements.search.addEventListener("input", () => {
   state.query = elements.search.value;
@@ -264,6 +266,12 @@ document.addEventListener("keydown", (event) => {
 });
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "GOOGLE_SYNC_APPLIED") {
+    Promise.all([restorePaperSort(), restorePaperGroupMode(), restoreMessageRingVisibility(), restoreLabelGroupOrder()])
+      .then(refreshRecords)
+      .catch((error) => console.warn("Could not refresh synced library", error));
+    return;
+  }
   if (message?.type === MessageType.LIBRARY_PAPER_CONTEXT_CHANGED) {
     applyActiveDashboardContext(message.context);
     renderPapers();

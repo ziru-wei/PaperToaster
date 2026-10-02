@@ -30,6 +30,8 @@ import {
 } from "../storage/saved-qa-settings-store.js";
 import { importLibraryArchive, validateLibraryArchive } from "../storage/library-archive-store.js";
 import { chooseImportDestination } from "../components/import-destination-dialog.js";
+import { initializeGoogleSyncControls } from "../components/google-sync-controls.js";
+import { initializeLocalBackupControls } from "./local-backup-controls.js";
 
 const elements = {
   aiLocalEndpoint: document.querySelector("#aiLocalEndpoint"),
@@ -124,6 +126,17 @@ loadSavedQaSettings();
 loadPresets();
 loadComparativePresets();
 loadComparisonSettings();
+initializeGoogleSyncControls(refreshSettingsFromStorage, { showSetupInstructions: true });
+initializeLocalBackupControls(refreshSettingsFromStorage);
+
+function refreshSettingsFromStorage() {
+  loadAiSettings();
+  loadParsingSettings();
+  loadSavedQaSettings();
+  loadPresets();
+  loadComparativePresets();
+  loadComparisonSettings();
+}
 
 async function importSelectedLibraryArchive() {
   const file = elements.libraryArchiveFile.files?.[0];
@@ -290,7 +303,7 @@ function queueAiSettingsSave(patch, section, options = {}) {
   aiSettingsSaveQueue = aiSettingsSaveQueue
     .catch(() => {})
     .then(async () => {
-      const base = savedAiSettings || await getAiSettings();
+      const base = await getAiSettings();
       savedAiSettings = await saveAiSettings({ ...base, ...patch });
       if (options.clearTokenField) {
         elements.aiLocalAuthToken.value = "";

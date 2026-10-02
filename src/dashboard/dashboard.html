@@ -31,6 +31,20 @@
           </div>
         </div>
         <p id="librarySummary" class="dashboard-status" aria-live="polite"></p>
+        <details id="googleSyncMenu" class="dashboard-google-sync">
+          <summary id="googleSyncIndicator" class="google-sync-menu-button" data-state="disconnected" title="Google sync: not connected" aria-label="Google sync: not connected">
+            <span class="icon-mask google-sync-cloud" aria-hidden="true"></span>
+            <span class="google-sync-dot" aria-hidden="true"></span>
+          </summary>
+          <div class="google-sync-popover">
+            <p id="googleSyncAccount" class="google-sync-account">Not connected</p>
+            <div class="google-sync-actions">
+              <button id="googleSyncConnect" class="glass-button" type="button" disabled>Sign in with Google</button>
+              <button id="googleSyncDisconnect" class="glass-button" type="button" hidden>Disconnect</button>
+            </div>
+            <p id="googleSyncStatus" class="google-sync-status" role="status">Loading sync status…</p>
+          </div>
+        </details>
       </header>
 
       <section id="bulkActions" class="bulk-actions is-hidden" aria-live="polite" aria-hidden="true">

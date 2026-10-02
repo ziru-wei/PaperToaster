@@ -53,6 +53,7 @@ export function createConversationPanelController({
   let threadUrl = "";
   let threadDocumentKey = "";
   let activeThreadId = "";
+  let persistedMessagesJson = "[]";
   let threadSummaries = [];
   let saveTimer = null;
   let documentRequestId = 0;
@@ -769,14 +770,17 @@ export function createConversationPanelController({
     }
 
     window.clearTimeout(saveTimer);
+    const visibleMessages = messages.filter((message) => !message.pending);
+    if (JSON.stringify(visibleMessages) === persistedMessagesJson) return;
     const savedThread = await saveStoredChatThread(threadUrl, {
       threadId: activeThreadId,
       url: threadUrl,
-      messages: messages.filter((message) => !message.pending)
+      messages: visibleMessages
     });
     const nextThreadId = savedThread.threadId || activeThreadId;
     migrateAssistantCollapseScope(activeThreadId, nextThreadId);
     activeThreadId = nextThreadId;
+    persistedMessagesJson = JSON.stringify(visibleMessages);
     return savedThread;
   }
 
@@ -807,6 +811,7 @@ export function createConversationPanelController({
     if (threadUrl === scopedUrl && activeThreadId === scopedThreadId) {
       migrateAssistantCollapseScope(activeThreadId, snapshot.threadId);
       activeThreadId = snapshot.threadId;
+      persistedMessagesJson = JSON.stringify(scopedMessages);
       await refreshThreadList();
     }
 
@@ -880,6 +885,27 @@ export function createConversationPanelController({
   function applyThread(thread) {
     messages = thread.messages || [];
     activeThreadId = thread.threadId || "";
+    persistedMessagesJson = JSON.stringify(messages);
+  }
+
+  async function refreshFromSync() {
+    if (!threadUrl) return true;
+    if (messages.some((message) => message.pending)) return false;
+    await persist();
+    await flushPaperUserNoteSave();
+    const requestId = documentRequestId;
+    const [thread, note] = await Promise.all([
+      activeThreadId ? getStoredChatThreadById(threadUrl, activeThreadId) : getStoredChatThread(threadUrl),
+      getPaperUserNote(threadDocumentKey)
+    ]);
+    if (requestId !== documentRequestId) return true;
+    applyThread(thread || { messages: [], threadId: "" });
+    paperUserNoteDocument = note.document;
+    await refreshThreadList(requestId);
+    if (savedViewActive) await loadSavedQuestionAnswerUnits(requestId);
+    render({ scrollToBottom: false });
+    onChange?.();
+    return true;
   }
 
   async function setSavedQuestionAnswerViewActive(active) {
@@ -1207,6 +1233,7 @@ export function createConversationPanelController({
 
   return {
     setDocumentUrl,
+    refreshFromSync,
     appendMessage,
     appendTransientMessage,
     updateTransientMessage,

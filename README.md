@@ -69,3 +69,60 @@ Whole-paper, selected-text, and comparative questions use managed outline-guided
 - The production parser adapter lives in `src/parsers/outline-guided-markdown-parser.js`; its deterministic reconstruction logic lives in `src/pdf/outline-guided-core.js`.
 - If automatic loading fails with a content-type or request error, test with a direct arXiv PDF URL first.
 - Selection capture is scoped to the current tab and resets when that tab navigates. The right-click menu uses the browser-provided selected text.
+
+## Google account sync
+
+Click the cloud indicator in the Dashboard header → **Sign in with Google** to connect an account. Approve Google's consent screen once; automatic sync then starts. The indicator's dot shows disconnected (gray), pending (amber), syncing (pulsing blue), synced (green), or error (red); hover for status or click for account details and **Disconnect**. Settings also provides the account controls and an optional **Sync now** button. Ordinary users do not need a Google Cloud project or any OAuth configuration. Sync is opt-in. It includes Board and Archive papers, parsed Markdown and parser artifacts, labels/stars, notes (including images), conversation threads, saved Q&A and annotations, comparative readings, prompt presets, model preferences, system prompt, parsing options, and dashboard preferences.
+
+Data is stored in Google Drive's private application data folder using the `drive.appdata` scope, not in a visible Drive document. Raw PDF files, local Agent endpoints/tokens, Google access tokens, current-tab context, and local CLI session files are not uploaded. Markdown content hashes remain in synced records so the existing Agent upload flow can register each paper on the receiving machine before answering.
+
+### One-time Google OAuth setup (developer only)
+
+Before distributing a build, the developer configures a real Google Cloud OAuth client registered against this extension's stable Chrome ID. Ship the configured manifest to users; they only sign in and consent. Local reading also works in builds without OAuth configuration.
+
+When switching an existing unpacked installation to a fixed extension ID, first open Settings → **Full Backup** → **Export full backup** and verify the downloaded JSON exists. This exports Board/Archive records with their original label/star/archive metadata, image notes, conversations, and persistent preferences, including this device's Local Agent settings. After loading the extension with its fixed ID, use **Restore full backup** before connecting Google. Restore fills missing records/settings and keeps existing ones; Google account/device identity is excluded from the backup. Keep the original installation until the restored library is verified.
+
+You can reuse an existing Google Cloud project from another plugin: keep its existing OAuth client, add a new Chrome Extension OAuth client for Paper Toaster's extension ID, and enable Google Drive API/add the required scopes if needed. A client bound to the other extension's ID cannot be used with Paper Toaster's different ID. OAuth branding, audience, and publishing status are project-level settings shared by the project's clients, so retain branding appropriate for both plugins if sharing a project.
+
+1. For an unpacked development extension, run:
+
+   ```sh
+   npm run configure:google -- --generate-key
+   ```
+
+   This adds a public `key` to `manifest.json` and prints a stable extension ID. Keep the same public key on all installations. Reload the extension and confirm its ID in `chrome://extensions`. Changing the ID creates a different extension storage namespace; export existing local library data before changing it, then import it into the new installation.
+
+   For a Chrome Web Store extension, use its existing ID and public key instead of generating a development key. Pass the public key with `--extension-key` when configuring the client. Do not replace an established extension key.
+
+2. In [Google Cloud Console](https://console.cloud.google.com/), create or select a project and enable **Google Drive API**. Configure Google Auth Platform branding/audience and add these scopes under Data Access:
+
+   - `https://www.googleapis.com/auth/drive.appdata`
+   - `openid`
+   - `email`
+
+   While the OAuth app is in Testing, add the Google accounts you will use as test users.
+
+3. Create an OAuth client of type **Chrome Extension** (sometimes labeled **Chrome app**). Set its Application ID to the stable extension ID from step 1. No client secret is used or stored by the extension.
+
+4. Configure the resulting client ID:
+
+   ```sh
+   npm run configure:google -- --client-id YOUR_CLIENT_ID.apps.googleusercontent.com
+   ```
+
+   The script writes the `oauth2` declaration to `manifest.json`. Use the actual client ID, which starts with a numeric project identifier. Keep this manifest's `key` and OAuth configuration identical across devices.
+
+5. Reload Paper Toaster in `chrome://extensions`. Open Dashboard → cloud indicator, click **Sign in with Google**, and approve access. Distribute the configured extension; other users perform only this login/consent step.
+
+See the official [Chrome OAuth setup](https://developer.chrome.com/docs/extensions/how-to/integrate/oauth), [Identity API](https://developer.chrome.com/docs/extensions/reference/api/identity), and [Google Drive application data](https://developers.google.com/workspace/drive/api/guides/appdata) documentation.
+
+### Sync behavior
+
+- Local changes trigger sync after approximately three seconds without further edits. A 30-second fallback alarm survives background-worker suspension and prevents continuous editing from postponing sync indefinitely. A one-minute alarm checks for other devices' changes while Chrome is running; opening or focusing Dashboard/Settings and restoring the network also check for pending, failed, or overdue sync. Chrome may delay background alarms. Background retries never open a sign-in popup; authorization errors appear in the indicator and Settings. **Sync now** in Settings is optional.
+- Each installation writes its own JSON replica; devices merge records using revision clocks with a stable device-ID tie breaker. Different records merge independently. Concurrent edits to the same record use the later revision observed at sync; individual AI preferences merge independently. This is not collaborative text editing.
+- Deletion markers prevent offline replicas from restoring deleted records. Paper/thread deletion also removes stale child data. New installations merge existing local data with cloud data rather than clearing either library.
+- Local edits made during a download are retained. Failed downloads do not publish a partial merge. Offline changes and deletion markers survive failed uploads and retry later.
+- Disconnect stops automatic sync and clears the extension's cached Google authorization. It keeps both local data and Drive replicas. Reconnecting resumes merging. If Chrome's Google account changes, sync stops with an error until you disconnect and connect again.
+- This first version downloads the replicas and uploads a complete JSON replica when changes occur. Large libraries or image-heavy notes can take longer; deletion markers are retained, and cloud replicas are not compacted automatically.
+
+Run `npm run test:sync` for the mocked Google API and IndexedDB checks. A real sign-in and two-device smoke test require the OAuth setup above: connect both devices, add/edit a note, sync each, verify the note and an archived paper, then delete a thread and verify it stays deleted after reconnecting an offline device.

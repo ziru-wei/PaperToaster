@@ -16,6 +16,8 @@
     "activeTab",
     "contextMenus",
     "storage",
+    "identity",
+    "alarms",
     "tabs",
     "unlimitedStorage",
     "scripting",
@@ -89,5 +91,14 @@
         "https://*/*"
       ]
     }
-  ]
+  ],
+  "oauth2": {
+    "client_id": "61518282198-6fj09tqn2svfjigsjmr9mpkoptbjtdjp.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.appdata",
+      "openid",
+      "email"
+    ]
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx2mrWbIYSQL7ccvEttQg7T+bohONk8em/6Z9RdX9nYVx2qAolqh+ZS2oleNEtkepEhDzCWEUrFYP5Z34WH9csIrBQ6DOCS3h3yVcHpsfK2nZiCznIn6vAA7e3kP2wIdpONyH0lFwUfDgIsjc1zCaTYoh/te1V9T7+QJJY0n2wtgqed42Nbmq6g27viRsL2uUZT49dMU2JgWWPxZBDnJATdkjYrkvWfhAF0C4L3O4iRQP8w3VCpntnvNX19EzkbNDz7bsqbyGZoZxssFwtGitq7No5C6xsbsujmYnDpmvuUA/n9OROBDOtcdDdYiTZILN0priSk3oUo9ZkhyyRumh4QIDAQAB"
 }

@@ -1,4 +1,5 @@
 import { MessageType } from "../shared/messages.js";
+import { registerGoogleSync, handleGoogleSyncMessage } from "../sync/google-sync.js";
 import { getComparisonSettings } from "../storage/comparison-settings-store.js";
 import { openExtensionPageInExistingTab } from "../browser/open-paper-tab.js";
 import {
@@ -14,6 +15,7 @@ import {
 const CAPTURE_SELECTION_MENU_ID = "capture-selection";
 const LIBRARY_PAPER_CONTEXT_KEY = "libraryPaperContext";
 const selectionsByTab = new Map();
+registerGoogleSync();
 let fallbackLibraryPaperContext = null;
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -139,6 +141,9 @@ function normalizeExternalLibraryScope(scope) {
 }
 
 async function handleMessage(message, sender) {
+  if (message?.type?.startsWith("GOOGLE_SYNC_")) {
+    return { ok: true, status: await handleGoogleSyncMessage(message, sender) };
+  }
   switch (message?.type) {
     case MessageType.PDF_SELECTION_CHANGED: {
       const tabId = sender.tab?.id || message.tabId;

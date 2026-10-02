@@ -12,9 +12,26 @@
       <header>
         <div>
           <h1>Paper Toaster Settings</h1>
-          <p>Local settings for model access and selected-text prompts.</p>
+          <p>Settings for Google sync, model access, and selected-text prompts.</p>
         </div>
       </header>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <h2>Google Sync</h2>
+            <p>Sync your library, notes, conversations, and preferences with Google Drive.</p>
+            <p id="googleSyncAccount">Not connected</p>
+          </div>
+          <div class="actions">
+            <button id="googleSyncConnect" type="button" disabled>Connect Google account</button>
+            <button id="googleSyncNow" type="button" hidden>Sync now</button>
+            <button id="googleSyncDisconnect" type="button" hidden>Disconnect</button>
+          </div>
+        </div>
+        <p>Changes sync automatically. Local Agent addresses and tokens stay on this device. Disconnecting keeps local and cloud data.</p>
+        <div id="googleSyncStatus" class="status" role="status">Loading sync status…</div>
+      </section>
 
       <section>
         <div class="section-header">
@@ -197,6 +214,21 @@
             <button id="stripStoredEmphasisMarkers" type="button">Strip stored emphasis</button>
           </div>
         </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <div>
+            <h2>Full Backup</h2>
+            <p>Export all Board and Archive data, notes, conversations, and preferences together. Includes this device’s Local Agent settings. Restore fills missing records and settings.</p>
+          </div>
+          <div class="actions">
+            <button id="exportLocalBackup" type="button">Export full backup</button>
+            <button id="restoreLocalBackup" type="button">Restore full backup</button>
+          </div>
+        </div>
+        <input id="localBackupFile" type="file" accept="application/json,.json" hidden>
+        <div id="localBackupStatus" class="status" role="status"></div>
       </section>
 
       <section>
