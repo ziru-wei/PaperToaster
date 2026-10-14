@@ -9,8 +9,10 @@ import {
   canLoadDocumentFromTab,
   getCachedDocumentForUrl,
   loadDocumentForTab,
+  isLocalPdfFileUrl,
   saveDocumentForUrl
 } from "../document/load-document.js";
+import { importLocalPdfFromFileUrl } from "../document/local-pdf-import.js";
 import { getStoredDocumentByDocumentKey } from "../storage/document-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
 import {
@@ -32,6 +34,8 @@ export function createSidePanelDocumentContext({
   onDiagnostic
 }) {
   let activeTab = null;
+  // Saved copies of local files that should parse as soon as their tab opens.
+  const parseOnArrivalUrls = new Set();
   let currentDocument = null;
   let titleSaveTimer = null;
   let refreshTimer = null;
@@ -102,6 +106,7 @@ export function createSidePanelDocumentContext({
       }
 
       if (cached) {
+        parseOnArrivalUrls.delete(activeTab.url);
         await renderDocumentIfCurrent(cached, request);
       } else {
         await renderDocumentIfCurrent(null, request, { preserveConversationView: true });
@@ -109,7 +114,9 @@ export function createSidePanelDocumentContext({
         if (!isCurrentDocumentRequest(request)) {
           return;
         }
-        if (parsingSettings.autoParse) {
+        // A local PDF that was just copied in keeps going without a second click.
+        const continueParse = parseOnArrivalUrls.delete(activeTab.url);
+        if (parsingSettings.autoParse || continueParse) {
           await loadPdf({ bypassCache: false });
         } else {
           renderIdleState(true, { manualParse: true });
@@ -258,6 +265,17 @@ export function createSidePanelDocumentContext({
         await renderDocumentIfCurrent(null, request);
         renderIdleState(true);
         onDiagnostic?.("Load skipped: active tab is not a recognized PDF viewer.");
+        return;
+      }
+
+      if (isLocalPdfFileUrl(activeTab.url)) {
+        // Read the saved copy rather than the file path, so moving or deleting
+        // the original never loses the paper.
+        setStatus("Saving a copy of this PDF...");
+        const { viewerUrl } = await importLocalPdfFromFileUrl(activeTab.url);
+        onDiagnostic?.("Saved a copy of the local PDF; opening the saved copy.");
+        parseOnArrivalUrls.add(viewerUrl);
+        await chrome.tabs.update(activeTab.id, { url: viewerUrl });
         return;
       }
 

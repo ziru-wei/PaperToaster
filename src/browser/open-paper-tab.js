@@ -1,4 +1,9 @@
-import { getDocumentMemoryKey, normalizeDocumentUrl } from "../storage/document-key.js";
+import {
+  getDocumentMemoryKey,
+  getLocalPdfHashFromUrl,
+  getLocalPdfViewerUrl,
+  normalizeDocumentUrl
+} from "../storage/document-key.js";
 
 export async function openPaperUrlInExistingTab(url) {
   const targetUrl = normalizeOpenableUrl(url);
@@ -100,6 +105,10 @@ export function normalizeOpenableUrl(url) {
 
   try {
     const parsed = new URL(value);
+    // Saved local PDFs open in this device's viewer page; a URL synced from
+    // another device may carry that device's extension ID.
+    const localPdfHash = getLocalPdfHashFromUrl(parsed.href);
+    if (localPdfHash) return getLocalPdfViewerUrl(localPdfHash);
     return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
   } catch {
     return "";

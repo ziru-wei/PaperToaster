@@ -302,6 +302,7 @@ test("local changes sync automatically without consent prompts and foreground re
   t.mock.method(GoogleDriveClient.prototype, "getAccount", async () => ({ id: "auto-account" }));
   t.mock.method(GoogleDriveClient.prototype, "listReplicas", async () => []);
   t.mock.method(GoogleDriveClient.prototype, "writeReplica", async () => {});
+  t.mock.method(GoogleDriveClient.prototype, "listPdfFiles", async () => new Map());
   alarms.clear();
   local.googleSyncStateV1 = { enabled: false };
   await scheduleGoogleSync();
@@ -338,6 +339,7 @@ test("an edit during upload remains pending and is included in the next automati
   t.mock.method(globalThis, "clearTimeout", () => {});
   t.mock.method(GoogleDriveClient.prototype, "getAccount", async () => ({ id: "auto-account" }));
   t.mock.method(GoogleDriveClient.prototype, "listReplicas", async () => []);
+  t.mock.method(GoogleDriveClient.prototype, "listPdfFiles", async () => new Map());
   t.mock.method(GoogleDriveClient.prototype, "writeReplica", async (_id, _device, entries) => {
     uploaded = entries;
     if (++uploadCount === 1) {
@@ -358,4 +360,32 @@ test("an edit during upload remains pending and is included in the next automati
   assert.equal(uploadCount, 2);
   assert.equal(uploaded[entryId("paperNotes", "backup-paper")].value.text, "Edited during upload");
   assert.equal((await getGoogleSyncStatus()).pendingRevision, "");
+});
+
+test("saved local PDFs upload once and download where a synced paper needs them", async (t) => {
+  const { syncLocalPdfs } = await import("../src/sync/pdf-sync.js");
+  const { saveLocalPdf, getLocalPdf, hashPdfBytes } = await import("../src/storage/local-pdf-store.js");
+  const pdf = (text) => new TextEncoder().encode(`%PDF-1.4\n${text}\n%%EOF`);
+  const localHash = await saveLocalPdf(pdf("local"), { name: "local.pdf" });
+  const remoteBytes = pdf("remote");
+  const remoteHash = await hashPdfBytes(remoteBytes);
+  const uploads = [];
+  t.mock.method(GoogleDriveClient.prototype, "listPdfFiles", async () => new Map([[remoteHash, { id: "remote-pdf", name: "remote.pdf" }]]));
+  t.mock.method(GoogleDriveClient.prototype, "uploadPdf", async (sha256, blob, name) => { uploads.push({ sha256, size: blob.size, name }); });
+  t.mock.method(GoogleDriveClient.prototype, "downloadPdf", async () => new Blob([remoteBytes], { type: "application/pdf" }));
+  const entries = {
+    [entryId("papers", `pdf:${localHash}`)]: entry({ documentKey: `pdf:${localHash}`, title: "Local" }, 1),
+    [entryId("papers", `pdf:${remoteHash}`)]: entry({ documentKey: `pdf:${remoteHash}`, title: "Remote" }, 1)
+  };
+  const result = await syncLocalPdfs(new GoogleDriveClient("token"), entries);
+  assert.deepEqual(result, { uploaded: 1, downloaded: 1 });
+  assert.deepEqual(uploads.map((upload) => [upload.sha256, upload.name]), [[localHash, "local.pdf"]]);
+  assert.equal((await getLocalPdf(remoteHash)).name, "remote.pdf");
+  // A copy whose bytes do not match its hash is rejected instead of stored.
+  t.mock.method(GoogleDriveClient.prototype, "downloadPdf", async () => new Blob([pdf("tampered")]));
+  const otherHash = "f".repeat(64);
+  t.mock.method(GoogleDriveClient.prototype, "listPdfFiles", async () => new Map([[otherHash, { id: "bad", name: "bad.pdf" }]]));
+  await assert.rejects(syncLocalPdfs(new GoogleDriveClient("token"), {
+    [entryId("papers", `pdf:${otherHash}`)]: entry({ documentKey: `pdf:${otherHash}` }, 1)
+  }), /checksum/);
 });

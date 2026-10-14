@@ -27,6 +27,7 @@ export function createDashboardBulkActions({
     togglePaperSelection,
     setPaperSelection,
     toggleComparisonSelection,
+    setComparisonSelected,
     getSelectedDocumentKeys,
     getSelectedComparisonIds,
     getActionableDocumentKeys,

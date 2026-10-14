@@ -6,6 +6,7 @@
     <title>Paper Toaster</title>
     <link rel="stylesheet" href="../components/click-menu.css">
     <link rel="stylesheet" href="../components/glass-button.css">
+    <link rel="stylesheet" href="../components/update-notice.css">
     <link rel="stylesheet" href="../components/import-destination-dialog.css">
     <link rel="stylesheet" href="./dashboard.css">
     <link rel="stylesheet" href="../components/paper-label-control.css">
@@ -20,16 +21,24 @@
             </button>
             <div id="paperSortMenu" class="click-menu sort-menu" role="menu" hidden></div>
           </div>
-          <button id="paperGroupLayoutButton" class="glass-button dashboard-icon-button" type="button" aria-label="Group papers by latest conversation" aria-pressed="false">
-            <span class="icon-mask group-layout-icon" aria-hidden="true"></span>
+          <div class="sort-control group-control">
+            <button id="paperGroupButton" class="glass-button dashboard-icon-button" type="button" title="Group and organize papers" aria-label="Group and organize papers" aria-haspopup="menu" aria-expanded="false">
+              <span class="icon-mask group-icon" aria-hidden="true"></span>
+            </button>
+            <div id="paperGroupMenu" class="click-menu sort-menu" role="menu" hidden></div>
+          </div>
+          <button id="paperPropertiesButton" class="glass-button dashboard-icon-button" type="button" aria-label="Properties" title="Properties" aria-haspopup="menu" aria-expanded="false">
+            <span class="icon-mask properties-icon" aria-hidden="true"></span>
           </button>
-          <button id="paperMessageRingButton" class="glass-button dashboard-icon-button" type="button" aria-label="Hide message rings" aria-pressed="false">
-            <span class="icon-mask message-ring-toggle-icon" aria-hidden="true"></span>
+          <button id="importPdfButton" class="glass-button dashboard-icon-button" type="button" aria-label="Import PDF" title="Import PDF from this computer (or drop PDFs here)">
+            <span class="icon-mask import-pdf-icon" aria-hidden="true"></span>
           </button>
+          <input id="importPdfInput" type="file" accept="application/pdf,.pdf" multiple hidden>
           <div class="dashboard-search-control">
             <input id="paperSearch" type="search" placeholder="Loading local papers..." aria-label="Search papers">
           </div>
         </div>
+        <div id="paperViewSwitch" class="paper-view-switch" role="radiogroup" aria-label="View"></div>
         <p id="librarySummary" class="dashboard-status" aria-live="polite"></p>
         <details id="googleSyncMenu" class="dashboard-google-sync">
           <summary id="googleSyncIndicator" class="google-sync-menu-button" data-state="disconnected" title="Google sync: not connected" aria-label="Google sync: not connected">

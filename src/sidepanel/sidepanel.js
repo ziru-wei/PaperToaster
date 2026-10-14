@@ -30,10 +30,12 @@ import { hydrateBreadTextElement } from "./bread-text.js";
 import { createSelectionPanelController } from "./selection-panel-controller.js";
 import { createSidePanelDocumentContext } from "./sidepanel-document-context.js";
 import { getSidePanelElements } from "./sidepanel-elements.js";
+import { initializeUpdateNotice } from "../components/update-notice.js";
 
 const SAVED_QA_TOGGLE_TOP_KEY = "savedQaToggleTopPercent";
 
 const elements = getSidePanelElements();
+initializeUpdateNotice();
 let composer = null;
 let paperActions = null;
 let conversation = null;
@@ -355,6 +357,9 @@ chrome.runtime.onMessage.addListener((message) => {
     message.documentKey === documentContext.getCurrentDocument()?.documentKey
   ) {
     paperActions.refresh();
+    conversation.refreshPaperShortNote().catch((error) => {
+      addDiagnostic(`Could not refresh paper short note: ${error.message || String(error)}`);
+    });
   }
 });
 

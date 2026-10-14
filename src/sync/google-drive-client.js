@@ -23,10 +23,11 @@ export class GoogleDriveClient {
   }
 
   async request(url, options = {}, retry = true) {
+    const { timeoutMs = 20000, ...fetchOptions } = options;
     const response = await fetch(url, {
-      ...options,
-      headers: { ...options.headers, Authorization: `Bearer ${this.token}` },
-      signal: AbortSignal.timeout(20000)
+      ...fetchOptions,
+      headers: { ...fetchOptions.headers, Authorization: `Bearer ${this.token}` },
+      signal: AbortSignal.timeout(timeoutMs)
     });
     if (response.status === 401 && retry) {
       await chrome.identity.removeCachedAuthToken({ token: this.token });
@@ -63,6 +64,62 @@ export class GoogleDriveClient {
       pageToken = data.nextPageToken || "";
     } while (pageToken);
     return files;
+  }
+
+  // Saved local PDFs live beside the replicas as their own files, named and
+  // tagged by content hash, so each is uploaded once and never conflicts.
+  async listPdfFiles() {
+    const files = new Map();
+    let pageToken = "";
+    do {
+      const query = new URLSearchParams({
+        spaces: "appDataFolder",
+        q: "trashed = false and appProperties has { key='paperToasterPdf' and value='1' }",
+        fields: "nextPageToken,files(id,name,appProperties)",
+        pageSize: "1000",
+        ...(pageToken ? { pageToken } : {})
+      });
+      const data = await (await this.request(`${DRIVE_URL}?${query}`)).json();
+      for (const file of data.files || []) {
+        const sha256 = file.appProperties?.sha256;
+        if (/^[0-9a-f]{64}$/.test(sha256 || "")) files.set(sha256, { id: file.id, name: file.appProperties?.fileName || "" });
+      }
+      pageToken = data.nextPageToken || "";
+    } while (pageToken);
+    return files;
+  }
+
+  async uploadPdf(sha256, blob, fileName = "") {
+    const metadata = {
+      name: `papertoaster-pdf-${sha256}.pdf`,
+      mimeType: "application/pdf",
+      parents: ["appDataFolder"],
+      appProperties: { paperToasterPdf: "1", sha256, fileName: String(fileName).slice(0, 100) }
+    };
+    const session = await this.request("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": "application/pdf",
+        "X-Upload-Content-Length": String(blob.size)
+      },
+      body: JSON.stringify(metadata)
+    });
+    const uploadUrl = session.headers.get("Location");
+    if (!uploadUrl) throw new Error("Google Drive did not start the PDF upload.");
+    await this.request(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf" },
+      body: blob,
+      timeoutMs: 10 * 60 * 1000
+    });
+  }
+
+  async downloadPdf(fileId) {
+    const response = await this.request(`${DRIVE_URL}/${encodeURIComponent(fileId)}?alt=media`, {
+      timeoutMs: 10 * 60 * 1000
+    });
+    return response.blob();
   }
 
   async readReplica(fileId) {

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="../../vendor/markdown-renderer/katex.min.css">
     <link rel="stylesheet" href="../components/click-menu.css">
     <link rel="stylesheet" href="../components/glass-button.css">
+    <link rel="stylesheet" href="../components/update-notice.css">
     <link rel="stylesheet" href="./sidepanel.css">
     <link rel="stylesheet" href="../components/paper-label-control.css">
   </head>
@@ -103,6 +104,11 @@
         <div id="conversationThread" class="conversation-thread" hidden></div>
         <div class="composer">
           <div id="comparisonPaperChips" class="comparison-paper-chips" aria-label="Selected comparison papers" hidden></div>
+          <div id="comparisonReadMode" class="comparison-read-mode" role="radiogroup" aria-label="What the agent reads">
+            <span class="comparison-read-mode-label">Agent reads</span>
+            <button type="button" class="comparison-read-mode-option" data-mode="abstract" role="radio" aria-checked="true">Abstracts</button>
+            <button type="button" class="comparison-read-mode-option" data-mode="full" role="radio" aria-checked="false">Full papers</button>
+          </div>
           <div class="composer-input-stack">
             <button id="scrollToLatest" class="glass-button scroll-to-latest" type="button" aria-label="Scroll to latest" hidden>
               <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -112,20 +118,19 @@
             </button>
             <div class="selection-quote-layer">
               <blockquote id="selectionText" class="selection-quote empty" tabindex="0" aria-expanded="false"></blockquote>
-              <button id="clearSelectionText" class="selection-quote-clear" type="button" aria-label="Remove selected text" hidden>×</button>
+              <button id="clearSelectionText" class="selection-quote-clear" type="button" aria-label="Remove selected text" hidden></button>
             </div>
             <form id="selectionQuestionForm">
               <div class="prompt-field">
-                <textarea id="selectionQuestion" rows="4" placeholder="Start with typing /"></textarea>
+                <textarea id="selectionQuestion" rows="4" placeholder="Ask about this paper · / for commands"></textarea>
+                <span class="composer-focus-hint" aria-hidden="true"><kbd>↵</kbd></span>
                 <span id="modelCommandCompletion" class="model-command-completion" aria-hidden="true" hidden></span>
                 <span id="currentModelIndicator" class="current-model-indicator" hidden></span>
-                <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden>Press ↵ to start a new thread</div>
+                <span class="composer-send-hint" aria-hidden="true"><kbd>↵</kbd> Send<span class="composer-hint-separator"></span><kbd>⇧</kbd><kbd>↵</kbd> New line</span>
+                <div id="newThreadPromptHint" class="new-thread-prompt-hint" hidden><kbd>↵</kbd> Start a new thread</div>
                 <div id="promptPresetMenu" class="click-menu prompt-preset-menu" role="listbox" hidden></div>
               </div>
             </form>
-          </div>
-          <div class="chat-query-prompt" aria-hidden="true">
-            <span>Press</span><kbd>↵</kbd><span>Enter for querying</span>
           </div>
         </div>
       </section>

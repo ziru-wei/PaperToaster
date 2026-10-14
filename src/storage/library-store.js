@@ -1,3 +1,10 @@
+import { getLocalPdfHashFromDocumentKey, getLocalPdfViewerUrl } from "./document-key.js";
+import {
+  DEFAULT_LABEL_COLUMN_ID,
+  getPaperLabels,
+  normalizeLabelName,
+  withPaperLabels
+} from "./label-columns.js";
 import {
   CONVERSATION_THREAD_STORE,
   DOCUMENT_STORE,
@@ -8,6 +15,7 @@ import {
 } from "./paper-database.js";
 
 const PAPER_GROUP_TONE_COUNT = 5;
+const MAX_PAPER_SHORT_NOTE_CHARS = 500;
 export const LIBRARY_SCOPE_BOARD = "board";
 export const LIBRARY_SCOPE_ARCHIVE = "archive";
 
@@ -127,11 +135,12 @@ export async function listLibraryPaperGroups(options = {}) {
   return papers
     .filter((paper) => matchesRecordScope(paper, options.scope))
     .filter((paper) => options.scope === LIBRARY_SCOPE_ARCHIVE || normalizeLibraryPaperLabelState(paper.labelState) !== "dead")
-    .filter((paper) => normalizeLibraryPaperGroup(paper.group))
     .map((paper) => ({
+      documentKey: paper.documentKey,
       group: paper.group,
       groupTone: options.scope === LIBRARY_SCOPE_ARCHIVE ? null : paper.groupTone,
-      labelState: normalizeLibraryPaperLabelState(paper.labelState)
+      labelState: normalizeLibraryPaperLabelState(paper.labelState),
+      labels: collectPaperLabels(paper)
     }));
 }
 
@@ -160,27 +169,84 @@ export async function setLibraryPaperStarred(documentKey, isStarred, fallback = 
   await transactionDone(transaction);
 }
 
-export async function setLibraryPaperGroup(documentKey, group, fallback = {}, options = {}) {
+export async function setLibraryPaperShortNote(documentKey, shortNote, fallback = {}) {
   const normalizedDocumentKey = String(documentKey || "").trim();
   if (!normalizedDocumentKey) {
-    return;
+    return "";
   }
 
   const db = await openPaperDatabase();
   const now = Date.now();
-  const allPapers = await getAllFromStore(db, PAPER_STORE);
-  const existing = allPapers.find((paper) => paper.documentKey === normalizedDocumentKey);
-  const scope = normalizeLibraryScope(options.scope || (normalizeArchivedAt(existing?.archivedAt) ? LIBRARY_SCOPE_ARCHIVE : LIBRARY_SCOPE_BOARD));
-  const normalizedGroup = normalizeLibraryPaperGroup(group);
-  const liveBoardPapers = getLiveBoardPapers(allPapers);
-  if (scope === LIBRARY_SCOPE_BOARD && normalizedGroup && !canCreateLibraryPaperGroup(normalizedGroup, liveBoardPapers)) {
-    throw new Error(`Paper labels are limited to ${PAPER_GROUP_TONE_COUNT}.`);
+  const normalizedShortNote = normalizePaperShortNote(shortNote);
+  const existing = await requestToPromise(
+    db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE).get(normalizedDocumentKey)
+  );
+  if (normalizePaperShortNote(existing?.shortNote) === normalizedShortNote) {
+    return normalizedShortNote;
   }
-  const groupTone = scope === LIBRARY_SCOPE_BOARD && normalizedGroup
-    ? resolveLibraryPaperGroupTone(normalizedGroup, liveBoardPapers)
-    : null;
+
   const transaction = db.transaction(PAPER_STORE, "readwrite");
   transaction.objectStore(PAPER_STORE).put({
+    ...(existing || {}),
+    documentKey: normalizedDocumentKey,
+    canonicalUrl: existing?.canonicalUrl || fallback.canonicalUrl || "",
+    title: existing?.title || fallback.title || "",
+    titleSource: existing?.titleSource || "",
+    metadata: existing?.metadata || null,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    activeThreadId: existing?.activeThreadId || "",
+    shortNote: normalizedShortNote,
+    shortNoteUpdatedAt: now
+  });
+  await transactionDone(transaction);
+  return normalizedShortNote;
+}
+
+export async function getLibraryPaperShortNote(documentKey) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return "";
+  }
+
+  const db = await openPaperDatabase();
+  const paper = await requestToPromise(
+    db.transaction(PAPER_STORE, "readonly").objectStore(PAPER_STORE).get(normalizedDocumentKey)
+  );
+  return normalizePaperShortNote(paper?.shortNote);
+}
+
+export function normalizePaperShortNote(value) {
+  return String(value || "")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, MAX_PAPER_SHORT_NOTE_CHARS);
+}
+
+// The original "Label" column, kept for callers that set a single label.
+export function setLibraryPaperGroup(documentKey, group, fallback = {}) {
+  return setLibraryPaperLabels(documentKey, DEFAULT_LABEL_COLUMN_ID, normalizeLibraryPaperGroup(group) ? [group] : [], fallback);
+}
+
+export function renameLibraryPaperGroup(oldGroup, newGroup, options = {}) {
+  return renameLibraryPaperLabel(DEFAULT_LABEL_COLUMN_ID, oldGroup, newGroup, options);
+}
+
+export function deleteLibraryPaperGroup(group, options = {}) {
+  return deleteLibraryPaperLabel(DEFAULT_LABEL_COLUMN_ID, group, options);
+}
+
+// Replaces a paper's labels in one column. There is no limit on how many labels exist.
+export async function setLibraryPaperLabels(documentKey, columnId, labels, fallback = {}) {
+  const normalizedDocumentKey = String(documentKey || "").trim();
+  if (!normalizedDocumentKey) {
+    return;
+  }
+  const db = await openPaperDatabase();
+  const transaction = db.transaction(PAPER_STORE, "readwrite");
+  const store = transaction.objectStore(PAPER_STORE);
+  const existing = await requestToPromise(store.get(normalizedDocumentKey));
+  const now = Date.now();
+  store.put(withPaperLabels({
     ...(existing || {}),
     documentKey: normalizedDocumentKey,
     canonicalUrl: existing?.canonicalUrl || fallback.canonicalUrl || "",
@@ -192,94 +258,60 @@ export async function setLibraryPaperGroup(documentKey, group, fallback = {}, op
     activeThreadId: existing?.activeThreadId || "",
     isStarred: Boolean(existing?.isStarred),
     starredAt: existing?.starredAt || null,
-    group: normalizedGroup,
-    groupTone,
-    labelState: "live",
     archivedAt: normalizeArchivedAt(existing?.archivedAt)
-  });
+  }, columnId, labels));
   await transactionDone(transaction);
 }
 
-export async function renameLibraryPaperGroup(oldGroup, newGroup, options = {}) {
-  const normalizedOldGroup = normalizeLibraryPaperGroup(oldGroup);
-  const normalizedNewGroup = normalizeLibraryPaperGroup(newGroup);
-  if (!normalizedOldGroup) {
-    return [];
-  }
-  if (!normalizedNewGroup) {
-    return deleteLibraryPaperGroup(normalizedOldGroup, options);
-  }
-  if (normalizedOldGroup.toLowerCase() === normalizedNewGroup.toLowerCase()) {
-    return [];
-  }
-
-  const db = await openPaperDatabase();
-  const papers = await getAllFromStore(db, PAPER_STORE);
-  const scope = normalizeLibraryScope(options.scope);
-  const matchingPapers = papers.filter((paper) =>
-    matchesRecordScope(paper, scope) &&
-    (!options.labelState || normalizeLibraryPaperLabelState(paper.labelState) === options.labelState) &&
-    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedOldGroup.toLowerCase()
-  );
-  if (!matchingPapers.length) {
-    return [];
-  }
-
-  const now = Date.now();
-  const liveBoardPapers = getLiveBoardPapers(papers);
-  if (scope === LIBRARY_SCOPE_BOARD && !canRenameLibraryPaperGroup(normalizedOldGroup, normalizedNewGroup, liveBoardPapers, matchingPapers)) {
-    throw new Error(`Paper labels are limited to ${PAPER_GROUP_TONE_COUNT}.`);
-  }
-  const groupTone = scope === LIBRARY_SCOPE_ARCHIVE
-    ? null
-    : resolveRenamedLibraryPaperGroupTone(normalizedOldGroup, normalizedNewGroup, liveBoardPapers);
-  const transaction = db.transaction(PAPER_STORE, "readwrite");
-  const store = transaction.objectStore(PAPER_STORE);
-  matchingPapers.forEach((paper) => {
-    store.put({
-      ...paper,
-      updatedAt: now,
-      group: normalizedNewGroup,
-      groupTone,
-      labelState: "live"
-    });
-  });
-  await transactionDone(transaction);
-  return matchingPapers.map((paper) => paper.documentKey).filter(Boolean);
+// Renames a label on every paper in the scope that has it; renaming onto an
+// existing label merges the two.
+export async function renameLibraryPaperLabel(columnId, oldLabel, newLabel, options = {}) {
+  const oldName = normalizeLabelName(oldLabel);
+  const newName = normalizeLabelName(newLabel);
+  if (!oldName) return [];
+  if (!newName) return deleteLibraryPaperLabel(columnId, oldName, options);
+  if (oldName === newName) return [];
+  return updateLabelsInScope(columnId, oldName, options, (labels) => labels.map((label) => (
+    label.toLowerCase() === oldName.toLowerCase() ? newName : label
+  )));
 }
 
-export async function deleteLibraryPaperGroup(group, options = {}) {
-  const normalizedGroup = normalizeLibraryPaperGroup(group);
-  if (!normalizedGroup) {
-    return [];
-  }
+export function deleteLibraryPaperLabel(columnId, label, options = {}) {
+  const name = normalizeLabelName(label);
+  if (!name) return Promise.resolve([]);
+  return updateLabelsInScope(columnId, name, options, (labels) => labels.filter((item) => (
+    item.toLowerCase() !== name.toLowerCase()
+  )));
+}
 
+async function updateLabelsInScope(columnId, label, options, transform) {
   const db = await openPaperDatabase();
   const papers = await getAllFromStore(db, PAPER_STORE);
   const scope = normalizeLibraryScope(options.scope);
-  const matchingPapers = papers.filter((paper) =>
+  const key = label.toLowerCase();
+  const matching = papers.filter((paper) => (
     matchesRecordScope(paper, scope) &&
-    (!options.labelState || normalizeLibraryPaperLabelState(paper.labelState) === options.labelState) &&
-    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedGroup.toLowerCase()
-  );
-  if (!matchingPapers.length) {
-    return [];
-  }
-
+    getPaperLabels(paper, columnId).some((item) => item.toLowerCase() === key)
+  ));
+  if (!matching.length) return [];
   const now = Date.now();
   const transaction = db.transaction(PAPER_STORE, "readwrite");
   const store = transaction.objectStore(PAPER_STORE);
-  matchingPapers.forEach((paper) => {
-    store.put({
-      ...paper,
-      updatedAt: now,
-      group: "",
-      groupTone: null,
-      labelState: "live"
-    });
+  matching.forEach((paper) => {
+    store.put({ ...withPaperLabels(paper, columnId, transform(getPaperLabels(paper, columnId))), updatedAt: now });
   });
   await transactionDone(transaction);
-  return matchingPapers.map((paper) => paper.documentKey).filter(Boolean);
+  return matching.map((paper) => paper.documentKey).filter(Boolean);
+}
+
+// Every label column's labels, including the original column's legacy `group`.
+function collectPaperLabels(paper) {
+  const labels = {};
+  for (const columnId of Object.keys(paper?.labels || {})) {
+    labels[columnId] = getPaperLabels(paper, columnId);
+  }
+  labels[DEFAULT_LABEL_COLUMN_ID] = getPaperLabels(paper, DEFAULT_LABEL_COLUMN_ID);
+  return labels;
 }
 
 function getAllFromStore(db, storeName) {
@@ -340,12 +372,18 @@ function createPaperSummary({ paper, document, threads }) {
   const lastConversationAt = maxTime(nonEmptyThreads.map((thread) => thread.updatedAt));
   const updatedAt = maxTime([paper.updatedAt, document?.updatedAt, lastConversationAt]);
   const byteLength = Number(document?.byteLength) || 0;
-  const canonicalUrl = paper.canonicalUrl || document?.url || "";
+  // A saved local PDF opens in this device's viewer, whose extension ID can
+  // differ from the device that imported it.
+  const localPdfHash = getLocalPdfHashFromDocumentKey(paper.documentKey);
+  const canonicalUrl = localPdfHash
+    ? getLocalPdfViewerUrl(localPdfHash)
+    : paper.canonicalUrl || document?.url || "";
 
   return {
     documentKey: paper.documentKey || document?.documentKey || "",
     title: paper.title || document?.title || "Untitled paper",
     citationShortName: paper.citationShortName || "",
+    shortNote: normalizePaperShortNote(paper.shortNote).trim(),
     canonicalUrl,
     domain: getDomain(canonicalUrl),
     hasMarkdown: Boolean(document?.markdown),
@@ -369,6 +407,7 @@ function createPaperSummary({ paper, document, threads }) {
       ? null
       : normalizeLibraryPaperGroupTone(paper.groupTone, paper.group),
     labelState: normalizeLibraryPaperLabelState(paper.labelState),
+    labels: collectPaperLabels(paper),
     archivedAt: normalizeArchivedAt(paper.archivedAt)
   };
 }
@@ -388,7 +427,8 @@ function matchesLibraryFilters(paper, options) {
     paper.title,
     paper.canonicalUrl,
     paper.domain,
-    paper.group
+    paper.group,
+    paper.shortNote
   ].some((value) => String(value || "").toLowerCase().includes(query));
 }
 
@@ -400,11 +440,6 @@ function compareLibraryPapers(left, right, options) {
 
   const direction = options.sortDirection === "asc" ? 1 : -1;
   const sortBy = options.sortBy || "latestThread";
-
-  const starredComparison = compareBoolean(left.isStarred, right.isStarred);
-  if (starredComparison) {
-    return -starredComparison;
-  }
 
   if (sortBy === "title") {
     return compareTitle(left, right) * (options.sortDirection === "desc" ? -1 : 1);
@@ -441,14 +476,6 @@ function getSortValue(paper, sortBy) {
 
 function compareTitle(left, right) {
   return String(left.title || "").localeCompare(String(right.title || ""), undefined, { sensitivity: "base" });
-}
-
-function compareBoolean(left, right) {
-  if (Boolean(left) === Boolean(right)) {
-    return 0;
-  }
-
-  return Boolean(left) ? 1 : -1;
 }
 
 function compareNumber(left, right, direction = "asc") {
@@ -526,68 +553,6 @@ function matchesRecordScope(paper, scope) {
   return normalizeLibraryScope(scope) === LIBRARY_SCOPE_ARCHIVE ? archived : !archived;
 }
 
-function getLiveBoardPapers(papers) {
-  return (papers || []).filter((paper) => (
-    !normalizeArchivedAt(paper?.archivedAt) && normalizeLibraryPaperLabelState(paper?.labelState) !== "dead"
-  ));
-}
-
-function resolveLibraryPaperGroupTone(group, papers) {
-  const normalizedGroup = normalizeLibraryPaperGroup(group);
-  const usedTones = new Set();
-
-  for (const paper of papers || []) {
-    const paperGroup = normalizeLibraryPaperGroup(paper.group);
-    if (!paperGroup) {
-      continue;
-    }
-
-    const paperTone = normalizeLibraryPaperGroupTone(paper.groupTone, paperGroup);
-    if (paperGroup.toLowerCase() === normalizedGroup.toLowerCase()) {
-      return paperTone;
-    }
-    if (paperTone !== null) {
-      usedTones.add(paperTone);
-    }
-  }
-
-  for (let tone = 0; tone < PAPER_GROUP_TONE_COUNT; tone += 1) {
-    if (!usedTones.has(tone)) {
-      return tone;
-    }
-  }
-
-  return getStableGroupToneIndex(normalizedGroup);
-}
-
-function canCreateLibraryPaperGroup(group, papers) {
-  const normalizedGroup = normalizeLibraryPaperGroup(group);
-  if (!normalizedGroup) {
-    return true;
-  }
-
-  const groups = getDistinctLibraryPaperGroups(papers);
-  if (groups.some((existingGroup) => existingGroup.toLowerCase() === normalizedGroup.toLowerCase())) {
-    return true;
-  }
-
-  return groups.length < PAPER_GROUP_TONE_COUNT;
-}
-
-function canRenameLibraryPaperGroup(oldGroup, newGroup, livePapers, matchingPapers) {
-  const normalizedNewGroup = normalizeLibraryPaperGroup(newGroup);
-  const normalizedOldGroup = normalizeLibraryPaperGroup(oldGroup);
-  const groups = getDistinctLibraryPaperGroups(livePapers);
-  if (groups.some((group) => group.toLowerCase() === normalizedNewGroup.toLowerCase())) {
-    return true;
-  }
-  const replacesLiveGroup = matchingPapers.some((paper) => (
-    normalizeLibraryPaperLabelState(paper.labelState) !== "dead" &&
-    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedOldGroup.toLowerCase()
-  ));
-  return groups.length - (replacesLiveGroup ? 1 : 0) < PAPER_GROUP_TONE_COUNT;
-}
-
 function getDistinctLibraryPaperGroups(papers) {
   const groups = [];
   for (const paper of papers || []) {
@@ -598,22 +563,6 @@ function getDistinctLibraryPaperGroups(papers) {
     groups.push(group);
   }
   return groups;
-}
-
-function resolveRenamedLibraryPaperGroupTone(oldGroup, newGroup, papers) {
-  const normalizedOldGroup = normalizeLibraryPaperGroup(oldGroup);
-  const normalizedNewGroup = normalizeLibraryPaperGroup(newGroup);
-  const existingNewGroupPaper = (papers || []).find((paper) =>
-    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedNewGroup.toLowerCase()
-  );
-  if (existingNewGroupPaper) {
-    return normalizeLibraryPaperGroupTone(existingNewGroupPaper.groupTone, normalizedNewGroup);
-  }
-
-  const existingOldGroupPaper = (papers || []).find((paper) =>
-    normalizeLibraryPaperGroup(paper.group).toLowerCase() === normalizedOldGroup.toLowerCase()
-  );
-  return normalizeLibraryPaperGroupTone(existingOldGroupPaper?.groupTone, normalizedOldGroup);
 }
 
 function getStableGroupToneIndex(group) {

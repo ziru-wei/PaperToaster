@@ -1,4 +1,5 @@
 import { answerComparisonQuestion } from "../compare/comparison-answer.js";
+import { createAbstractAgentDocument } from "../ai/abstract-document.js";
 import { normalizeOpenableUrl, openPaperUrlInExistingTab } from "../browser/open-paper-tab.js";
 import { MessageType } from "../shared/messages.js";
 import {
@@ -10,9 +11,11 @@ import {
   setComparisonSessionTitle
 } from "../storage/comparison-store.js";
 import {
+  COMPARISON_AGENT_READING,
   DEFAULT_COMPARISON_PAPER_LIMIT,
   getComparisonSettings,
-  normalizeComparisonPaperLimit
+  normalizeComparisonPaperLimit,
+  saveComparisonSettings
 } from "../storage/comparison-settings-store.js";
 import { getEffectiveAiSettings, hasConfiguredAiProvider, usesDebugAiMode } from "../storage/ai-settings-store.js";
 import { getLibraryPaperSummary } from "../storage/library-store.js";
@@ -66,6 +69,27 @@ export function createComparativeReadingController({
   let titleSaveTimer = null;
   let sessionEpoch = 0;
   const scheduleNewQuestionAtTop = createQuestionScrollScheduler(elements.conversationThread);
+  let agentReading = COMPARISON_AGENT_READING.ABSTRACT;
+
+  // "Agent reads": abstracts (default) or full papers, saved for later comparisons.
+  const renderAgentReading = () => {
+    elements.comparisonReadMode?.querySelectorAll("[data-mode]").forEach((option) => {
+      option.setAttribute("aria-checked", String(option.dataset.mode === agentReading));
+    });
+  };
+  elements.comparisonReadMode?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-mode]");
+    if (!option || option.dataset.mode === agentReading) return;
+    agentReading = option.dataset.mode;
+    renderAgentReading();
+    saveComparisonSettings({ agentReading }).catch((error) => {
+      onDiagnostic?.(`Could not save what the agent reads: ${error.message || String(error)}`);
+    });
+  });
+  getComparisonSettings().then((settings) => {
+    agentReading = settings.agentReading;
+    renderAgentReading();
+  }).catch(() => {});
   const pendingTitlesBySession = new Map();
   const collapsedAssistantResponsesBySession = new Map();
 
@@ -374,11 +398,14 @@ export function createComparativeReadingController({
         usedShortNames.add(name.toLowerCase());
         return name;
       });
+      const readAbstracts = agentReading === COMPARISON_AGENT_READING.ABSTRACT;
       const citationContexts = await Promise.all(askPapers.map(async (paper, index) => {
-        const document = await getStoredDocumentByDocumentKey(paper.documentKey);
-        if (!document?.markdown || !document.agentDocumentRef) {
+        const storedDocument = await getStoredDocumentByDocumentKey(paper.documentKey);
+        if (!storedDocument?.markdown || !storedDocument.agentDocumentRef) {
           throw new Error(`${paper.title || `Paper ${index + 1}`} has no local agent document reference.`);
         }
+        // Abstract-only reading sends a document of just the opening and Abstract.
+        const document = readAbstracts ? await createAbstractAgentDocument(storedDocument) : storedDocument;
         if (!usesDebugAiMode(aiSettings)) {
           await ensureAgentDocument({
             endpoint: aiSettings.localEndpoint,

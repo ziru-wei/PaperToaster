@@ -5,6 +5,9 @@ import {
   CONVERSATION_THREAD_STORE,
   DOCUMENT_ALIAS_STORE,
   DOCUMENT_STORE,
+  PAPER_FIGURE_STORE,
+  PAPER_METADATA_STORE,
+  LOCAL_PDF_STORE,
   PAPER_NOTE_ASSET_STORE,
   PAPER_NOTE_STORE,
   PAPER_STORE,
@@ -13,6 +16,7 @@ import {
   transactionDone
 } from "./paper-database.js";
 import { getAiSettings } from "./ai-settings-store.js";
+import { getLocalPdfHashFromDocumentKey } from "./document-key.js";
 import { deleteAgentDocument } from "../ai/local-agent-document-client.js";
 import { deleteLocalAgentSessions } from "../ai/local-agent-session-client.js";
 
@@ -32,6 +36,9 @@ const DOCUMENT_KEY_STORES = [
 
 const DELETE_TRANSACTION_STORES = [
   ...DOCUMENT_KEY_STORES,
+  PAPER_FIGURE_STORE,
+  PAPER_METADATA_STORE,
+  LOCAL_PDF_STORE,
   COMPARISON_SESSION_STORE,
   COMPARISON_MESSAGE_STORE
 ];
@@ -146,6 +153,11 @@ export async function deleteLibraryRecords({ documentKeys = [], comparisonIds = 
     deleteRecordsByDocumentKey(transaction.objectStore(DOCUMENT_ALIAS_STORE), documentKey);
     deleteRecordsByDocumentKey(transaction.objectStore(PAPER_NOTE_STORE), documentKey);
     deleteRecordsByDocumentKey(transaction.objectStore(PAPER_NOTE_ASSET_STORE), documentKey);
+    transaction.objectStore(PAPER_FIGURE_STORE).delete(documentKey);
+    transaction.objectStore(PAPER_METADATA_STORE).delete(documentKey);
+    // This device's saved copy goes with the paper; the synced Drive copy stays as a backup.
+    const localPdfHash = getLocalPdfHashFromDocumentKey(documentKey);
+    if (localPdfHash) transaction.objectStore(LOCAL_PDF_STORE).delete(localPdfHash);
   }
   pruneComparisonRecordsForDeletedPapers(transaction, new Set(keys));
 

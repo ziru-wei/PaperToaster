@@ -1,3 +1,4 @@
+import { DEFAULT_LABEL_COLUMN_ID, getPaperLabels } from "./label-columns.js";
 import { prepareAnnotatedMarkdownForExport } from "../markdown/highlight-markdown.js";
 
 const LEXICAL_BOLD_FORMAT = 1;
@@ -12,14 +13,14 @@ export function createLibraryRecordsCsv(archive, selection = {}) {
     ...comparisonIds.map((comparisonId) => createComparisonRow(records, comparisonId)).filter(Boolean)
   ];
   const maximumQuestionCount = rows.reduce((maximum, row) => Math.max(maximum, row.questionAnswers.length), 0);
-  const headers = ["title", "added time", "isComparativeReading", "label", "note"];
+  const headers = ["title", "added time", "isComparativeReading", "label", "short note", "note"];
   for (let index = 1; index <= maximumQuestionCount; index += 1) {
     headers.push(`q_${index}`, `a_${index}`);
   }
 
   const csvRows = [headers];
   for (const row of rows) {
-    const cells = [row.title, row.addedTime, String(row.isComparativeReading), row.label, row.note];
+    const cells = [row.title, row.addedTime, String(row.isComparativeReading), row.label, row.shortNote, row.note];
     for (const unit of row.questionAnswers) {
       cells.push(unit.question, unit.answer);
     }
@@ -44,7 +45,9 @@ function createPaperRow(records, documentKey) {
     title: paper?.title || document?.title || "Untitled paper",
     addedTime: formatTimestamp(document?.parsedAt || paper?.createdAt),
     isComparativeReading: false,
-    label: String(paper?.group || ""),
+    // Every label the paper has in the original Label column (it can have several).
+    label: getPaperLabels(paper, DEFAULT_LABEL_COLUMN_ID).join(", "),
+    shortNote: String(paper?.shortNote || "").trim(),
     note: exportPaperNote(note?.document, note?.plainText || paper?.userNote || ""),
     questionAnswers: collectQuestionAnswers(
       (records.conversationMessages || []).filter((message) => message.documentKey === documentKey),
@@ -63,6 +66,7 @@ function createComparisonRow(records, comparisonId) {
     addedTime: formatTimestamp(session.createdAt),
     isComparativeReading: true,
     label: "",
+    shortNote: "",
     note: "",
     questionAnswers: collectQuestionAnswers(
       (records.comparisonMessages || []).filter((message) => message.comparisonId === comparisonId),

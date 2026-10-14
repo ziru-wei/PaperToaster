@@ -52,6 +52,7 @@ const elements = {
   refreshChatModels: document.querySelector("#refreshChatModels"),
   chatModelList: document.querySelector("#chatModelList"),
   comparisonPaperLimit: document.querySelector("#comparisonPaperLimit"),
+  comparisonAgentReading: document.querySelector("#comparisonAgentReading"),
   saveComparisonSettings: document.querySelector("#saveComparisonSettings"),
   comparisonSettingsStatus: document.querySelector("#comparisonSettingsStatus"),
   addPreset: document.querySelector("#addPreset"),
@@ -175,6 +176,7 @@ async function loadComparisonSettings() {
   try {
     const settings = await getComparisonSettings();
     elements.comparisonPaperLimit.value = String(settings.paperLimit);
+    elements.comparisonAgentReading.value = settings.agentReading;
   } catch (error) {
     setComparisonSettingsStatus(error.message || String(error), true);
   }
@@ -248,9 +250,13 @@ async function saveComparativeReadingSettings() {
       throw new Error(`Maximum papers must be an integer of at least ${MIN_COMPARISON_PAPERS}.`);
     }
 
-    const settings = await saveComparisonSettings({ paperLimit: rawLimit });
+    const settings = await saveComparisonSettings({
+      paperLimit: rawLimit,
+      agentReading: elements.comparisonAgentReading.value
+    });
     elements.comparisonPaperLimit.value = String(settings.paperLimit);
-    setComparisonSettingsStatus(`Comparative Reading limit saved as ${settings.paperLimit} papers.`);
+    elements.comparisonAgentReading.value = settings.agentReading;
+    setComparisonSettingsStatus(`Saved: up to ${settings.paperLimit} papers; the agent reads ${settings.agentReading === "full" ? "full papers" : "abstracts only"}.`);
   } catch (error) {
     setComparisonSettingsStatus(error.message || String(error), true);
   }

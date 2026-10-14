@@ -1,5 +1,5 @@
 export const DB_NAME = "pdf-ai-inspector";
-export const DB_VERSION = 8;
+export const DB_VERSION = 11;
 export const SYNC_META_STORE = "googleSyncMetadata";
 
 export const PAPER_STORE = "papers";
@@ -11,18 +11,54 @@ export const COMPARISON_SESSION_STORE = "comparisonSessions";
 export const COMPARISON_MESSAGE_STORE = "comparisonMessages";
 export const PAPER_NOTE_STORE = "paperNotes";
 export const PAPER_NOTE_ASSET_STORE = "paperNoteAssets";
+// Figure 1 crops for dashboard covers; derived from the PDF, so not backed up or synced.
+export const PAPER_FIGURE_STORE = "paperFigures";
+// Authors, year, venue and citation counts from public APIs; a refreshable local cache like figures.
+export const PAPER_METADATA_STORE = "paperMetadata";
+// Saved copies of local PDFs, keyed by SHA-256. Synced as separate Drive files,
+// not inside the library replica.
+export const LOCAL_PDF_STORE = "pdfFiles";
 
 const OBSOLETE_STORES = ["labels", "paperLabels"];
 
 let databasePromise = null;
+const outdatedListeners = new Set();
+let outdatedVersion = 0;
+
+// An unpacked build serves new files at once, so a page reloaded after an upgrade can
+// raise the schema while the side panel or service worker still runs the old code.
+// Schema upgrades only add stores, so an outdated page keeps working on the newer
+// database and only asks the person to reload when it suits them.
+export function onPaperDatabaseOutdated(listener) {
+  outdatedListeners.add(listener);
+  if (outdatedVersion) listener(outdatedVersion);
+  return () => outdatedListeners.delete(listener);
+}
+
+function reportOutdated(version) {
+  if (!version || version <= DB_VERSION || version <= outdatedVersion) return;
+  outdatedVersion = version;
+  outdatedListeners.forEach((listener) => listener(version));
+}
 
 export function openPaperDatabase() {
   if (databasePromise) {
     return databasePromise;
   }
 
-  databasePromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+  databasePromise = openAtVersion(DB_VERSION).catch((error) => {
+    if (error?.name !== "VersionError") throw error;
+    return openAtVersion(undefined);
+  }).catch((error) => {
+    databasePromise = null;
+    throw error;
+  });
+  return databasePromise;
+}
+
+function openAtVersion(version) {
+  return new Promise((resolve, reject) => {
+    const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -77,21 +113,26 @@ export function openPaperDatabase() {
       const paperNoteAssets = ensureStore(db, transaction, PAPER_NOTE_ASSET_STORE, { keyPath: "assetId" });
       ensureIndex(paperNoteAssets, "byDocumentKey", "documentKey", { unique: false });
 
+      ensureStore(db, transaction, PAPER_FIGURE_STORE, { keyPath: "documentKey" });
+      ensureStore(db, transaction, PAPER_METADATA_STORE, { keyPath: "documentKey" });
+      ensureStore(db, transaction, LOCAL_PDF_STORE, { keyPath: "sha256" });
+
       backfillSavedDocumentKeys(transaction);
     };
 
     request.onsuccess = () => {
-      request.result.onversionchange = () => {
-        request.result.close();
+      const db = request.result;
+      db.onversionchange = (event) => {
+        db.close();
         databasePromise = null;
+        reportOutdated(event.newVersion);
       };
-      resolve(request.result);
+      reportOutdated(db.version);
+      resolve(db);
     };
     request.onerror = () => reject(request.error || new Error("Could not open paper database."));
     request.onblocked = () => reject(new Error("Paper database upgrade is blocked by another extension view."));
   });
-
-  return databasePromise;
 }
 
 function backfillSavedDocumentKeys(transaction) {

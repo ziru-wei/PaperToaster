@@ -1,12 +1,21 @@
 import { MessageType } from "../shared/messages.js";
 import {
-  deleteLibraryPaperGroup,
+  deleteLibraryPaperLabel,
   getLibraryPaperSummary,
   listLibraryPaperGroups,
-  renameLibraryPaperGroup,
-  setLibraryPaperGroup,
+  renameLibraryPaperLabel,
+  setLibraryPaperLabels,
   setLibraryPaperStarred
 } from "../storage/library-store.js";
+import {
+  getPaperLabels,
+  normalizeLabelColumns,
+  readLabelColumns,
+  withLabelTone,
+  withTonesForNewLabels,
+  withoutLabelTone,
+  writeLabelColumns
+} from "../storage/label-columns.js";
 import {
   createPaperLabelControl,
   getPaperLabelOptions
@@ -61,7 +70,7 @@ export function createPaperActionsController({
 
     starElement.hidden = Boolean(paper?.archivedAt);
     setDocumentStarState(isStarred, Boolean(paper?.archivedAt));
-    renderDocumentLabel(currentDocument, paper, papers);
+    await renderDocumentLabel(currentDocument, paper, papers);
   }
 
   async function refresh() {
@@ -98,55 +107,92 @@ export function createPaperActionsController({
     }
   }
 
-  function renderDocumentLabel(document, paper, papers) {
-    if (!document?.documentKey) {
+  // Every label column for this paper, each with its own multi-select control.
+  async function renderDocumentLabel(paperDocument, paper, papers) {
+    if (!paperDocument?.documentKey) {
       labelElement.replaceChildren();
       return;
     }
 
+    const settings = await readLabelColumns().catch(() => normalizeLabelColumns());
+    if (getCurrentDocument()?.documentKey !== paperDocument.documentKey) {
+      return;
+    }
     const labelPaper = {
-      documentKey: document.documentKey,
-      canonicalUrl: paper?.canonicalUrl || document.url || "",
-      title: paper?.title || document.title || "",
-      titleSource: paper?.titleSource || document.titleSource || "",
-      group: paper?.group || document.group || "",
-      groupTone: paper?.groupTone ?? document.groupTone ?? null,
-      labelState: paper?.labelState || document.labelState || "live"
+      documentKey: paperDocument.documentKey,
+      canonicalUrl: paper?.canonicalUrl || paperDocument.url || "",
+      title: paper?.title || paperDocument.title || "",
+      titleSource: paper?.titleSource || paperDocument.titleSource || "",
+      group: paper?.group || paperDocument.group || "",
+      groupTone: paper?.groupTone ?? paperDocument.groupTone ?? null,
+      labels: paper?.labels || {},
+      labelState: paper?.labelState || paperDocument.labelState || "live"
     };
     const scope = paper?.archivedAt ? "archive" : "board";
-    const gray = scope === "archive" || labelPaper.labelState === "dead";
-    const groupOptions = getPaperLabelOptions(papers, { appearance: scope === "archive" ? "gray" : "colored" });
-    labelElement.replaceChildren(createPaperLabelControl({
-      paper: labelPaper,
-      groupOptions,
-      onUpdatePaperGroup: updatePaperGroup,
-      onRenamePaperGroup: renamePaperGroup,
-      onDeletePaperGroup: deletePaperGroup,
-      appearance: gray ? "gray" : "colored",
-      enforceLimit: scope !== "archive"
+    const appearance = scope === "archive" || labelPaper.labelState === "dead" ? "gray" : "colored";
+    labelElement.classList.toggle("multiple-label-columns", settings.columns.length > 1);
+    labelElement.replaceChildren(...settings.columns.map((column) => {
+      const wrapper = document.createElement("span");
+      wrapper.className = "document-label-column";
+      if (settings.columns.length > 1) {
+        const name = document.createElement("span");
+        name.className = "document-label-column-name";
+        name.textContent = column.name;
+        wrapper.append(name);
+      }
+      wrapper.append(createPaperLabelControl({
+        paper: labelPaper,
+        columnId: column.id,
+        columnName: column.name,
+        labels: getPaperLabels(labelPaper, column.id),
+        options: getPaperLabelOptions(papers, { columnId: column.id, settings, appearance }),
+        appearance,
+        onChangeLabels: (labels) => changeLabels(labelPaper, column.id, labels, papers, settings),
+        onRenameLabel: (from, to) => renameLabel(column.id, from, to, settings),
+        onDeleteLabel: (name) => deleteLabel(column.id, name, settings),
+        onSetLabelTone: (name, tone) => writeLabelColumns(withLabelTone(settings, column.id, name, tone)).then(refresh)
+      }));
+      return wrapper;
     }));
   }
 
-  async function updatePaperGroup(paper, group) {
+  function getScope() {
+    return getCurrentDocument()?.archivedAt ? "archive" : "board";
+  }
+
+  // Label edits apply one at a time, so quick toggles never overwrite each other.
+  let labelChangeChain = Promise.resolve();
+  function changeLabels(...args) {
+    labelChangeChain = labelChangeChain.catch(() => {}).then(() => applyLabelChange(...args));
+    return labelChangeChain;
+  }
+
+  async function applyLabelChange(paper, columnId, labels, papers) {
     try {
-      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
-      await setLibraryPaperGroup(paper.documentKey, group, {
+      const settings = await readLabelColumns();
+      const existing = [...new Set(papers.flatMap((item) => getPaperLabels(item, columnId)))];
+      const nextSettings = withTonesForNewLabels(settings, columnId, labels, existing);
+      if (nextSettings !== settings) await writeLabelColumns(nextSettings);
+      await setLibraryPaperLabels(paper.documentKey, columnId, labels, {
         canonicalUrl: paper.canonicalUrl,
         title: paper.title,
         titleSource: paper.titleSource
-      }, { scope });
+      });
       notifyLibraryPaperActivityChanged(paper.documentKey);
       await refresh();
     } catch (error) {
-      onError?.(`Could not update label.\n${error.message || String(error)}`);
+      onError?.(`Could not update labels.\n${error.message || String(error)}`);
       throw error;
     }
   }
 
-  async function renamePaperGroup(oldGroup, newGroup) {
+  async function renameLabel(columnId, from, to, settings) {
     try {
-      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
-      const documentKeys = await renameLibraryPaperGroup(oldGroup, newGroup, { scope });
+      const documentKeys = await renameLibraryPaperLabel(columnId, from, to, { scope: getScope() });
+      const tone = settings.colors?.[columnId]?.[from.toLowerCase()];
+      if (Number.isInteger(tone)) {
+        await writeLabelColumns(withLabelTone(withoutLabelTone(settings, columnId, from), columnId, to, tone));
+      }
       documentKeys.forEach(notifyLibraryPaperActivityChanged);
       await refresh();
     } catch (error) {
@@ -155,10 +201,10 @@ export function createPaperActionsController({
     }
   }
 
-  async function deletePaperGroup(group) {
+  async function deleteLabel(columnId, name, settings) {
     try {
-      const scope = getCurrentDocument()?.archivedAt ? "archive" : "board";
-      const documentKeys = await deleteLibraryPaperGroup(group, { scope });
+      const documentKeys = await deleteLibraryPaperLabel(columnId, name, { scope: getScope() });
+      await writeLabelColumns(withoutLabelTone(settings, columnId, name));
       documentKeys.forEach(notifyLibraryPaperActivityChanged);
       await refresh();
     } catch (error) {

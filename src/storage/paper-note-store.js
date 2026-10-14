@@ -6,6 +6,7 @@ import {
   requestToPromise,
   transactionDone
 } from "./paper-database.js";
+import { normalizePaperShortNote } from "./library-store.js";
 
 const MAX_PAPER_NOTE_CHARS = 50000;
 const NOTE_DOCUMENT_VERSION = 3;
@@ -26,7 +27,10 @@ export async function getPaperUserNote(documentKey) {
   const assets = normalizePaperNoteAssets(storedAssets, key);
   const document = await normalizeLexicalEditorState(storedNote?.document || paper?.userNote || "", assets);
   const updatedAt = Number(storedNote?.updatedAt || paper?.userNoteUpdatedAt) || null;
-  return { document, assets: [], text: getLexicalPlainText(document), updatedAt };
+  return {
+    document, assets: [], text: getLexicalPlainText(document), updatedAt,
+    shortNote: normalizePaperShortNote(paper?.shortNote)
+  };
 }
 
 export async function savePaperUserNote(documentKey, noteDocument) {
@@ -67,36 +71,6 @@ export async function savePaperUserNote(documentKey, noteDocument) {
   return { document, text: plainText, updatedAt: now };
 }
 
-export function normalizePaperUserNoteDocument(value, options = {}) {
-  const assetIds = options.assetIds instanceof Set ? options.assetIds : null;
-  const blocks = Array.isArray(value?.blocks) ? value.blocks : [{ type: "text", text: typeof value === "string" ? value : "" }];
-  const normalizedBlocks = [];
-  let remainingText = MAX_PAPER_NOTE_CHARS;
-  for (const block of blocks) {
-    if (block?.type === "image") {
-      const assetId = String(block.assetId || "").trim();
-      if (!assetId || (assetIds && !assetIds.has(assetId))) continue;
-      normalizedBlocks.push({
-        type: "image", assetId,
-        alt: String(block.alt || "").replace(/\s+/g, " ").trim().slice(0, 240),
-        widthRatio: clamp(Number(block.widthRatio), 0.15, 1, 0.72)
-      });
-      continue;
-    }
-    const text = normalizePaperUserNote(block?.text).slice(0, remainingText);
-    remainingText -= text.length;
-    const previous = normalizedBlocks.at(-1);
-    if (previous?.type === "text") previous.text += text;
-    else normalizedBlocks.push({ type: "text", text });
-  }
-  if (!normalizedBlocks.length || normalizedBlocks.every((block) => block.type === "image")) {
-    normalizedBlocks.unshift({ type: "text", text: "" });
-  }
-  const plainText = normalizedBlocks.filter((block) => block.type === "text")
-    .map((block) => block.text).join("\n").slice(0, MAX_PAPER_NOTE_CHARS);
-  return { version: NOTE_DOCUMENT_VERSION, blocks: normalizedBlocks, plainText };
-}
-
 export function normalizePaperUserNote(text) {
   return String(text || "").replace(/\r\n?/g, "\n").slice(0, MAX_PAPER_NOTE_CHARS);
 }
@@ -116,7 +90,7 @@ function normalizePaperNoteAssets(assets, documentKey) {
 
 function createEmptyPaperNote() {
   const document = createLexicalEditorState([]);
-  return { document, assets: [], text: "", updatedAt: null };
+  return { document, assets: [], text: "", updatedAt: null, shortNote: "" };
 }
 
 async function normalizeLexicalEditorState(value, assets = []) {

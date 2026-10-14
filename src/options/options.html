@@ -159,7 +159,7 @@
         <div class="section-header">
           <div>
             <h2>Comparative Reading</h2>
-            <p>Set how many papers can be included in one comparison.</p>
+            <p>Set how many papers can be included in one comparison, and what the agent reads from each.</p>
           </div>
           <div class="actions">
             <button id="saveComparisonSettings" type="button">Save</button>
@@ -169,6 +169,13 @@
           <label>
             <span>Maximum papers</span>
             <input id="comparisonPaperLimit" type="number" min="5" step="1" inputmode="numeric">
+          </label>
+          <label>
+            <span>Agent reads</span>
+            <select id="comparisonAgentReading">
+              <option value="abstract">Abstracts only (faster)</option>
+              <option value="full">Full papers</option>
+            </select>
           </label>
         </div>
         <div id="comparisonSettingsStatus" class="status"></div>

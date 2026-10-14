@@ -12,6 +12,8 @@ import {
 } from "../storage/chat-store.js";
 import { listSavedComparisonQuestionAnswerUnitsForDocument } from "../storage/comparison-store.js";
 import { getPaperUserNote, savePaperUserNote } from "../storage/paper-note-store.js";
+import { getLibraryPaperShortNote, setLibraryPaperShortNote } from "../storage/library-store.js";
+import { notifyLibraryPaperActivityChanged } from "./paper-actions-controller.js";
 import { setConversationAnswerSaved } from "../storage/saved-qa-store.js";
 import {
   collapseOpenConversationSelections,
@@ -20,7 +22,8 @@ import {
   renderSavedQuestionAnswerUnits,
   renderConversationMessages,
   toggleConversationSelection,
-  updatePendingConversationMessageText
+  updatePendingConversationMessageText,
+  updateRenderedPaperShortNote
 } from "./conversation-message-renderer.js";
 import {
   applyMarkdownCircle,
@@ -65,6 +68,9 @@ export function createConversationPanelController({
   let paperUserNoteDocument = null;
   let paperUserNoteSaveTimer = null;
   let pendingPaperUserNote = null;
+  let paperShortNote = "";
+  let paperShortNoteSaveTimer = null;
+  let pendingPaperShortNote = null;
   let savedQaPerPaperLimit = 20;
   const scheduleNewQuestionAtTop = createQuestionScrollScheduler(threadElement);
   let allAssistantResponsesExpanded = false;
@@ -87,7 +93,7 @@ export function createConversationPanelController({
     collapseOpenConversationSelections(threadElement);
   });
   window.addEventListener("pagehide", () => {
-    flushPaperUserNoteSave().catch((error) => {
+    flushPaperNoteSaves().catch((error) => {
       onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
     });
   });
@@ -116,7 +122,7 @@ export function createConversationPanelController({
     }
 
     await persist();
-    await flushPaperUserNoteSave().catch((error) => {
+    await flushPaperNoteSaves().catch((error) => {
       onDiagnostic?.(`Paper note save failed: ${error.message || String(error)}`);
     });
     if (requestId !== documentRequestId) {
@@ -138,6 +144,7 @@ export function createConversationPanelController({
       savedCollapsedUnitKeys = new Set();
       savedQaCollapseInitialized = false;
       paperUserNoteDocument = null;
+      paperShortNote = "";
       threadWheel.close();
       render();
       scrollToLatest.update();
@@ -172,6 +179,7 @@ export function createConversationPanelController({
     applyThread(thread);
     resetAssistantResponsesCollapsed();
     paperUserNoteDocument = storedPaperUserNote.document;
+    paperShortNote = storedPaperUserNote.shortNote;
     await refreshThreadList(requestId);
     if (savedViewActive) {
       await loadSavedQuestionAnswerUnits(requestId);
@@ -336,6 +344,7 @@ export function createConversationPanelController({
       render({ scrollToBottom: false });
     }
     if (nextSaved) onMessageSaved?.();
+    notifyLibraryPaperActivityChanged(threadDocumentKey);
     await refreshThreadList();
     if (savedViewActive) {
       await loadSavedQuestionAnswerUnits();
@@ -892,7 +901,7 @@ export function createConversationPanelController({
     if (!threadUrl) return true;
     if (messages.some((message) => message.pending)) return false;
     await persist();
-    await flushPaperUserNoteSave();
+    await flushPaperNoteSaves();
     const requestId = documentRequestId;
     const [thread, note] = await Promise.all([
       activeThreadId ? getStoredChatThreadById(threadUrl, activeThreadId) : getStoredChatThread(threadUrl),
@@ -901,6 +910,7 @@ export function createConversationPanelController({
     if (requestId !== documentRequestId) return true;
     applyThread(thread || { messages: [], threadId: "" });
     paperUserNoteDocument = note.document;
+    paperShortNote = note.shortNote;
     await refreshThreadList(requestId);
     if (savedViewActive) await loadSavedQuestionAnswerUnits(requestId);
     render({ scrollToBottom: false });
@@ -979,6 +989,54 @@ export function createConversationPanelController({
     }
   }
 
+  function updatePaperShortNote(value) {
+    paperShortNote = value;
+    pendingPaperShortNote = {
+      documentKey: threadDocumentKey,
+      value
+    };
+    window.clearTimeout(paperShortNoteSaveTimer);
+    paperShortNoteSaveTimer = window.setTimeout(() => {
+      flushPaperShortNoteSave().catch((error) => {
+        onDiagnostic?.(`Paper short note save failed: ${error.message || String(error)}`);
+      });
+    }, 300);
+  }
+
+  async function flushPaperShortNoteSave() {
+    window.clearTimeout(paperShortNoteSaveTimer);
+    paperShortNoteSaveTimer = null;
+    const pending = pendingPaperShortNote;
+    if (!pending?.documentKey) {
+      return;
+    }
+
+    await setLibraryPaperShortNote(pending.documentKey, pending.value);
+    if (pendingPaperShortNote === pending) {
+      pendingPaperShortNote = null;
+    }
+    notifyLibraryPaperActivityChanged(pending.documentKey);
+  }
+
+  async function flushPaperNoteSaves() {
+    await Promise.all([flushPaperUserNoteSave(), flushPaperShortNoteSave()]);
+  }
+
+  async function refreshPaperShortNote() {
+    if (!threadDocumentKey || pendingPaperShortNote) {
+      return;
+    }
+
+    const documentKey = threadDocumentKey;
+    const shortNote = await getLibraryPaperShortNote(documentKey);
+    if (documentKey !== threadDocumentKey || pendingPaperShortNote) {
+      return;
+    }
+
+    paperShortNote = shortNote;
+    updateRenderedPaperShortNote(threadElement, shortNote);
+  }
+
   async function jumpToSavedQuestionAnswerUnit(unit) {
     if (unit?.sourceType === "comparison") {
       await onJumpToComparisonUnit?.(unit);
@@ -1045,6 +1103,14 @@ export function createConversationPanelController({
           });
         },
         onUserNoteError: (error) => onDiagnostic?.(`Paper note image skipped: ${error.message || String(error)}`),
+        shortNote: paperShortNote,
+        onShortNoteChange: updatePaperShortNote,
+        onShortNoteCommit: (value) => {
+          updatePaperShortNote(value);
+          return flushPaperShortNoteSave().catch((error) => {
+            onDiagnostic?.(`Paper short note save failed: ${error.message || String(error)}`);
+          });
+        },
         collapsedUnitKeys: savedCollapsedUnitKeys,
         onJumpToUnit: jumpToSavedQuestionAnswerUnit,
         onNavigateCitation,
@@ -1234,6 +1300,7 @@ export function createConversationPanelController({
   return {
     setDocumentUrl,
     refreshFromSync,
+    refreshPaperShortNote,
     appendMessage,
     appendTransientMessage,
     updateTransientMessage,

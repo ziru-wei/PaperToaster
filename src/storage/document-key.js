@@ -22,7 +22,49 @@ export function getDocumentMemoryKey(url) {
   return normalizedUrl ? `url:${normalizedUrl}` : "";
 }
 
+// Local PDFs are read from a saved copy shown by the extension's viewer page,
+// so their identity is the content hash, not a file path or extension ID.
+export const LOCAL_PDF_VIEWER_PATH = "src/viewer/pdf-viewer.html";
+const LOCAL_PDF_HASH_PATTERN = /^[0-9a-f]{64}$/;
+
+export function getLocalPdfViewerUrl(sha256) {
+  const base = globalThis.chrome?.runtime?.getURL?.(LOCAL_PDF_VIEWER_PATH) || `/${LOCAL_PDF_VIEWER_PATH}`;
+  return `${base}?pdf=${sha256}`;
+}
+
+export function getLocalPdfHashFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "chrome-extension:" || !parsed.pathname.endsWith(`/${LOCAL_PDF_VIEWER_PATH}`)) return "";
+    const hash = parsed.searchParams.get("pdf") || "";
+    return LOCAL_PDF_HASH_PATTERN.test(hash) ? hash : "";
+  } catch {
+    return "";
+  }
+}
+
+export function getLocalPdfHashFromDocumentKey(documentKey) {
+  const hash = String(documentKey || "").match(/^pdf:([0-9a-f]{64})$/)?.[1] || "";
+  return hash;
+}
+
+export function isLocalFileUrl(url) {
+  try {
+    return new URL(url).protocol === "file:";
+  } catch {
+    return false;
+  }
+}
+
 export function extractCanonicalDocumentId(url) {
+  const localPdfHash = getLocalPdfHashFromUrl(url);
+  if (localPdfHash) {
+    return {
+      type: "pdf",
+      value: localPdfHash
+    };
+  }
+
   const doi = extractDoi(url);
   if (doi) {
     return {

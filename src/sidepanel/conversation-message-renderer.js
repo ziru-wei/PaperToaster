@@ -379,12 +379,60 @@ export function renderSavedQuestionAnswerUnits(threadElement, units, options = {
 }
 
 function createPaperUserNoteElement(options) {
-  return createPaperNoteEditor({
+  const note = createPaperNoteEditor({
     noteDocument: options.userNoteDocument,
     onChange: options.onUserNoteChange,
     onCommit: options.onUserNoteCommit,
     onError: options.onUserNoteError
   });
+  note.prepend(createPaperShortNoteCallout(options));
+  return note;
+}
+
+// The short note sits in a callout pinned above the notes, marked with the same
+// sticky-note icon the dashboard uses for it.
+function createPaperShortNoteCallout(options) {
+  const callout = document.createElement("div");
+  callout.className = "saved-paper-short-note-callout";
+  const icon = document.createElement("span");
+  icon.className = "saved-paper-short-note-icon";
+  icon.setAttribute("aria-hidden", "true");
+  callout.append(icon, createPaperShortNoteElement(options));
+  return callout;
+}
+
+function createPaperShortNoteElement(options) {
+  const input = document.createElement("textarea");
+  input.className = "saved-paper-short-note";
+  input.value = options.shortNote || "";
+  input.placeholder = "One-line summary";
+  input.maxLength = 500;
+  input.rows = 1;
+  input.spellcheck = false;
+  input.setAttribute("aria-label", "Short note for this paper");
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+  input.addEventListener("input", () => {
+    if (/[\r\n]/.test(input.value)) {
+      const caret = input.selectionStart;
+      input.value = input.value.replace(/[\r\n]+/g, " ");
+      input.setSelectionRange(caret, caret);
+    }
+    options.onShortNoteChange?.(input.value);
+  });
+  input.addEventListener("blur", () => options.onShortNoteCommit?.(input.value));
+  return input;
+}
+
+export function updateRenderedPaperShortNote(threadElement, shortNote) {
+  const input = threadElement.querySelector(".saved-paper-short-note");
+  if (input && document.activeElement !== input && input.value !== shortNote) {
+    input.value = shortNote;
+  }
 }
 
 function compareSavedQuestionAnswerUnitItemsByAge(left, right) {

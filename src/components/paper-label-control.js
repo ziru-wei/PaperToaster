@@ -1,41 +1,106 @@
-const PAPER_LABEL_TONE_COUNT = 5;
+import {
+  DEFAULT_LABEL_COLUMN_ID,
+  LABEL_TONE_COUNT,
+  getLabelTone,
+  getPaperLabels,
+  normalizeLabelList,
+  normalizeLabelName
+} from "../storage/label-columns.js";
+
+// A multi-select label property. The button shows the paper's labels as pills;
+// the editor toggles labels on and off and stays open, like Notion's
+// multi-select. Enter switches to edit mode to create, rename, recolor or
+// delete labels.
+
+export const normalizePaperLabel = normalizeLabelName;
+
+export function getPaperLabelToneClass(tone, appearance = "colored") {
+  return appearance === "gray" ? "paper-group-gray" : `paper-group-tone-${tone}`;
+}
+
+// Every label used in a column across papers, with its color.
+export function getPaperLabelOptions(papers, { columnId = DEFAULT_LABEL_COLUMN_ID, settings = null, appearance = "colored" } = {}) {
+  const options = new Map();
+  for (const paper of papers || []) {
+    for (const name of getPaperLabels(paper, columnId)) {
+      const key = name.toLowerCase();
+      if (options.has(key)) continue;
+      const legacyTone = columnId === DEFAULT_LABEL_COLUMN_ID ? paper.groupTone : null;
+      const tone = getLabelTone(settings, columnId, name, legacyTone);
+      options.set(key, { name, tone, toneClass: getPaperLabelToneClass(tone, appearance) });
+    }
+  }
+  return [...options.values()].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+}
+
+// A column whose value is just "yes" or "no" reads as a check or a cross.
+const YES_LABELS = new Set(["yes", "y", "true", "是"]);
+const NO_LABELS = new Set(["no", "n", "false", "否"]);
+
+export function getYesNoLabelValue(labels) {
+  if (labels.length !== 1) return null;
+  const value = labels[0].toLowerCase();
+  if (YES_LABELS.has(value)) return true;
+  if (NO_LABELS.has(value)) return false;
+  return null;
+}
 
 export function createPaperLabelControl({
   paper,
-  onUpdatePaperGroup,
-  onRenamePaperGroup,
-  onDeletePaperGroup,
-  groupOptions = [],
+  columnId = DEFAULT_LABEL_COLUMN_ID,
+  columnName = "Label",
+  labels = getPaperLabels(paper, columnId),
+  options = [],
   appearance = "colored",
-  enforceLimit = true
+  // "card" shows "<column name> ✓"; "list" shows only the mark.
+  yesNoDisplay = "card",
+  onChangeLabels,
+  onRenameLabel,
+  onDeleteLabel,
+  onSetLabelTone
 }) {
-  const group = normalizePaperLabel(paper.group);
+  const selected = normalizeLabelList(labels);
   const control = document.createElement("div");
   control.className = "paper-group-control";
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = [
-    "paper-group-button",
-    appearance === "gray" ? "paper-group-gray" : "",
-    appearance !== "gray" && group ? getPaperGroupToneClass(group, groupOptions, paper.groupTone) : ""
-  ].filter(Boolean).join(" ");
-  button.classList.toggle("empty", !group);
-  button.textContent = group || "+";
-  button.setAttribute("aria-label", group ? `Edit label: ${group}` : "Add label");
+  button.className = "paper-group-button";
+  button.dataset.labelAnchor = `${paper?.documentKey || ""}|${columnId}`;
+  button.classList.toggle("empty", !selected.length);
+  const yesNo = getYesNoLabelValue(selected);
+  if (yesNo !== null) {
+    button.classList.add("yes-no", yesNo ? "yes" : "no");
+    if (yesNoDisplay === "card") {
+      const name = document.createElement("span");
+      name.className = "paper-group-yes-no-name";
+      name.textContent = columnName;
+      button.append(name);
+    }
+    const mark = document.createElement("span");
+    mark.className = "paper-group-yes-no-mark";
+    mark.setAttribute("aria-hidden", "true");
+    button.append(mark);
+  } else {
+    for (const name of selected) {
+      button.append(createLabelPill(name, findOption(options, name), appearance));
+    }
+  }
+  button.title = selected.length ? `${columnName}: ${selected.join(", ")}` : `Add ${columnName}`;
+  button.setAttribute("aria-label", selected.length ? `Edit ${columnName}: ${selected.join(", ")}` : `Add ${columnName}`);
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     openPaperLabelEditor({
-      control,
       button,
-      paper,
-      group,
-      groupOptions,
-      onUpdatePaperGroup,
-      onRenamePaperGroup,
-      onDeletePaperGroup,
-      enforceLimit
+      columnName,
+      selected,
+      options,
+      appearance,
+      onChangeLabels,
+      onRenameLabel,
+      onDeleteLabel,
+      onSetLabelTone
     });
   });
 
@@ -43,50 +108,47 @@ export function createPaperLabelControl({
   return control;
 }
 
-export function getPaperLabelOptions(papers, options = {}) {
-  const optionsByName = new Map();
-  for (const paper of papers || []) {
-    const name = normalizePaperLabel(paper.group);
-    if (!name) {
-      continue;
-    }
+function createLabelPill(name, option, appearance) {
+  const pill = document.createElement("span");
+  pill.className = ["paper-group-pill", getPaperLabelToneClass(option?.tone ?? 0, appearance)].join(" ");
+  pill.textContent = name;
+  return pill;
+}
 
-    const key = name.toLowerCase();
-    if (!optionsByName.has(key)) {
-      optionsByName.set(key, {
-        name,
-        toneClass: options.appearance === "gray"
-          ? "paper-group-gray"
-          : getPaperGroupToneClass(name, [], paper.groupTone)
-      });
-    }
+function getNextUnusedTone(options) {
+  const used = new Set(options.map((option) => option.tone));
+  for (let tone = 0; tone < LABEL_TONE_COUNT; tone += 1) {
+    if (!used.has(tone)) return tone;
   }
-
-  return [...optionsByName.values()]
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  return options.length % LABEL_TONE_COUNT;
 }
 
-export function normalizePaperLabel(group) {
-  return String(group || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 64);
+function findOption(options, name) {
+  const key = normalizeLabelName(name).toLowerCase();
+  return options.find((option) => option.name.toLowerCase() === key);
 }
 
+// Like Notion's multi-select menu: the paper's labels sit as chips beside a
+// search box; typing filters, Enter picks the match or creates the label, and
+// each option's "⋯" opens rename, color and delete in place.
 function openPaperLabelEditor({
-  control,
-  button,
-  paper,
-  group,
-  groupOptions,
-  onUpdatePaperGroup,
-  onRenamePaperGroup,
-  onDeletePaperGroup,
-  enforceLimit
+  button: initialButton,
+  columnName,
+  selected: initialSelected,
+  options: initialOptions,
+  appearance,
+  onChangeLabels,
+  onRenameLabel,
+  onDeleteLabel,
+  onSetLabelTone
 }) {
   closePaperLabelEditors();
+  let button = initialButton;
+  const anchorKey = button.dataset.labelAnchor;
+  let selected = [...initialSelected];
+  let options = [...initialOptions];
+  let expanded = "";
   button.classList.add("editing");
-  let editMode = false;
 
   const editor = document.createElement("div");
   editor.className = "paper-group-editor";
@@ -95,192 +157,204 @@ function openPaperLabelEditor({
   editor.addEventListener("pointerdown", (event) => event.stopPropagation());
   editor.addEventListener("click", (event) => event.stopPropagation());
 
+  const searchRow = document.createElement("div");
+  searchRow.className = "paper-group-search";
   const input = document.createElement("input");
   input.className = "paper-group-input";
   input.type = "text";
-  input.value = "";
-  input.placeholder = "Label";
-  input.setAttribute("aria-label", "Paper label");
-  input.hidden = true;
+  input.placeholder = "Search or create…";
+  input.setAttribute("aria-label", `Search or create a ${columnName} label`);
 
-  const options = document.createElement("div");
-  options.className = "paper-group-options";
+  const hint = document.createElement("div");
+  hint.className = "paper-group-editor-heading";
+  hint.textContent = "Select an option or create one";
 
-  const prompt = document.createElement("div");
-  prompt.className = "paper-group-key-prompt";
-  let limitWarningActive = false;
+  const list = document.createElement("div");
+  list.className = "paper-group-options";
 
-  const saveGroup = async (value) => {
-    const nextGroup = normalizePaperLabel(value);
-    if (nextGroup === group) {
-      closePaperLabelEditors();
-      return;
+  const isSelected = (name) => selected.some((item) => item.toLowerCase() === name.toLowerCase());
+
+  const commit = async (next) => {
+    selected = normalizeLabelList(next);
+    for (const name of selected) {
+      // A label made here shows the color it will be saved with: the next unused one.
+      if (!findOption(options, name)) options = [...options, { name, tone: getNextUnusedTone(options) }];
     }
-    if (enforceLimit && !canUsePaperGroup(nextGroup, groupOptions)) {
-      renderOptions();
-      return;
-    }
-
-    closePaperLabelEditors();
+    render();
     try {
-      await onUpdatePaperGroup?.(paper, nextGroup);
+      await onChangeLabels?.(selected);
     } catch (error) {
-      console.debug("[Paper Toaster] Could not update paper group", error);
+      console.debug("[Paper Toaster] Could not update labels", error);
     }
   };
 
-  const renameGroup = async (oldValue, newValue) => {
-    const oldName = normalizePaperLabel(oldValue);
-    const newName = normalizePaperLabel(newValue);
-    if (!oldName || !newName || oldName.toLowerCase() === newName.toLowerCase()) {
-      renderOptions();
-      return;
-    }
+  const toggle = (name) => commit(isSelected(name)
+    ? selected.filter((item) => item.toLowerCase() !== name.toLowerCase())
+    : [...selected, name]);
 
+  const rename = async (oldName, newName) => {
+    const from = normalizeLabelName(oldName);
+    const to = normalizeLabelName(newName);
+    if (!from || !to || from === to) return;
+    options = options.map((option) => option.name === from ? { ...option, name: to } : option);
+    selected = selected.map((item) => item === from ? to : item);
+    expanded = to;
+    render();
     try {
-      await onRenamePaperGroup?.(oldName, newName);
-      closePaperLabelEditors();
+      await onRenameLabel?.(from, to);
     } catch (error) {
-      console.debug("[Paper Toaster] Could not rename paper label", error);
+      console.debug("[Paper Toaster] Could not rename label", error);
     }
   };
 
-  const deleteGroup = async (value) => {
-    const label = normalizePaperLabel(value);
-    if (!label) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete label "${label}"? All related papers will lose this label.`);
-    if (!confirmed) {
-      return;
-    }
-
+  const remove = async (name) => {
+    if (!window.confirm(`Delete label "${name}"? Every paper loses it from ${columnName}.`)) return;
+    options = options.filter((option) => option.name !== name);
+    selected = selected.filter((item) => item !== name);
+    expanded = "";
+    render();
     try {
-      await onDeletePaperGroup?.(label);
-      closePaperLabelEditors();
+      await onDeleteLabel?.(name);
     } catch (error) {
-      console.debug("[Paper Toaster] Could not delete paper label", error);
+      console.debug("[Paper Toaster] Could not delete label", error);
     }
   };
 
-  const toggleEditMode = () => {
-    const focusedRenameInput = editor.querySelector(".paper-group-edit-input:focus");
-    focusedRenameInput?.blur();
-    editMode = !editMode;
-    input.value = "";
-    renderOptions();
-    if (editMode) {
-      input.focus();
-    } else {
-      editor.focus({ preventScroll: true });
+  const recolor = async (name, tone) => {
+    options = options.map((option) => option.name === name ? { ...option, tone } : option);
+    render();
+    try {
+      await onSetLabelTone?.(name, tone);
+    } catch (error) {
+      console.debug("[Paper Toaster] Could not recolor label", error);
     }
   };
 
-  const renderOptions = () => {
-    const normalizedOptions = groupOptions.filter((option) => option.name);
-    editor.classList.toggle("edit-mode", editMode);
-    input.hidden = !editMode;
-    const children = editMode
-      ? normalizedOptions.map((option) => createEditablePaperGroupOption({
-        option,
-        active: option.name === group,
-        onRename: renameGroup,
-        onDelete: deleteGroup
-      }))
-      : normalizedOptions.map((option) => createPaperGroupOption({
-        label: option.name,
-        toneSource: option.name,
-        toneClass: option.toneClass,
-        groupOptions,
-        active: option.name === group,
-        onSelect: () => saveGroup(option.name)
-      }));
-    const typedGroup = normalizePaperLabel(input.value);
-    const hasExactMatch = groupOptions.some((option) => option.name.toLowerCase() === typedGroup.toLowerCase());
-    const hasAvailableTone = !enforceLimit || groupOptions.length < PAPER_LABEL_TONE_COUNT;
-    const limitExceeded = Boolean(editMode && typedGroup && !hasExactMatch && !hasAvailableTone);
-    if (limitExceeded && !limitWarningActive) {
-      input.classList.add("limit-shake");
-    } else if (!limitExceeded) {
-      input.classList.remove("limit-shake");
-    }
-    limitWarningActive = limitExceeded;
-    if (limitExceeded) {
-      const limit = document.createElement("div");
-      limit.className = "paper-group-limit-warning";
-      const icon = document.createElement("span");
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "⚠";
-      const text = document.createElement("span");
-      text.textContent = "That's too much!";
-      limit.append(icon, text);
-      children.unshift(limit);
+  function render() {
+    // Chips for the paper's labels, then the search box.
+    searchRow.replaceChildren(...selected.map((name) => {
+      const chip = createLabelPill(name, findOption(options, name), appearance);
+      chip.classList.add("paper-group-chip");
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "paper-group-chip-remove";
+      removeButton.setAttribute("aria-label", `Remove ${name}`);
+      removeButton.textContent = "×";
+      removeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void toggle(name);
+      });
+      chip.append(removeButton);
+      return chip;
+    }), input);
+
+    const typed = normalizeLabelName(input.value);
+    const query = typed.toLowerCase();
+    const visible = query ? options.filter((option) => option.name.toLowerCase().includes(query)) : options;
+    const children = visible.map((option) => createOptionRow({
+      option,
+      appearance,
+      selected: isSelected(option.name),
+      expanded: expanded === option.name,
+      onToggle: () => toggle(option.name),
+      onExpand: () => {
+        expanded = expanded === option.name ? "" : option.name;
+        render();
+      },
+      onRename: rename,
+      onDelete: remove,
+      onPickTone: (tone) => recolor(option.name, tone)
+    }));
+    if (typed && !options.some((option) => option.name.toLowerCase() === query)) {
+      const create = document.createElement("button");
+      create.type = "button";
+      create.className = "paper-group-option paper-group-create";
+      create.append("Create ", createLabelPill(typed, { tone: getNextUnusedTone(options) }, appearance));
+      create.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = "";
+        void commit([...selected, typed]);
+        input.focus();
+      });
+      children.push(create);
     }
     if (!children.length) {
       const empty = document.createElement("div");
       empty.className = "paper-group-empty";
-      empty.textContent = editMode ? "Type to create" : "No labels";
+      empty.textContent = "Type a name to create a label";
       children.push(empty);
     }
-    options.replaceChildren(...children);
+    list.replaceChildren(...children);
+  }
 
-    prompt.replaceChildren(createPaperGroupKeyPrompt(editMode, Boolean(group)));
-  };
-
-  input.addEventListener("input", renderOptions);
+  input.addEventListener("input", render);
   input.addEventListener("beforeinput", (event) => event.stopPropagation());
+  input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("keydown", (event) => {
     event.stopPropagation();
     if (event.key === "Enter") {
       event.preventDefault();
-      if (normalizePaperLabel(input.value)) {
-        saveGroup(input.value);
-      }
+      const name = normalizeLabelName(input.value);
+      if (!name) return;
+      const match = findOption(options, name) ||
+        options.find((option) => option.name.toLowerCase().includes(name.toLowerCase()));
+      input.value = "";
+      void (match ? toggle(match.name) : commit([...selected, name]));
+    } else if (event.key === "Backspace" && !input.value && selected.length) {
+      event.preventDefault();
+      void commit(selected.slice(0, -1));
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusAdjacentOption(editor, 1);
     } else if (event.key === "Escape") {
       event.preventDefault();
-      toggleEditMode();
+      closePaperLabelEditors();
     }
   });
-  input.addEventListener("click", (event) => event.stopPropagation());
 
   editor.addEventListener("keydown", (event) => {
+    if (event.target === input || event.target.closest?.(".paper-group-option-panel")) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();
-      focusAdjacentPaperGroupLabel(editor, editMode, event.key === "ArrowDown" ? 1 : -1);
-      return;
-    }
-    if (!editMode && event.key === "Enter") {
+      focusAdjacentOption(editor, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      toggleEditMode();
-      return;
-    }
-    if (!editMode && group && event.key === "Backspace") {
-      event.preventDefault();
-      event.stopPropagation();
-      saveGroup("");
-      return;
-    }
-    if (editMode && event.key === "ArrowLeft") {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleEditMode();
+      closePaperLabelEditors();
     }
   }, true);
 
-  editor.append(input, options, prompt);
-  control.append(editor);
-  renderOptions();
-  editor.focus({ preventScroll: true });
+  editor.append(searchRow, hint, list);
+  // The editor floats on the page so no scrolling or clipped container can cut it off.
+  document.body.append(editor);
+  render();
+  // Changing labels re-renders the board, replacing the button: follow its replacement.
+  let positionFrame = requestAnimationFrame(function followButton() {
+    if (!button.isConnected) {
+      const replacement = document.querySelector(`.paper-group-button[data-label-anchor="${CSS.escape(anchorKey)}"]`);
+      if (!replacement) {
+        closePaperLabelEditors();
+        return;
+      }
+      button = replacement;
+      button.classList.add("editing");
+    }
+    positionPaperLabelEditor(editor, button);
+    positionFrame = requestAnimationFrame(followButton);
+  });
+  positionPaperLabelEditor(editor, button);
+  input.focus({ preventScroll: true });
 
   const closeOnOutside = (event) => {
-    if (!control.contains(event.target)) {
+    if (!button.contains(event.target) && !editor.contains(event.target)) {
       closePaperLabelEditors();
     }
   };
   editor._paperGroupCleanup = () => {
+    cancelAnimationFrame(positionFrame);
     document.removeEventListener("pointerdown", closeOnOutside, true);
     button.classList.remove("editing");
   };
@@ -289,84 +363,104 @@ function openPaperLabelEditor({
   }, 0);
 }
 
-function createPaperGroupOption({
-  label,
-  toneSource = "",
-  toneClass = "",
-  groupOptions = [],
-  active = false,
-  danger = false,
-  onSelect
-}) {
-  const option = document.createElement("button");
-  option.type = "button";
-  option.className = [
-    "paper-group-option",
-    toneClass || (toneSource ? getPaperGroupToneClass(toneSource, groupOptions) : "")
-  ].filter(Boolean).join(" ");
-  option.classList.toggle("active", active);
-  option.classList.toggle("danger", danger);
-  option.textContent = label;
-  let handledPointerDown = false;
-  option.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) {
-      return;
-    }
-    handledPointerDown = true;
+function createOptionRow({ option, appearance, selected, expanded, onToggle, onExpand, onRename, onDelete, onPickTone }) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "paper-group-option-wrapper";
+  wrapper.classList.toggle("expanded", expanded);
+
+  const row = document.createElement("div");
+  row.className = "paper-group-option";
+  row.classList.toggle("active", selected);
+  row.tabIndex = 0;
+  row.setAttribute("role", "menuitemcheckbox");
+  row.setAttribute("aria-checked", String(selected));
+  row.append(createLabelPill(option.name, option, appearance));
+  row.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    onSelect();
+    onToggle();
   });
-  option.addEventListener("click", (event) => {
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    if (handledPointerDown) {
-      handledPointerDown = false;
-      return;
-    }
-    onSelect();
+    onToggle();
   });
-  return option;
-}
 
-function createPaperGroupKeyPrompt(editMode, hasGroup) {
-  const prompt = document.createElement("span");
-  prompt.className = "paper-group-key-prompt-content";
-  if (editMode) {
-    prompt.append(
-      createPaperGroupKeyPromptRow("←", "Back"),
-      createPaperGroupKeyPromptRow("↵", "Confirm")
-    );
-  } else {
-    prompt.append(createPaperGroupKeyPromptRow("↵", "to edit"));
-    if (hasGroup) {
-      prompt.append(createPaperGroupKeyPromptRow("⌫", "to clear"));
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "paper-group-option-more";
+  more.setAttribute("aria-label", `Edit ${option.name}`);
+  more.setAttribute("aria-expanded", String(expanded));
+  more.textContent = "⋯";
+  more.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onExpand();
+  });
+  row.append(more);
+  wrapper.append(row);
+
+  if (expanded) {
+    const panel = document.createElement("div");
+    panel.className = "paper-group-option-panel";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "paper-group-rename-input";
+    nameInput.value = option.name;
+    nameInput.setAttribute("aria-label", `Rename ${option.name}`);
+    const save = () => onRename(option.name, nameInput.value);
+    for (const type of ["click", "pointerdown", "beforeinput"]) {
+      nameInput.addEventListener(type, (event) => event.stopPropagation());
     }
+    nameInput.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        save();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        onExpand();
+      }
+    });
+    nameInput.addEventListener("blur", save);
+
+    const palette = document.createElement("div");
+    palette.className = "paper-group-palette";
+    palette.setAttribute("role", "group");
+    palette.setAttribute("aria-label", `Colors for ${option.name}`);
+    for (let tone = 0; tone < LABEL_TONE_COUNT; tone += 1) {
+      const color = document.createElement("button");
+      color.type = "button";
+      color.className = `paper-group-palette-swatch paper-group-tone-${tone}`;
+      color.classList.toggle("active", tone === option.tone);
+      color.setAttribute("aria-label", `Color ${tone + 1}`);
+      color.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onPickTone(tone);
+      });
+      palette.append(color);
+    }
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "paper-group-delete-label";
+    deleteButton.textContent = "Delete label";
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onDelete(option.name);
+    });
+    panel.append(nameInput, palette, deleteButton);
+    wrapper.append(panel);
   }
-  return prompt;
+  return wrapper;
 }
 
-function createPaperGroupKeyPromptRow(symbol, label) {
-  const row = document.createElement("span");
-  row.className = "paper-group-key-prompt-row";
-  const prefix = document.createElement("span");
-  prefix.textContent = "Press";
-  const key = document.createElement("kbd");
-  key.textContent = symbol;
-  const text = document.createElement("span");
-  text.textContent = label;
-  row.append(prefix, key, text);
-  return row;
-}
-
-function focusAdjacentPaperGroupLabel(editor, editMode, direction) {
-  const selector = editMode
-    ? ".paper-group-input, .paper-group-edit-input"
-    : ".paper-group-option";
-  const candidates = [...editor.querySelectorAll(selector)].filter((element) => !element.hidden);
-  if (!candidates.length) {
-    return;
-  }
+function focusAdjacentOption(editor, direction) {
+  const candidates = [...editor.querySelectorAll(".paper-group-input, .paper-group-option")];
+  if (!candidates.length) return;
   const currentIndex = candidates.indexOf(document.activeElement);
   const nextIndex = currentIndex < 0
     ? direction > 0 ? 0 : candidates.length - 1
@@ -374,113 +468,23 @@ function focusAdjacentPaperGroupLabel(editor, editMode, direction) {
   candidates[nextIndex].focus({ preventScroll: true });
 }
 
-function createEditablePaperGroupOption({ option, active = false, onRename, onDelete }) {
-  const chip = document.createElement("span");
-  chip.className = ["paper-group-edit-chip", option.toneClass || ""].filter(Boolean).join(" ");
-  chip.classList.toggle("active", active);
-
-  const input = document.createElement("input");
-  input.className = "paper-group-edit-input";
-  input.type = "text";
-  input.value = option.name;
-  input.setAttribute("aria-label", `Rename label ${option.name}`);
-  const saveRename = () => onRename(option.name, input.value);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("pointerdown", (event) => event.stopPropagation());
-  input.addEventListener("beforeinput", (event) => event.stopPropagation());
-  input.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      saveRename();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      input.value = option.name;
-      input.blur();
-    }
-  });
-  input.addEventListener("blur", saveRename);
-
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "paper-group-delete";
-  deleteButton.setAttribute("aria-label", `Delete label ${option.name}`);
-  deleteButton.textContent = "×";
-  let handledDeletePointerDown = false;
-  deleteButton.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) {
-      return;
-    }
-    handledDeletePointerDown = true;
-    event.preventDefault();
-    event.stopPropagation();
-    onDelete(option.name);
-  });
-  deleteButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (handledDeletePointerDown) {
-      handledDeletePointerDown = false;
-      return;
-    }
-    onDelete(option.name);
-  });
-  chip.append(input, deleteButton);
-  return chip;
+// Below the label button, or above it when the viewport has no room below.
+function positionPaperLabelEditor(editor, button) {
+  const anchor = button.getBoundingClientRect();
+  const { width, height } = editor.getBoundingClientRect();
+  const margin = 8;
+  const below = anchor.bottom + 4;
+  const top = below + height > window.innerHeight - margin && anchor.top - 4 - height >= margin
+    ? anchor.top - 4 - height
+    : below;
+  const left = Math.max(margin, Math.min(anchor.left, window.innerWidth - width - margin));
+  editor.style.top = `${Math.round(top)}px`;
+  editor.style.left = `${Math.round(left)}px`;
 }
 
-function closePaperLabelEditors() {
+export function closePaperLabelEditors() {
   document.querySelectorAll(".paper-group-editor").forEach((editor) => {
     editor._paperGroupCleanup?.();
     editor.remove();
   });
-}
-
-function getPaperGroupToneClass(group, groupOptions = [], preferredTone = null) {
-  const toneNumber = Number(preferredTone);
-  if (Number.isInteger(toneNumber) && toneNumber >= 0 && toneNumber < PAPER_LABEL_TONE_COUNT) {
-    return `paper-group-tone-${toneNumber}`;
-  }
-  const normalizedGroup = normalizePaperLabel(group);
-  const option = groupOptions.find((groupOption) => {
-    const optionName = normalizePaperLabel(groupOption?.name || groupOption);
-    return optionName.toLowerCase() === normalizedGroup.toLowerCase();
-  });
-  if (option?.toneClass) {
-    return option.toneClass;
-  }
-  return getAvailablePaperGroupToneClass(groupOptions, normalizedGroup);
-}
-
-function getAvailablePaperGroupToneClass(groupOptions = [], group = "") {
-  const usedIndexes = new Set(groupOptions
-    .map((option) => String(option?.toneClass || "").match(/^paper-group-tone-(\d)$/)?.[1])
-    .filter((index) => index !== undefined)
-    .map(Number));
-  for (let index = 0; index < PAPER_LABEL_TONE_COUNT; index += 1) {
-    if (!usedIndexes.has(index)) {
-      return `paper-group-tone-${index}`;
-    }
-  }
-  return `paper-group-tone-${getStableGroupToneIndex(group)}`;
-}
-
-function canUsePaperGroup(group, groupOptions = []) {
-  const normalizedGroup = normalizePaperLabel(group);
-  if (!normalizedGroup) {
-    return true;
-  }
-  if (groupOptions.some((option) => option.name.toLowerCase() === normalizedGroup.toLowerCase())) {
-    return true;
-  }
-  return groupOptions.length < PAPER_LABEL_TONE_COUNT;
-}
-
-function getStableGroupToneIndex(group) {
-  const text = normalizePaperLabel(group).toLowerCase();
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
-  }
-  return hash % PAPER_LABEL_TONE_COUNT;
 }

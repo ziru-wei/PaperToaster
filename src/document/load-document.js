@@ -8,12 +8,25 @@ import { parsePdfToContent } from "../parsers/parser-registry.js";
 import { getDocumentStoreKey, getStoredDocument, saveStoredDocument } from "../storage/document-store.js";
 import { createDocument } from "./create-document.js";
 import { createAgentDocumentRef } from "../ai/local-agent-document-client.js";
+import { getDocumentMemoryKey, getLocalPdfHashFromUrl, isLocalFileUrl } from "../storage/document-key.js";
+import { readLocalPdfBytes } from "./local-pdf-import.js";
+import { extractAndSavePaperFigure } from "./paper-figures.js";
 
 const documentMemoryCache = new Map();
 const activeLoadKeys = new Set();
 
 export function canLoadDocumentFromTab(tab) {
-  return isPotentialPaperViewerUrl(tab?.url);
+  return isPotentialPaperViewerUrl(tab?.url) || Boolean(getLocalPdfHashFromUrl(tab?.url)) || isLocalPdfFileUrl(tab?.url);
+}
+
+// A PDF opened straight from disk. It is copied into the library before parsing.
+export function isLocalPdfFileUrl(url) {
+  if (!isLocalFileUrl(url)) return false;
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith(".pdf");
+  } catch {
+    return false;
+  }
 }
 
 export function getDocumentCacheKey(url, parserId, cacheVersion) {
@@ -114,6 +127,7 @@ export async function loadDocumentForTab({
 
     let fetched;
     let content;
+    let figureBytes = null;
     let primaryError = null;
 
     try {
@@ -126,6 +140,7 @@ export async function loadDocumentForTab({
       fetched = parsed.fetched;
       content = parsed.content;
       titleInfo = parsed.titleInfo;
+      figureBytes = parsed.figureBytes;
     } catch (error) {
       primaryError = error;
       diagnose(`PDF byte acquisition/parsing failed: ${error.message || String(error)}`);
@@ -168,6 +183,15 @@ export async function loadDocumentForTab({
       throw new Error("No text could be extracted. This may be a scanned/image-only PDF.");
     }
 
+    if (figureBytes) {
+      // The dashboard cover comes from Figure 1; crop it while the bytes are in hand.
+      extractAndSavePaperFigure({
+        documentKey: getDocumentMemoryKey(tab.url),
+        bytes: figureBytes,
+        sourceUrl: fetched.finalUrl || tab.url
+      });
+    }
+
     diagnose("Step 6: saving title, URL, and cleaned document text to local document store.");
     try {
       const storedDocument = await saveDocumentForUrl({
@@ -196,9 +220,7 @@ export async function loadDocumentForTab({
 }
 
 async function fetchParseAndTitleDocument({ tab, parserId, diagnose, onTitleInfo }) {
-  const fetched = await acquirePdfBytesFromTab(tab, {
-    onDiagnostic: diagnose
-  });
+  const fetched = await acquireDocumentBytes(tab, diagnose);
   diagnose([
     `Fetch ok: HTTP ${fetched.status}`,
     `content-type=${fetched.contentType || "unknown"}`,
@@ -214,6 +236,9 @@ async function fetchParseAndTitleDocument({ tab, parserId, diagnose, onTitleInfo
   });
   let titleInfo = selectTitleInfoByPriority(metadataTitleInfo);
   onTitleInfo?.(titleInfo);
+
+  // Parsers may take ownership of the buffer, so keep a copy for the cover figure.
+  const figureBytes = fetched.bytes.slice(0);
 
   diagnose(`Step 4: parsing PDF with parser "${parserId}".`);
   const content = await parsePdfToContent({
@@ -235,7 +260,26 @@ async function fetchParseAndTitleDocument({ tab, parserId, diagnose, onTitleInfo
   return {
     fetched,
     content,
-    titleInfo
+    titleInfo,
+    figureBytes
+  };
+}
+
+// Saved local PDFs are read from the library; web PDFs are fetched from their tab.
+async function acquireDocumentBytes(tab, diagnose) {
+  const localPdfHash = getLocalPdfHashFromUrl(tab.url);
+  if (!localPdfHash) {
+    return acquirePdfBytesFromTab(tab, { onDiagnostic: diagnose });
+  }
+  diagnose("Step 3A: reading the saved copy of this local PDF.");
+  const { bytes } = await readLocalPdfBytes(localPdfHash);
+  return {
+    bytes,
+    contentType: "application/pdf",
+    byteLength: bytes.byteLength,
+    finalUrl: tab.url,
+    status: 200,
+    hasPdfHeader: true
   };
 }
 

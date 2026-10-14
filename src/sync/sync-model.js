@@ -17,7 +17,11 @@ export const SETTINGS_KEYS = [
   "selectionPromptPresetsV1", "comparativePromptPresetsV1",
   "comparisonSettingsV1", "parsingSettingsV1", "savedQaSettingsV1",
   "dashboardPaperSort", "dashboardPaperGroupMode",
-  "dashboardPaperMessageRingsVisible", "dashboardPaperLabelGroupOrder"
+  "dashboardPaperMessageRingsVisible", "dashboardPaperLabelGroupOrder",
+  "dashboardPaperSortDirection", "dashboardPaperView", "dashboardPaperViewProperties",
+  "dashboardPaperViewSettings", "paperLabelColumnsV1",
+  // Legacy keys stay accepted so replicas written by earlier builds still validate.
+  "dashboardPaperListColumns"
 ];
 export const AI_FIELDS = [
   "model", "reasoningEffort", "enabledChatModels", "debugMode", "systemPrompt"

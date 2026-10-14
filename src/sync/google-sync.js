@@ -1,6 +1,7 @@
 import { GoogleDriveClient, getGoogleToken, isGoogleSyncConfigured } from "./google-drive-client.js";
 import { captureChanges, mergeEntries, pruneDeletedParents, SYNC_SETTINGS_KEYS, pickSettings, stableJson } from "./sync-model.js";
 import { readSyncSnapshot, applySyncEntries } from "./sync-store.js";
+import { fetchLocalPdfFromDrive, syncLocalPdfs } from "./pdf-sync.js";
 
 export const GOOGLE_SYNC_STATE_KEY = "googleSyncStateV1";
 const DEVICE_KEY = "googleSyncDeviceIdV1";
@@ -113,6 +114,10 @@ async function syncWithClient(client, account) {
     if (!own || stableJson(ownReplica?.entries) !== stableJson(applied.entries)) {
       await client.writeReplica(own?.id, deviceId, applied.entries);
     }
+    const pdfs = await syncLocalPdfs(client, applied.entries);
+    if (pdfs.downloaded) {
+      chrome.runtime.sendMessage({ type: "GOOGLE_SYNC_APPLIED" }).catch(() => {});
+    }
     await updateStatus((state) => {
       const stillPending = Boolean(state.pendingRevision && state.pendingRevision !== pendingRevision);
       return {
@@ -177,6 +182,14 @@ export function registerGoogleSync() {
   void restoreSyncAlarm();
 }
 
+async function fetchSyncedPdf(sha256) {
+  if (!/^[0-9a-f]{64}$/.test(String(sha256 || ""))) throw new Error("Unknown PDF.");
+  const state = await getGoogleSyncStatus();
+  if (!state.enabled) return { found: false };
+  const client = new GoogleDriveClient(await getGoogleToken(false));
+  return { found: await fetchLocalPdfFromDrive(client, sha256) };
+}
+
 async function restoreSyncAlarm() {
   if (!(await getGoogleSyncStatus()).enabled) return;
   const alarm = await chrome.alarms.get(PERIODIC_ALARM);
@@ -197,6 +210,7 @@ export async function handleGoogleSyncMessage(message, sender) {
     case "GOOGLE_SYNC_DISCONNECT": return disconnectGoogleSync();
     case "GOOGLE_SYNC_NOW": return syncGoogleNow();
     case "GOOGLE_SYNC_DIRTY": await scheduleGoogleSync(); return { ok: true };
+    case "GOOGLE_SYNC_FETCH_PDF": return fetchSyncedPdf(message.sha256);
     case "GOOGLE_SYNC_APPLIED": return { ok: true };
     default: throw new Error("Unknown Google sync request.");
   }

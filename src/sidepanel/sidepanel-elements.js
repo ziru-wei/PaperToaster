@@ -11,6 +11,7 @@ export function getSidePanelElements(root = document) {
     documentTitle: root.querySelector("#documentTitle"),
     comparisonContextBar: root.querySelector("#comparisonContextBar"),
     comparisonPaperChips: root.querySelector("#comparisonPaperChips"),
+    comparisonReadMode: root.querySelector("#comparisonReadMode"),
     comparisonStatus: root.querySelector("#comparisonStatus"),
     contextReadyIndicator: root.querySelector("#contextReadyIndicator"),
     statusLineShell: root.querySelector("#statusLineShell"),

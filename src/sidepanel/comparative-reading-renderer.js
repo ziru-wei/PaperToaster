@@ -57,7 +57,7 @@ export function renderComparativeReadingPanel({
   elements.comparisonStatus.hidden = !visibleStatus;
   elements.comparisonStatus.classList.toggle("error", Boolean(status));
   elements.comparisonContextBar.hidden = !visibleStatus;
-  elements.selectionQuestion.placeholder = allowRemovePapers ? "Start with /, @ or @#" : "";
+  elements.selectionQuestion.placeholder = allowRemovePapers ? "Ask across papers · / commands · @ papers" : "";
 
   renderPaperChips({
     container: elements.comparisonPaperChips,
@@ -101,7 +101,7 @@ export function clearComparativeReadingPanel(elements) {
   elements.documentTitle.removeAttribute("tabindex");
   elements.documentTitle.removeAttribute("aria-readonly");
   elements.selectionText.hidden = false;
-  elements.selectionQuestion.placeholder = "Start with typing /";
+  elements.selectionQuestion.placeholder = "Ask about this paper · / for commands";
   elements.comparisonContextBar.hidden = true;
   elements.comparisonStatus.textContent = "";
   elements.comparisonStatus.hidden = false;
