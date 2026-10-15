@@ -3964,10 +3964,16 @@ body.comparative-mode .conversation-thread:not(.comparison-empty-thread) {
   color: #9a9a9a;
 }
 
+/* Overrides the panel-wide button size (32px min-height, 6px padding). */
 .comparison-read-mode-option {
+  display: inline-flex;
+  height: 20px;
+  min-height: 0;
+  align-items: center;
   border: 0;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 0 8px;
+  line-height: 1;
   color: #777777;
   background: transparent;
   font: inherit;

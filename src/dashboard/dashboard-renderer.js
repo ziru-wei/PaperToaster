@@ -24,7 +24,6 @@ import {
 import { abbreviateVenue } from "./venue-abbreviation.js";
 
 const FULL_MESSAGE_RING_COUNT = 10;
-const PAPER_CARD_DRAG_LONG_PRESS_MS = 500;
 const PAPER_CARD_DRAG_MOVE_TOLERANCE = 8;
 const DASHBOARD_DRAG_DISPOSE_EVENT = "paper-toaster:dispose-dashboard-drag";
 const DASHBOARD_DRAG_ARTIFACT_SELECTOR = [
@@ -299,9 +298,13 @@ function createPaperGroups(paperRecords, createItem, mode, {
 
   if (isLabelGroupMode(mode) && !manageMode) {
     attachLabelGroupReordering(container, onReorderLabelGroups);
-    if (!isListView && !isBoardView) {
-      attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGroup);
-    }
+  }
+  // Papers move between groups in every view: across board columns (and the
+  // groups around them), or between list and gallery groups.
+  if (!manageMode && isBoardView) {
+    attachPaperCardGroupTransfer(container, paperRecords, { isBoard: true, targetSelector: ".paper-board > .paper-card-group" });
+  } else if (!manageMode && isLabelGroupMode(mode)) {
+    attachPaperCardGroupTransfer(container, paperRecords);
   }
 
   return container;
@@ -341,7 +344,6 @@ function createBoardKanban(records, createItem, organizeBy, { manageMode, labelG
   });
   if (!manageMode) {
     attachLabelGroupReordering(kanban, onReorderLabelGroups);
-    attachPaperCardGroupTransfer(kanban, records);
   }
   return kanban;
 }
@@ -714,6 +716,37 @@ function attachLabelGroupReordering(container, onReorderLabelGroups) {
   }
 }
 
+// Moving a paper swaps the label it was under for the target's label, at every
+// grouping level that differs: on the board, a column in another group changes
+// both the "organized by" label and the "group by" label.
+async function movePaperBetweenGroups(paper, sourceGroup, targetGroup, container) {
+  const sourceChain = getLabelGroupChain(sourceGroup, container);
+  const targetChain = getLabelGroupChain(targetGroup, container);
+  let current = paper;
+  for (let level = 0; level < targetChain.length; level += 1) {
+    const target = targetChain[level];
+    const source = sourceChain[level];
+    if (!source || source.dataset.groupColumn !== target.dataset.groupColumn) continue;
+    const columnId = target.dataset.groupColumn;
+    const from = source.dataset.groupLabel || "";
+    const to = target.dataset.groupLabel || "";
+    if (from.toLowerCase() === to.toLowerCase()) continue;
+    const next = getPaperLabels(current, columnId).filter((label) => label.toLowerCase() !== from.toLowerCase());
+    if (to && !next.some((label) => label.toLowerCase() === to.toLowerCase())) next.push(to);
+    current = { ...current, labels: { ...(current.labels || {}), [columnId]: next } };
+    await labelContext?.onChangePaperLabels?.(paper, columnId, next);
+  }
+}
+
+// The label groups around an element, innermost first (a board column, then its group).
+function getLabelGroupChain(element, container) {
+  const chain = [];
+  for (let node = element; node && node !== container; node = node.parentElement) {
+    if (node.matches?.(".paper-card-group") && node.dataset.groupColumn) chain.push(node);
+  }
+  return chain;
+}
+
 // Scrolls a board sideways while a drag nears its left or right edge.
 function scrollBoardNearEdge(board, pointerX) {
   const rect = board.getBoundingClientRect();
@@ -730,17 +763,23 @@ function scrollBoardNearEdge(board, pointerX) {
   return board.scrollLeft !== previous;
 }
 
-function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGroup) {
-  // Board cards drag as soon as they move, like Notion; gallery cards need a long press.
-  const isBoard = container.classList.contains("paper-board");
+// Drags a paper (a board or gallery card, or a list row) into another group,
+// moving it between labels. A drag starts once the pointer moves a few pixels,
+// like Notion, so a click still opens the paper. `targetSelector` names the
+// groups that take drops: board kanban columns, or the view's groups.
+function attachPaperCardGroupTransfer(container, paperRecords, {
+  isBoard = false,
+  targetSelector = ":scope > .paper-card-group"
+} = {}) {
   const papersByDocumentKey = new Map(paperRecords.map((record) => [record.paper.documentKey, record.paper]));
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let pendingDrag = null;
   let activeDrag = null;
 
   container.addEventListener("pointerdown", (event) => {
-    const card = event.target.closest(".paper-card");
-    if (!card || event.button !== 0 || isCardActionIgnored(event.target)) {
+    const card = event.target.closest(".paper-card, .paper-list-row");
+    if (!card || event.button !== 0 || isCardActionIgnored(event.target) ||
+        !container.querySelectorAll(targetSelector).length) {
       return;
     }
     cancelPendingDrag();
@@ -760,7 +799,6 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
         cancelPendingDrag();
       }
     };
-    drag.timer = window.setTimeout(() => beginCardDrag(), PAPER_CARD_DRAG_LONG_PRESS_MS);
     pendingDrag = drag;
     card.addEventListener("lostpointercapture", drag.handleLostPointerCapture, { once: true });
     card.setPointerCapture(event.pointerId);
@@ -771,11 +809,7 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
       pendingDrag.lastX = event.clientX;
       pendingDrag.lastY = event.clientY;
       if (Math.hypot(event.clientX - pendingDrag.startX, event.clientY - pendingDrag.startY) > PAPER_CARD_DRAG_MOVE_TOLERANCE) {
-        if (isBoard) {
-          beginCardDrag();
-        } else {
-          cancelPendingDrag();
-        }
+        beginCardDrag();
       }
       return;
     }
@@ -800,7 +834,7 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
   });
 
   container.addEventListener("contextmenu", (event) => {
-    if (activeDrag && event.target.closest(".paper-card")) {
+    if (activeDrag && event.target.closest(".paper-card, .paper-list-row")) {
       event.preventDefault();
     }
   });
@@ -825,6 +859,9 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
     }
     const preview = drag.card.cloneNode(true);
     preview.classList.add("paper-card-drag-preview");
+    // A list row lays out by its table's column template, which lives on the list container.
+    const columns = getComputedStyle(drag.card).getPropertyValue("--paper-list-columns");
+    if (columns) preview.style.setProperty("--paper-list-columns", columns);
     preview.setAttribute("aria-hidden", "true");
     preview.inert = true;
     Object.assign(preview.style, {
@@ -890,7 +927,7 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
   }
 
   function updateCardDropTarget(drag) {
-    const groups = [...container.querySelectorAll(":scope > .paper-card-group")];
+    const groups = [...container.querySelectorAll(targetSelector)];
     const nextTarget = groups.find((group) => isPointInsideGroupGrid(group, drag.lastX, drag.lastY));
     const effectiveTarget = nextTarget === drag.sourceGroup ? null : nextTarget || null;
     if (effectiveTarget === drag.targetGroup) {
@@ -902,8 +939,8 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
   }
 
   function isPointInsideGroupGrid(group, pointerX, pointerY) {
-    // A whole board column takes the drop, not only the cards in it.
-    const grid = isBoard ? group : group.querySelector(".paper-card-group-grid");
+    // A whole board column or group takes the drop, not only the papers in it.
+    const grid = group;
     if (!grid) {
       return false;
     }
@@ -916,7 +953,11 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
     if (activeDrag !== drag) {
       return;
     }
-    if (isBoard && scrollBoardNearEdge(container, drag.lastX)) {
+    // Scroll the kanban under the pointer sideways near its edges.
+    const kanban = isBoard
+      ? document.elementFromPoint(drag.lastX, drag.lastY)?.closest(".paper-board")
+      : null;
+    if (kanban && scrollBoardNearEdge(kanban, drag.lastX)) {
       updateCardDropTarget(drag);
     }
     const edgeSize = 52;
@@ -948,13 +989,17 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
       container.releasePointerCapture(drag.pointerId);
     }
     const targetGroup = cancelled ? null : drag.targetGroup;
-    const targetGrid = targetGroup?.querySelector(".paper-card-group-grid");
-    const dropSlot = targetGrid ? document.createElement("div") : null;
+    const targetGrid = targetGroup?.querySelector(":scope > .paper-card-group-grid, :scope > .paper-list-table");
+    const dropSlot = targetGrid?.classList.contains("paper-card-group-grid") ? document.createElement("div") : null;
     if (dropSlot) {
       dropSlot.className = "paper-card paper-card-drop-slot";
       targetGrid.append(dropSlot);
     }
-    const targetRect = dropSlot?.getBoundingClientRect() || drag.card.getBoundingClientRect();
+    // A list row settles at the bottom of the target table.
+    const cardRect = drag.card.getBoundingClientRect();
+    const tableRect = !dropSlot && targetGrid ? targetGrid.getBoundingClientRect() : null;
+    const targetRect = dropSlot?.getBoundingClientRect() ||
+      (tableRect ? { left: tableRect.left, top: tableRect.bottom - cardRect.height, width: tableRect.width, height: cardRect.height } : cardRect);
     drag.preview.style.animation = "none";
     drag.preview.style.transform = "scale(1.015)";
     drag.preview.getBoundingClientRect();
@@ -969,13 +1014,7 @@ function attachPaperCardGroupTransfer(container, paperRecords, onUpdatePaperGrou
     const complete = async () => {
       if (targetGroup) {
         try {
-          // Moving a card swaps the label it was under for the target's label.
-          const columnId = targetGroup.dataset.groupColumn || DEFAULT_LABEL_COLUMN_ID;
-          const from = drag.sourceGroup?.dataset.groupLabel || "";
-          const to = targetGroup.dataset.groupLabel || "";
-          const next = getPaperLabels(drag.paper, columnId).filter((label) => label.toLowerCase() !== from.toLowerCase());
-          if (to) next.push(to);
-          await labelContext?.onChangePaperLabels?.(drag.paper, columnId, next);
+          await movePaperBetweenGroups(drag.paper, drag.sourceGroup, targetGroup, container);
         } catch (error) {
           console.debug("[Paper Toaster] Could not move paper to label group", error);
         }
